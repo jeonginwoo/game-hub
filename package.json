@@ -1,0 +1,15 @@
+{
+  "name": "game-hub",
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "workspaces": [
+    "lobby"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w lobby",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
+  }
+}

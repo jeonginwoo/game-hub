@@ -20,7 +20,16 @@ Read `docs/PROGRESS.md` first — current state, 열린 질문, decision log, wo
 bash scripts/verify.sh            # full verification (--quick: fast tier)
                                   # full log → build/last-verify.log; on FAIL read only the failing part
 bash scripts/ralph.sh 2           # autonomous queue loop — only with a human watching
+npm run dev                       # lobby dev server (Vite, http://localhost:5173)
+npm install                       # once after clone, and whenever package-lock.json changes
 ```
+
+## Layout
+
+One repo, npm workspaces (root `package.json`): `lobby/` (Three.js + Vite + TypeScript), `server/` (Node + ws —
+not yet), `games/<name>/` (one per game, any stack — reached by URL only). A folder is created in the session that
+first needs it. Root `typecheck`/`build` fan out with `--workspaces --if-present`, so a game without those scripts
+is simply skipped.
 
 ## Structure rules (invariants — never write code that violates them)
 

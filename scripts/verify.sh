@@ -96,15 +96,11 @@ step "reviewer model" check_reviewer_model
 step "script line endings" check_script_eol
 
 # Project stages — register them in the session that first needs them, never ahead
-# of it (CLAUDE.md: no speculative parts). Examples:
-#   step "typecheck"  npm run --silent typecheck
-#   if [ "$QUICK" != "--quick" ]; then
-#     step "unit tests" npm test --silent
-#     step "lint"       npx --no-install eslint .
-#     step "build"      npm run --silent build
-#   fi
+# of it (CLAUDE.md: no speculative parts). Root scripts fan out over npm workspaces
+# with --if-present, so a game that uses its own stack simply has no such script.
+step "typecheck" npm run --silent typecheck
 if [ "$QUICK" != "--quick" ]; then
-  :   # full-tier stages go here
+  step "build" npm run --silent build
 fi
 
 exit $fail

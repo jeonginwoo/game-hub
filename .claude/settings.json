@@ -2,6 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(bash scripts/*)",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(npm ci)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite:*)",
       "Bash(git status)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
