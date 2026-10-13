@@ -61,11 +61,12 @@ describe('renderChibiSheet', () => {
     }
   });
 
-  it('꾸미기 항목을 하나씩 바꾸면 그림이 바뀐다', () => {
-    for (const key of Object.keys(AVATAR_OPTIONS) as (keyof Avatar)[]) {
-      const other = AVATAR_OPTIONS[key].find((v) => v !== DEFAULT_AVATAR[key])!;
-      const changed = renderChibiSheet({ ...DEFAULT_AVATAR, [key]: other } as Avatar);
-      expect(changed, key).not.toEqual(sheet);
-    }
+  it('모든 선택지가 그림에 드러난다 — 항목 하나만 바꿔도 기본 캐릭터와 다르다', () => {
+    for (const key of Object.keys(AVATAR_OPTIONS) as (keyof Avatar)[])
+      for (const v of AVATAR_OPTIONS[key]) {
+        if (v === DEFAULT_AVATAR[key]) continue;
+        const changed = renderChibiSheet({ ...DEFAULT_AVATAR, [key]: v } as Avatar);
+        expect(changed, `${key}=${v}`).not.toEqual(sheet);
+      }
   });
 });

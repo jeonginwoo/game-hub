@@ -108,6 +108,13 @@ function sphereTone(r: Ramp, nx: number, ny: number): RGB {
   return lam > 0.82 ? r.light : lam > 0.5 ? r.base : lam > 0.2 ? r.shadow : r.deep;
 }
 
+/** 같은 램프에서 한 단계 어두운 색 */
+function darker(r: Ramp, col: RGB): RGB {
+  const order = [r.hi, r.light, r.base, r.shadow, r.deep];
+  const i = order.findIndex((o) => o.join() === col.join());
+  return i < 0 ? col : order[Math.min(i + 1, order.length - 1)] ?? col;
+}
+
 /** 꺾은선 위 x 의 y (구간 밖이면 양 끝 값) */
 function polyline(pts: readonly (readonly [number, number])[], x: number): number {
   const first = pts[0]!;
@@ -154,7 +161,7 @@ const BANGS_FRONT: readonly (readonly [number, number])[] = [
 ];
 const VALLEYS_FRONT: readonly (readonly [number, number])[] = [[8.5, 12], [12, 12], [16, 11.5], [19.6, 12], [23, 12]];
 const BANGS_SIDE: readonly (readonly [number, number])[] = [
-  [3, 15], [5, 11], [7, 13.5], [9, 10.5], [11, 13.5], [13, 11], [15.5, 13], [17, 20], [18, 40],
+  [3, 15], [5, 11], [7, 13.5], [9, 10.5], [11, 13.5], [12.5, 11.5], [14, 15], [15, 22], [16, 40],
 ];
 const VALLEYS_SIDE: readonly (readonly [number, number])[] = [[5, 11], [9, 10.5], [13, 11]];
 
@@ -164,7 +171,7 @@ function drawHead(g: Grid, a: Avatar, c: Colors, view: View, dy: number): void {
   const bangsPts = view === 'side' ? BANGS_SIDE : BANGS_FRONT;
   const bangs = (x: number) => polyline(bangsPts, x) + dy;
   const showsFace = (x: number, y: number) =>
-    view !== 'back' && inEllipse(face, x, y) && y >= bangs(x) && (view === 'front' || x <= 17);
+    view !== 'back' && inEllipse(face, x, y) && y >= bangs(x) && (view === 'front' || x <= 15);
 
   // 얼굴 피부 — 왼쪽 위는 밝게, 오른쪽·턱 아래는 그늘
   for (let y = 0; y < FRAME_H; y++)
@@ -181,15 +188,19 @@ function drawHead(g: Grid, a: Avatar, c: Colors, view: View, dy: number): void {
   if (view === 'front') drawFaceFront(g, c, dy);
   if (view === 'side') drawFaceSide(g, c, dy);
 
-  // 머리카락
+  // 머리카락 — 타원 둘레에 삐죽한 머리끝(tuft)을 붙여 매끈한 공처럼 보이지 않게
+  const tuft = (nx: number, ny: number) => ny < 0.55 && Math.sin(Math.atan2(ny, nx) * 13 + 0.6) > 0.5;
   for (let y = 0; y < FRAME_H; y++)
     for (let x = 0; x < FRAME_W; x++) {
-      if (!inEllipse(e, x, y) || y > limit || showsFace(x, y)) continue;
       const nx = (x + 0.5 - e.cx) / e.rx;
       const ny = (y + 0.5 - e.cy) / e.ry;
-      let col = sphereTone(c.hair, nx, ny);
-      // 엔젤링 — 정수리 아래 띠, 군데군데 끊는다
-      if (ny > -0.62 && ny < -0.46 && nx > -0.62 && nx < 0.35 && x % 5 !== 2) col = c.hair.hi;
+      const r = Math.hypot(nx, ny);
+      if (!(r <= 1 || (r <= 1.08 && tuft(nx, ny))) || y > limit || showsFace(x, y)) continue;
+      let col = sphereTone(c.hair, nx / Math.max(1, r), ny / Math.max(1, r));
+      // 뒷모습은 아래로 갈수록 한 단계 어둡게
+      if (view === 'back' && y > e.cy + 2) col = darker(c.hair, col);
+      // 엔젤링 — 정수리 아래 얇은 띠, 군데군데 끊는다
+      if (ny > -0.6 && ny < -0.5 && nx > -0.62 && nx < 0.35 && x % 5 !== 2) col = c.hair.hi;
       // 앞머리 끝 바로 위는 그늘 — 덩어리가 얼굴 위에 떠 보이게
       if (view !== 'back' && inEllipse(face, x, y + 1) && y >= bangs(x) - 1.2) col = c.hair.shadow;
       // 뒷머리 결
@@ -214,18 +225,28 @@ function drawHead(g: Grid, a: Avatar, c: Colors, view: View, dy: number): void {
       if (showsFace(x, y) && inEllipse(face, x, y)) g.set(x, y, c.skin.shadow);
     }
   }
+  // 앞모습 옆머리 — 얼굴 양옆으로 턱까지 내려온다
+  if (view === 'front') {
+    for (let y = 14 + dy; y <= 24 + dy; y++) {
+      const cut = Math.max(0, y - (20 + dy));
+      for (let x = 4; x <= 7 - cut; x++) g.set(x, y, x === 7 - cut || y === 24 + dy ? c.hair.shadow : c.hair.base);
+      for (let x = 24 + cut; x <= 27; x++) g.set(x, y, x === 24 + cut || y === 24 + dy ? c.hair.deep : c.hair.shadow);
+    }
+  }
   // 바보털
   const ahoge: readonly (readonly [number, number])[] =
     view === 'side' ? [[17, 1], [18, 0], [19, 0], [17, 2], [16, 2]] : [[16, 1], [17, 0], [18, 0], [16, 2], [15, 2]];
   for (const [x, y] of ahoge) g.set(x, y + dy, c.hair.base);
 }
 
-const EYE_FRONT_L = ['kkkk', 'kxii', 'iiii', 'ijji', '.kk.'];
-const EYE_FRONT_R = ['kkkk', 'ixik', 'iiii', 'ijji', '.kk.'];
-const EYE_SIDE = ['kkk', 'xii', 'iii', 'jji', '.k.'];
+// 눈 — 위 속눈썹(k), 눈동자는 위가 짙고 아래로 밝아진다(d → i → j), 반사광(x), 아래 눈꺼풀은 피부 그늘(s)
+const EYE_FRONT = ['kkkk', 'dxdd', 'diid', 'diid', 'djjd', '.ss.'];
+const EYE_SIDE = ['kkk', 'xdd', 'iid', 'iid', 'jjd', '.s.'];
 
 function stampEye(g: Grid, c: Colors, ox: number, oy: number, rows: readonly string[]): void {
-  const pal: Readonly<Record<string, RGB>> = { k: INK, x: WHITE, i: c.eye.base, j: c.eye.hi };
+  const pal: Readonly<Record<string, RGB>> = {
+    k: INK, x: WHITE, d: mix(c.eye.base, INK, 0.45), i: c.eye.base, j: c.eye.hi, s: c.skin.shadow,
+  };
   rows.forEach((r, dy) => [...r].forEach((ch, dx) => {
     const col = pal[ch];
     if (col) g.set(ox + dx, oy + dy, col);
@@ -233,22 +254,22 @@ function stampEye(g: Grid, c: Colors, ox: number, oy: number, rows: readonly str
 }
 
 function drawFaceFront(g: Grid, c: Colors, dy: number): void {
-  stampEye(g, c, 9, 15 + dy, EYE_FRONT_L);
-  stampEye(g, c, 19, 15 + dy, EYE_FRONT_R);
-  g.set(8, 15 + dy, INK); // 속눈썹 끝
+  stampEye(g, c, 9, 15 + dy, EYE_FRONT);
+  stampEye(g, c, 19, 15 + dy, EYE_FRONT);
+  g.set(8, 15 + dy, INK); // 속눈썹 끝 — 바깥쪽으로 살짝
   g.set(23, 15 + dy, INK);
-  const blush = mix(c.skin.base, hex('#ff7f9a'), 0.45);
-  for (const x of [8, 9, 10, 21, 22, 23]) g.set(x, 20 + dy, blush);
+  const blush = mix(c.skin.base, hex('#ff7f9a'), 0.4);
+  for (const x of [8, 9, 22, 23]) g.set(x, 21 + dy, blush);
   g.set(15, 22 + dy, mix(c.skin.shadow, hex('#a8384f'), 0.55));
   g.set(16, 22 + dy, mix(c.skin.base, hex('#e0607a'), 0.35));
 }
 
 function drawFaceSide(g: Grid, c: Colors, dy: number): void {
+  // 옆모습은 입을 그리지 않는다 — 얼굴 앞 테두리에 붙으면 외곽선과 겹쳐 입술이 튀어나와 보인다
   stampEye(g, c, 7, 15 + dy, EYE_SIDE);
   g.set(10, 15 + dy, INK);
-  const blush = mix(c.skin.base, hex('#ff7f9a'), 0.45);
-  for (const x of [7, 8, 9]) g.set(x, 20 + dy, blush);
-  g.set(7, 22 + dy, mix(c.skin.shadow, hex('#a8384f'), 0.55));
+  const blush = mix(c.skin.base, hex('#ff7f9a'), 0.4);
+  for (const x of [8, 9]) g.set(x, 21 + dy, blush);
 }
 
 // --- 몸 뒤 머리카락 (긴 머리·양갈래) ----------------------------------------------
@@ -267,24 +288,27 @@ function drawHairBehind(g: Grid, a: Avatar, c: Colors, view: View, dy: number): 
     }
   }
   if (a.hair === 'pigtails') {
+    // 높이 묶어 발 근처까지 늘어뜨린다 — 물결치며 바깥으로 벌어졌다 모인다
     const tails: readonly { ax: number; side: number }[] =
-      view === 'side' ? [{ ax: 25, side: 1 }] : [{ ax: 4.5, side: -1 }, { ax: 26.5, side: 1 }];
+      view === 'side' ? [{ ax: 24, side: 1 }] : [{ ax: 5, side: -1 }, { ax: 26, side: 1 }];
     for (const { ax, side } of tails) {
-      for (let t = 0; t <= 1; t += 0.02) {
-        const cx = ax + side * 2.6 * Math.sin(Math.PI * t * 0.9);
-        const cy = 9 + dy + 22 * t;
-        const r = 3.4 - 2 * t;
+      for (let t = 0; t <= 1; t += 0.015) {
+        const cx = ax + side * (2.2 + 1.4 * Math.sin(Math.PI * t * 2.2)) * Math.min(1, t * 5);
+        const cy = 6 + dy + 30 * t;
+        const r = Math.max(1.2, 4 - 2.8 * t);
         for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++)
           for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
             if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 > r * r) continue;
             const d = (x + 0.5 - cx) / r;
-            const col = t > 0.9 ? c.hair.shadow : d < -0.3 ? c.hair.light : d > 0.45 ? c.hair.shadow : c.hair.base;
+            const strand = (x + y) % 6 === 0; // 머리 결
+            const col = t > 0.92 ? c.hair.deep : d < -0.3 ? (t < 0.35 ? c.hair.hi : c.hair.light)
+              : d > 0.45 || strand ? c.hair.shadow : c.hair.base;
             g.set(x, y, col);
           }
       }
-      // 머리끈 — 상의 색
+      // 머리끈 — 하의 색 (옷과 맞춘다)
       const tx = Math.round(ax) - 1;
-      for (const [x, y] of [[tx, 8], [tx + 1, 8], [tx, 9], [tx + 1, 9]] as const) g.set(x, y + dy, c.top.shadow);
+      for (const [x, y] of [[tx, 5], [tx + 1, 5], [tx, 6], [tx + 1, 6]] as const) g.set(x, y + dy, c.bottom.base);
     }
   }
 }
@@ -302,6 +326,9 @@ const TORSO_SIDE: Readonly<Record<number, readonly [number, number]>> = {
 function drawTop(g: Grid, a: Avatar, c: Colors, view: View, dy: number, armSwing: number): void {
   const t = c.top;
   const hoodie = a.top === 'hoodie';
+  const blouse = a.top === 'blouse';
+  const collar = mix(t.base, WHITE, 0.7);
+  const ribbon = c.bottom;
   if (view === 'side') {
     g.spans(TORSO_SIDE, dy, (x, y) => (y === 32 ? t.shadow : x >= 18 ? t.shadow : t.base));
     // 가까운 팔 — 걸을 때 앞뒤로 흔든다
@@ -313,6 +340,10 @@ function drawTop(g: Grid, a: Avatar, c: Colors, view: View, dy: number, armSwing
       }
     for (let y = sleeveEnd + 1; y <= sleeveEnd + 2; y++)
       for (let x = 15; x <= 16; x++) g.set(x + armSwing, y + dy, c.skin.base);
+    if (blouse) {
+      for (const [x, y] of [[12, 25], [13, 25], [14, 25], [12, 26]] as const) g.set(x, y + dy, collar);
+      for (const [x, y] of [[11, 26], [11, 27], [12, 27]] as const) g.set(x, y + dy, ribbon.base);
+    }
     return;
   }
   const rows: Record<number, readonly [number, number]> = { ...TORSO_FRONT };
@@ -335,6 +366,15 @@ function drawTop(g: Grid, a: Avatar, c: Colors, view: View, dy: number, armSwing
       for (let x = 14; x <= 17; x++) g.set(x, 26 + dy, t.deep);
       for (let y = 27; y <= 29; y++) { g.set(14, y + dy, t.hi); g.set(17, y + dy, t.hi); } // 끈
       for (let x = 12; x <= 19; x++) g.set(x, 30 + dy, t.shadow); // 주머니
+    } else if (blouse) {
+      // 세일러 칼라 + 가슴 리본 (리본은 하의 색)
+      const collarCells = [[11, 25], [12, 25], [13, 25], [18, 25], [19, 25], [20, 25], [11, 26], [12, 26], [19, 26], [20, 26]] as const;
+      for (const [x, y] of collarCells) g.set(x, y + dy, collar);
+      const bow = ['bB..Bb', 'bbDDbb', '.b..b.'];
+      bow.forEach((row, ry) => [...row].forEach((ch, rx) => {
+        const col = ch === 'b' ? ribbon.base : ch === 'B' ? ribbon.shadow : ch === 'D' ? ribbon.deep : null;
+        if (col) g.set(13 + rx, 26 + ry + dy, col);
+      }));
     } else {
       g.set(13, 26 + dy, t.shadow); g.set(18, 26 + dy, t.shadow); // 칼라
       g.set(14, 26 + dy, t.deep); g.set(17, 26 + dy, t.deep);
@@ -342,6 +382,12 @@ function drawTop(g: Grid, a: Avatar, c: Colors, view: View, dy: number, armSwing
     }
   } else {
     for (let x = 12; x <= 19; x++) g.set(x, 25 + dy, t.shadow); // 뒷목 칼라
+    if (blouse) {
+      // 등에 넓게 덮인 세일러 칼라
+      for (let y = 25; y <= 28; y++)
+        for (let x = 11; x <= 20; x++)
+          g.set(x, y + dy, y === 28 || x === 11 || x === 20 ? mix(collar, t.shadow, 0.5) : collar);
+    }
     if (hoodie) {
       // 등에 걸친 후드
       for (let y = 23; y <= 27; y++)
@@ -358,7 +404,7 @@ function drawLeg(
   g: Grid, c: Colors, a: Avatar, x0: number, w: number, hip: number, lift: number, far: boolean, toe: number,
 ): void {
   const legRamp = a.bottom === 'pants' ? c.bottom : c.skin;
-  const shoeTop = 36 - lift;
+  const shoeTop = 37 - lift;
   for (let y = hip; y < shoeTop; y++)
     for (let x = x0; x < x0 + w; x++) {
       const skinny = a.bottom === 'skirt' && (x === x0 || x === x0 + w - 1); // 치마 아래 다리는 가늘게
@@ -366,10 +412,12 @@ function drawLeg(
       g.set(x, y, far ? legRamp.shadow : x === x0 + w - 1 ? legRamp.shadow : legRamp.base);
     }
   const s = c.shoes;
-  for (let y = shoeTop; y <= shoeTop + 2; y++)
-    for (let x = x0 - 1 + Math.min(toe, 0); x <= x0 + w - 1 + Math.max(toe, 0); x++) {
-      const sole = y === shoeTop + 2;
-      g.set(x, y, sole ? s.deep : far ? s.shadow : x === x0 - 1 + Math.min(toe, 0) && y === shoeTop ? s.hi : s.base);
+  // 신발은 작게 — 두 줄, 옆모습은 발끝 쪽으로 한 칸
+  const left = x0 + Math.min(toe, 0);
+  for (let y = shoeTop; y <= shoeTop + 1; y++)
+    for (let x = left; x <= x0 + w - 1 + Math.max(toe, 0); x++) {
+      const sole = y === shoeTop + 1;
+      g.set(x, y, sole ? s.deep : far ? s.shadow : x === left ? s.hi : s.base);
     }
 }
 

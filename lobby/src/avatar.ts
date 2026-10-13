@@ -2,7 +2,7 @@
 // 그림은 chibi.ts 가 이 값으로 직접 찍는다 — 외부 에셋 없음.
 
 export type HairStyle = 'short' | 'bob' | 'long' | 'pigtails';
-export type TopStyle = 'tshirt' | 'hoodie';
+export type TopStyle = 'tshirt' | 'hoodie' | 'blouse';
 export type BottomStyle = 'pants' | 'skirt';
 
 /** 저장·전송되는 꾸미기 값. 모든 값은 AVATAR_OPTIONS 의 키 */
@@ -72,7 +72,7 @@ export const AVATAR_OPTIONS: { readonly [K in keyof Avatar]: readonly string[] }
   eyeColor: Object.keys(EYE_COLORS),
   hair: ['short', 'bob', 'long', 'pigtails'] satisfies HairStyle[],
   hairColor: Object.keys(HAIR_COLORS),
-  top: ['tshirt', 'hoodie'] satisfies TopStyle[],
+  top: ['tshirt', 'hoodie', 'blouse'] satisfies TopStyle[],
   topColor: Object.keys(CLOTH_COLORS),
   bottom: ['pants', 'skirt'] satisfies BottomStyle[],
   bottomColor: Object.keys(CLOTH_COLORS),
