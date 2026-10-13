@@ -1,11 +1,12 @@
 // 로비 진입점 — 직교 카메라 위에 타일맵과 내 캐릭터를 그린다 (결정 2026-10-13: 직교 + 2D 스프라이트).
-// 에셋 전까지 타일·캐릭터는 색 사각형. 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
+// 타일은 Ninja Adventure 스프라이트 시트 (CC0, docs/assets.md), 캐릭터는 아직 색 사각형. 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
 import * as THREE from 'three';
 import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './entry';
 import { DOOR_GAMES, GAMES } from './games';
 import { LOBBY_ROWS } from './lobby-map';
-import { parseMap, type Pos, type Tile } from './map';
+import { parseMap, type Pos } from './map';
 import { step, type Dir } from './movement';
+import { cellUv, tileLook, type Cell, type Sheet } from './tiles';
 import { clampAxis } from './view';
 
 const VIEW_TILES_Y = 11; // 화면 세로에 보이는 타일 수
@@ -25,23 +26,64 @@ scene.background = new THREE.Color(0x10131b);
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
 camera.position.z = 10;
 
+// --- 스프라이트 시트 -----------------------------------------------------------
+
+const ASSET_DIR = `${import.meta.env.BASE_URL}assets/ninja-adventure/`;
+// 크기는 원본 PNG 그대로 — UV 를 텍스처 로드 전에 계산하려고 적어 둔다
+const SHEETS: Record<Sheet, { file: string; w: number; h: number }> = {
+  floor: { file: 'TilesetFloor.png', w: 352, h: 417 },
+  house: { file: 'TilesetHouse.png', w: 528, h: 368 },
+  nature: { file: 'TilesetNature.png', w: 384, h: 336 },
+};
+
+const loader = new THREE.TextureLoader();
+/** 픽셀아트 텍스처 — 확대해도 번지지 않게 최근접 샘플링, 밉맵 없음 */
+function pixelTexture(file: string): THREE.Texture {
+  const tex = loader.load(ASSET_DIR + file);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// alphaTest: 투명 픽셀은 버린다 — 덤불의 배경이 아래층을 가리지 않게 (정렬 없이)
+const sheetMat = Object.fromEntries(
+  (Object.keys(SHEETS) as Sheet[]).map((k) => [
+    k,
+    new THREE.MeshBasicMaterial({ map: pixelTexture(SHEETS[k].file), alphaTest: 0.5 }),
+  ]),
+) as Record<Sheet, THREE.MeshBasicMaterial>;
+
+/** 시트의 한 칸을 그리는 1×1 평면 */
+function cellMesh(cell: Cell): THREE.Mesh {
+  const { w, h } = SHEETS[cell.sheet];
+  const { u0, u1, vTop, vBottom } = cellUv(cell.col, cell.row, w, h);
+  const geo = new THREE.PlaneGeometry(1, 1);
+  // PlaneGeometry 정점 순서: 왼위 · 오른위 · 왼아래 · 오른아래
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute([u0, vTop, u1, vTop, u0, vBottom, u1, vBottom], 2));
+  return new THREE.Mesh(geo, sheetMat[cell.sheet]);
+}
+
 // --- 타일맵 -------------------------------------------------------------------
 
-const tileGeo = new THREE.PlaneGeometry(1, 1);
-const tileMat: Record<Tile | 'floorAlt', THREE.MeshBasicMaterial> = {
-  wall: new THREE.MeshBasicMaterial({ color: 0x3b4252 }),
-  floor: new THREE.MeshBasicMaterial({ color: 0x8fa36b }),
-  floorAlt: new THREE.MeshBasicMaterial({ color: 0x86995f }), // 바닥 체크무늬 — 이동량을 눈으로 읽게
-  door: new THREE.MeshBasicMaterial({ color: 0xd08770 }),
-};
+/** 게임이 배정된 문인지 — 열린 문과 닫힌 문을 다르게 그린다 */
+function isOpenDoor(p: Pos): boolean {
+  const door = doorIndexAt(map, p);
+  return door !== undefined && gameAtDoor(door, GAMES, DOOR_GAMES) !== undefined;
+}
 
 for (let y = 0; y < map.height; y++) {
   for (let x = 0; x < map.width; x++) {
-    const tile = map.tileAt({ x, y });
-    const mat = tile === 'floor' && (x + y) % 2 === 1 ? tileMat.floorAlt : tileMat[tile];
-    const mesh = new THREE.Mesh(tileGeo, mat);
-    mesh.position.set(x, -y, 0);
-    scene.add(mesh);
+    const look = tileLook(map, { x, y }, isOpenDoor);
+    const base = cellMesh(look.base);
+    base.position.set(x, -y, 0);
+    scene.add(base);
+    if (look.over) {
+      const over = cellMesh(look.over);
+      over.position.set(x, -y, 0.5);
+      scene.add(over);
+    }
   }
 }
 

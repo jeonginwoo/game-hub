@@ -5,9 +5,9 @@
 ## 현재 상태 (2026-10-13)
 
 - **목적:** Three.js 로 만드는 멀티플레이 게임 모음. 쯔꾸르(RPG Maker)식 로비에서 여러 명이 함께 돌아다니다가 문을 통해 각자 만든 게임으로 입장한다. 게임의 형식은 자유.
-- **진행:** 로비에 타일맵 + 내 캐릭터 이동. 직교 카메라, 색 사각형 타일·캐릭터(에셋 전 임시), 방향키/WASD 칸 단위 이동·벽 충돌·카메라 추적. 게임 입장 계약 문서 v1(`docs/game-entry-contract.md`). 문 입장 로비 쪽 구현 — 게임이 배정된 문에 올라서면 계약대로 게임 URL 로 이동, 복귀 시 그 문 앞에 등장. 첫 게임 `whiteboard-3d`(독립 저장소, 개발 URL `http://localhost:5174/`)를 1번(가운데) 문에 등록 — 입장·뒤로 가기·「로비로」 복귀 왕복 확인됨. 멀티플레이 서버·게임 폴더는 아직 없음. 원격 `origin` = GitHub `jeonginwoo/game-hub`
-- **검증 기준선:** `bash scripts/verify.sh` 6단계 PASS (docs · reviewer model · script line endings · typecheck · unit tests · build). 단위 테스트 30개. 번들 500 kB 경고는 그대로(실패 아님)
-- **다음 작업:** 사용자와 순서 결정 — `server/`(Node + ws) 스캐폴드와 다른 플레이어 표시, 또는 문 앞 게임 제목 표시
+- **진행:** 로비에 타일맵 + 내 캐릭터 이동. 직교 카메라, 타일은 Ninja Adventure(CC0) 스프라이트 — 풀밭·덤불 벽·윗줄 건물(정면·지붕)·문(배정된 문은 열린 입구, 아닌 문은 창살 문)(`docs/assets.md`). 캐릭터는 아직 색 사각형(직접 그릴 예정). 방향키/WASD 칸 단위 이동·벽 충돌·카메라 추적. 게임 입장 계약 문서 v1(`docs/game-entry-contract.md`). 문 입장 로비 쪽 구현 — 게임이 배정된 문에 올라서면 계약대로 게임 URL 로 이동, 복귀 시 그 문 앞에 등장. 첫 게임 `whiteboard-3d`(독립 저장소, 개발 URL `http://localhost:5174/`)를 1번(가운데) 문에 등록 — 입장·뒤로 가기·「로비로」 복귀 왕복 확인됨. 멀티플레이 서버·게임 폴더는 아직 없음. 원격 `origin` = GitHub `jeonginwoo/game-hub`
+- **검증 기준선:** `bash scripts/verify.sh` 6단계 PASS (docs · reviewer model · script line endings · typecheck · unit tests · build). 단위 테스트 36개. 번들 500 kB 경고는 그대로(실패 아님)
+- **다음 작업:** 직접 그린 2등신 캐릭터 + 꾸미기 값(체형·헤어·옷·색) — 사용자와 계획 합의됨, 미리보기로 모양 확인 후 로비에 연결
 - **차단 요소:** 없음
 
 ## 열린 질문 (다음 세션에서 사용자와 결정)
@@ -40,6 +40,8 @@
 | 2026-10-13 | **문 입장 구현 세부**: 문 번호 = 맵의 `D` 를 위→아래·왼→오른 순으로 센 0부터의 번호. 등록 표 `GAMES` 와 문 배정 `DOOR_GAMES` 는 `lobby/src/games.ts` 한 곳(지금은 비어 있음 — 배정 없는 문은 바닥). 문에 **도착하면** 바로 이동. 복귀 URL 에 로비 전용 `hub_door=<n>`, 로드 시 문 앞 칸에 등장하고 주소창에서 지운다. 떠나기 전 현재 기록도 복귀 URL 로 바꿔 뒤로 가기도 같은 자리 | 계약이 등록 정보·복귀 URL 내용을 로비 몫으로 남겨 둠. 등록 표를 빈 채로 먼저 만든 이유: 문 판정 코드가 참조할 자리가 있어야 하고, 첫 게임은 항목 한 줄만 더하면 된다(reviewer 지적 — 추측성 부품이 아니라 최소한). `hub_door` 를 지워야 새로고침이 시작점으로 돌아간다 |
 | 2026-10-13 | **첫 게임 등록: `whiteboard-3d`** — 독립 저장소(github.com/jeonginwoo/whiteboard-3d)를 외부 URL 로, 1번(가운데) 문. url 은 개발 서버 `http://localhost:5174/`, 배포 URL 은 호스팅(열린 질문 5) 뒤 교체 | 사용자가 이미 계약 v1 을 따르는 게임을 갖고 있었다(그쪽 `client/lobby-link.ts`). 가운데 문이 시작점에서 가장 가깝다. 계약 시험용 `games/hello/` 는 실제 게임으로 왕복을 확인했으므로 만들지 않는다 |
 | 2026-10-13 | 로비 로직(맵 해석·이동 판정·카메라 범위)은 Three.js 와 분리된 순수 함수로 두고 Vitest 로 검사. verify 에 `unit tests` 단계(full 티어) 등록 | 헤드리스 스크린샷은 키 입력을 못 보내 이동을 눈으로 검증할 수 없다. 판정을 순수 함수로 빼야 테스트로 잡힌다 |
+| 2026-10-13 | **로비 타일 = Ninja Adventure (pixel-boy · AAA, CC0).** 출처·쓰는 파일은 `docs/assets.md`. 맵 문자열 형식은 그대로 두고 외형은 주변 칸으로 정한다 — 문이 있는 줄의 벽 = 건물 정면, 그 위 벽 = 지붕, 나머지 벽 = 풀 위 덤불. 게임이 배정된 문은 열린 입구, 아닌 문은 창살 문 | 사용자 선택(Kenney Tiny 시리즈·LPC 와 비교). 16×16 쯔꾸르 외형, CC0 라 표기 의무 없음. 맵 형식을 안 바꾸면 이동·문 판정 코드와 테스트가 그대로 산다 |
+| 2026-10-13 | **캐릭터는 직접 그린다** — ZEP 식 2등신(큰 머리), 16px = 1칸 밀도로 타일과 맞춤, 부위 레이어로 꾸미기. 그 전에 시도한 Ninja 캐릭터 시트와 LPC 레이어 합성은 `experiment/lpc-avatar` 브랜치(커밋 75def1b·fe1cb97, push 안 함)에 보관하고 `main` 에서 뺐다. 이 커밋은 그 브랜치에서 타일 부분만 다시 가져온 것 | 사용자 피드백: LPC 캐릭터는 사실적이라 「징그럽다」, ZEP 처럼 귀여운 쪽을 원함. 무료 레이어 에셋 중 2등신·4방향 걷기를 갖춘 것이 없었다. 직접 그리면 라이선스 표기 의무가 없고 픽셀 밀도도 타일에 맞출 수 있다. 사용자 요청으로 실험 커밋을 브랜치로 옮겨 `main` 이력을 깔끔하게 |
 
 ## 작업 큐 (ralph 루프용)
 
@@ -53,7 +55,8 @@
 - `server/` 스캐폴드 (Node + `ws`, 워크스페이스 추가) 와 로비의 접속·명단 표시 — 계약 문서 뒤
 - 게임이 2개 이상 붙으면 `scripts/verify.sh` 에 "게임 ↔ 로비 · 게임 ↔ 게임 import 없음" 검사 (불변식 1 의 기계화)
 - `server/` `games/` 폴더가 생기면 `scripts/hooks/stop-verify.sh` 의 `CODE_PATHS` 에 추가
-- 로비 에셋(타일셋·캐릭터 시트) — 무료(CC0 등, 라이선스 `docs/` 기록) 또는 직접 제작. 그 전까지 색 사각형
+- 로비 맵 꾸미기 — 방 모양·장식물(나무 2×2·꽃·소품). 지금은 벽이 전부 1칸 덤불이고 여러 칸 오브젝트를 놓을 맵 표기가 없음
+- 픽셀 배율이 정수가 아님 (세로 11칸 고정 → 800px 창에서 칸당 72.7px, 4.5배쯤) — 픽셀 크기가 들쭉날쭉할 수 있음. 정수 배율로 맞출지 판단
 - whiteboard-3d 저장소에 알릴 것 (그쪽 일): CLAUDE.md·PROGRESS 의 game-hub 경로가 `C:\Projects\playground\game-hub` 로 적혀 있음(실제 `C:\Projects\game-hub`), 그쪽 후보 일감 「game-hub 쪽 등록」은 완료됨
 - 문 앞에 게임 제목 표시 (계약 등록 정보 `title` — 지금은 쓰이지 않음)
 - 채팅 등 텍스트 입력 UI 가 생기면 로비 키 입력이 입력창 포커스 중에는 꺼지게 (지금은 window 에서 방향키·WASD 를 모두 가로챔)
@@ -70,6 +73,11 @@
 - 미해결: <다음 세션으로 넘기는 것 · 확인하지 못한 것>
 - 다음 작업: <구체적으로>
 ```
+
+### 2026-10-13 — 로비 타일: Ninja Adventure
+- 완료: Ninja Adventure(CC0, 팩 `LICENSE.txt` 로 확인) 타일셋 3장을 `lobby/public/assets/ninja-adventure/` 에, 출처 `docs/assets.md`. `lobby/src/tiles.ts`(칸 외형 고르기·UV, 순수) + 테스트 6개, `main.ts` 타일을 시트 평면으로(최근접 샘플링, alphaTest). 캐릭터 실험(Ninja 시트 → LPC 레이어)은 사용자 피드백으로 접고 `experiment/lpc-avatar` 브랜치로 옮긴 뒤 타일만 다시 가져옴 → 결정 기록. verify 6단계 PASS(테스트 36개). `shot.sh` 로 확인
+- 미해결: 실제 GPU 브라우저 창은 보지 않음. 캐릭터는 색 사각형 그대로
+- 다음 작업: 직접 그린 2등신 캐릭터 + 꾸미기
 
 ### 2026-10-09 — 하네스 적용
 - 완료: `harness_default` 코드 프로파일 적용 — CLAUDE.md · PROGRESS · verify.sh(하네스 검사) · /next · /wrap-up · Stop 훅 · settings.json · reviewer · ralph. `bash scripts/verify.sh` 3단계 PASS.
