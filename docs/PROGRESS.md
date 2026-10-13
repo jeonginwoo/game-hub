@@ -5,9 +5,9 @@
 ## 현재 상태 (2026-10-13)
 
 - **목적:** Three.js 로 만드는 멀티플레이 게임 모음. 쯔꾸르(RPG Maker)식 로비에서 여러 명이 함께 돌아다니다가 문을 통해 각자 만든 게임으로 입장한다. 게임의 형식은 자유.
-- **진행:** 로비에 타일맵 + 내 캐릭터 이동. 직교 카메라, 색 사각형 타일·캐릭터(에셋 전 임시), 방향키/WASD 칸 단위 이동·벽 충돌·카메라 추적. 게임 입장 계약 문서 v1(`docs/game-entry-contract.md`). 문 입장 로비 쪽 구현 — 게임이 배정된 문에 올라서면 계약대로 게임 URL 로 이동, 복귀 시 그 문 앞에 등장. 등록 표(`lobby/src/games.ts`)는 비어 있음. 멀티플레이 서버·게임 폴더는 아직 없음. 원격 `origin` = GitHub `jeonginwoo/game-hub`
+- **진행:** 로비에 타일맵 + 내 캐릭터 이동. 직교 카메라, 색 사각형 타일·캐릭터(에셋 전 임시), 방향키/WASD 칸 단위 이동·벽 충돌·카메라 추적. 게임 입장 계약 문서 v1(`docs/game-entry-contract.md`). 문 입장 로비 쪽 구현 — 게임이 배정된 문에 올라서면 계약대로 게임 URL 로 이동, 복귀 시 그 문 앞에 등장. 첫 게임 `whiteboard-3d`(독립 저장소, 개발 URL `http://localhost:5174/`)를 1번(가운데) 문에 등록 — 입장·뒤로 가기·「로비로」 복귀 왕복 확인됨. 멀티플레이 서버·게임 폴더는 아직 없음. 원격 `origin` = GitHub `jeonginwoo/game-hub`
 - **검증 기준선:** `bash scripts/verify.sh` 6단계 PASS (docs · reviewer model · script line endings · typecheck · unit tests · build). 단위 테스트 30개. 번들 500 kB 경고는 그대로(실패 아님)
-- **다음 작업:** 사용자와 순서 결정 — 계약 시험용 정적 게임 `games/hello/` 로 입장·복귀 왕복 확인, 또는 `server/`(Node + ws) 스캐폴드와 다른 플레이어 표시
+- **다음 작업:** 사용자와 순서 결정 — `server/`(Node + ws) 스캐폴드와 다른 플레이어 표시, 또는 문 앞 게임 제목 표시
 - **차단 요소:** 없음
 
 ## 열린 질문 (다음 세션에서 사용자와 결정)
@@ -38,6 +38,7 @@
 | 2026-10-13 | **입장 계약 v1 세부** (`docs/game-entry-contract.md`): 쿼리 이름 `hub_return`, `hub_` 접두어는 로비 예약. 복귀 URL 은 게임에게 불투명 — 그대로 이동만. 로비는 등록 URL 의 기존 쿼리·해시를 보존. 등록 정보는 `id`·`title`·`url` 세 가지, 문 배정은 로비 몫. 플레이어 정보 전달 없음 | 접두어로 게임 자체 파라미터와의 충돌을 피한다(불변식 2 — 게임이 로비에 맞춰 바꿀 일이 없게). 복귀 URL 을 불투명하게 두면 로비가 "어느 문 앞에 등장" 같은 정보를 게임 수정 없이 넣고 바꿀 수 있다. 확장은 `hub_` 파라미터 추가로 — 모르는 파라미터를 무시하는 v1 게임이 그대로 동작 |
 | 2026-10-13 | 저장소 이름은 `game-hub` 로 확정, 원격은 GitHub `jeonginwoo/game-hub` (`origin`, `main` 추적). 열린 질문 5 중 원격 위치만 종결 | `/next` 상태 점검에서 원격이 이미 만들어진 것을 확인, 사용자 승인. 이름 확정 후보 일감은 이로써 해소 |
 | 2026-10-13 | **문 입장 구현 세부**: 문 번호 = 맵의 `D` 를 위→아래·왼→오른 순으로 센 0부터의 번호. 등록 표 `GAMES` 와 문 배정 `DOOR_GAMES` 는 `lobby/src/games.ts` 한 곳(지금은 비어 있음 — 배정 없는 문은 바닥). 문에 **도착하면** 바로 이동. 복귀 URL 에 로비 전용 `hub_door=<n>`, 로드 시 문 앞 칸에 등장하고 주소창에서 지운다. 떠나기 전 현재 기록도 복귀 URL 로 바꿔 뒤로 가기도 같은 자리 | 계약이 등록 정보·복귀 URL 내용을 로비 몫으로 남겨 둠. 등록 표를 빈 채로 먼저 만든 이유: 문 판정 코드가 참조할 자리가 있어야 하고, 첫 게임은 항목 한 줄만 더하면 된다(reviewer 지적 — 추측성 부품이 아니라 최소한). `hub_door` 를 지워야 새로고침이 시작점으로 돌아간다 |
+| 2026-10-13 | **첫 게임 등록: `whiteboard-3d`** — 독립 저장소(github.com/jeonginwoo/whiteboard-3d)를 외부 URL 로, 1번(가운데) 문. url 은 개발 서버 `http://localhost:5174/`, 배포 URL 은 호스팅(열린 질문 5) 뒤 교체 | 사용자가 이미 계약 v1 을 따르는 게임을 갖고 있었다(그쪽 `client/lobby-link.ts`). 가운데 문이 시작점에서 가장 가깝다. 계약 시험용 `games/hello/` 는 실제 게임으로 왕복을 확인했으므로 만들지 않는다 |
 | 2026-10-13 | 로비 로직(맵 해석·이동 판정·카메라 범위)은 Three.js 와 분리된 순수 함수로 두고 Vitest 로 검사. verify 에 `unit tests` 단계(full 티어) 등록 | 헤드리스 스크린샷은 키 입력을 못 보내 이동을 눈으로 검증할 수 없다. 판정을 순수 함수로 빼야 테스트로 잡힌다 |
 
 ## 작업 큐 (ralph 루프용)
@@ -53,11 +54,11 @@
 - 게임이 2개 이상 붙으면 `scripts/verify.sh` 에 "게임 ↔ 로비 · 게임 ↔ 게임 import 없음" 검사 (불변식 1 의 기계화)
 - `server/` `games/` 폴더가 생기면 `scripts/hooks/stop-verify.sh` 의 `CODE_PATHS` 에 추가
 - 로비 에셋(타일셋·캐릭터 시트) — 무료(CC0 등, 라이선스 `docs/` 기록) 또는 직접 제작. 그 전까지 색 사각형
-- 계약 시험용 정적 게임 `games/hello/` (`hub_return` 읽기 · 「로비로」 버튼) + 문 하나에 배정 — 입장·복귀·뒤로 가기를 실제 브라우저에서 왕복 확인. 계약 문서 자가 점검 항목의 첫 실례
+- whiteboard-3d 저장소에 알릴 것 (그쪽 일): CLAUDE.md·PROGRESS 의 game-hub 경로가 `C:\Projects\playground\game-hub` 로 적혀 있음(실제 `C:\Projects\game-hub`), 그쪽 후보 일감 「game-hub 쪽 등록」은 완료됨
 - 문 앞에 게임 제목 표시 (계약 등록 정보 `title` — 지금은 쓰이지 않음)
 - 채팅 등 텍스트 입력 UI 가 생기면 로비 키 입력이 입력창 포커스 중에는 꺼지게 (지금은 window 에서 방향키·WASD 를 모두 가로챔)
 - 번들 500 kB 경고 (실측 527 kB, three 전체가 한 청크) — 로비가 커지면 코드 분할 또는 `build.chunkSizeWarningLimit` 판단. 지금은 무시
-- `scripts/shot.sh` 에 키 입력 시뮬레이션(CDP `--remote-debugging-port`) — 걷기·문 입장을 눈으로 확인해야 할 때
+- `scripts/shot.sh` 에 키 입력 시뮬레이션(CDP `--remote-debugging-port`) — 걷기·문 입장을 눈으로 확인해야 할 때. 2026-10-13 일회용 스크립트로 가능함 확인: Node 22 내장 `WebSocket`·`fetch` 만으로 CDP 연결, `Input.dispatchKeyEvent`(rawKeyDown/keyUp) 로 칸 이동, `Page.captureScreenshot` — 추가 의존성 없음
 
 ## 세션 로그
 
@@ -90,6 +91,11 @@
 - 완료: 열린 질문 4 결정(직교 + 2D 스프라이트, 에셋은 나중). `lobby/src/` 에 맵 해석(`map.ts`)·칸 이동 판정(`movement.ts`)·카메라 범위(`view.ts`)·로비 맵 데이터 + `main.ts` 렌더/입력/루프. 단위 테스트 14개(Vitest), verify 에 `unit tests` 등록 → 6단계 PASS. `shot.sh` 로 맵·캐릭터 첫 화면 확인
 - 미해결: 실제로 키를 눌러 걷는 모습·벽 충돌·카메라 추적은 눈으로 보지 못함(스크린샷은 키 입력 불가, 로직은 단위 테스트로만). 시작 화면에서는 문이 화면 밖
 - 다음 작업: 사용자와 순서 결정 — `server/` 스캐폴드 + 다른 플레이어 표시, 또는 문 진입 감지
+
+### 2026-10-13 — 첫 게임 whiteboard-3d 등록 + 왕복 확인
+- 완료: `lobby/src/games.ts` 에 `whiteboard-3d`(`http://localhost:5174/`) 등록, 1번 문 배정. verify 6단계 PASS. 일회용 CDP 스크립트(scratchpad, 커밋 안 함)로 headless Chrome 왕복: 로비에서 걸어서 1번 문 → `http://localhost:5174/?hub_return=http%3A%2F%2Flocalhost%3A5173%2F%3Fhub_door%3D1` · 브라우저 뒤로 가기 → 로비 `/`(hub_door 제거) 1번 문 앞 · 위 1칸으로 재입장 · 게임의 「로비로 돌아가기」(`#ov-return`) 클릭 → 1번 문 앞. 스크린샷 4장 확인, 콘솔 오류 없음. 계약 문서의 「뒤로 가기 … (문 입장 구현 때 확인)」을 확인됨으로 수정
+- 미해결: 뒤로 가기가 bfcache 복원이었는지 새로 로드였는지는 구분하지 않음(어느 쪽이든 결과는 같음). 실제 GPU 브라우저 창·사람 손 입력은 보지 않음. whiteboard 안 멀티플레이·이름 입력 뒤 「로비로」는 시험하지 않음(시작 오버레이의 링크만). 문 앞에 게임 제목은 아직 안 보임
+- 다음 작업: 사용자와 순서 결정 — `server/` 스캐폴드, 또는 문 앞 제목 표시
 
 ### 2026-10-13 — 문 입장 → 게임 이동 (계약 로비 쪽)
 - 완료: `lobby/src/games.ts`(등록 표·문 배정, 비어 있음) · `lobby/src/entry.ts`(입장 URL — 기존 쿼리·해시 보존 + `hub_return`, 복귀 URL — `hub_door`, 문 앞 등장 위치) 순수 함수 + 테스트 16개. `main.ts` 에서 문 도착 시 이동, 로드 시 `hub_door` 로 등장 후 주소창에서 제거, bfcache 복귀(`pageshow`) 처리. verify 6단계 PASS(테스트 30개). `shot.sh "/?hub_door=1"` 로 가운데 문 바로 아래에 아래를 보고 선 것 확인. reviewer(sonnet) APPROVE — MINOR(URL 생성 실패 시 입력 굳음) 반영. 원격 GitHub 확인 → 결정 기록. 어긋나 있던 `package-lock.json`(npm 11.6.2 가 `libc` 필드 제거)은 되돌림

@@ -10,8 +10,13 @@ export interface GameEntry {
   readonly url: string;
 }
 
-// 아직 붙은 게임이 없다
-export const GAMES: readonly GameEntry[] = [];
+// url 은 개발 중 각 게임의 dev 서버 주소 — 배포 URL 은 호스팅(PROGRESS 열린 질문 5)이 정해지면 바꾼다
+export const GAMES: readonly GameEntry[] = [
+  // 독립 저장소 github.com/jeonginwoo/whiteboard-3d — `npm run dev` 가 5174 에 뜬다
+  { id: 'whiteboard-3d', title: '3D 화이트보드', url: 'http://localhost:5174/' },
+];
 
 /** 문 번호(맵의 'D' 를 위→아래, 왼→오른 순으로 센 0부터의 번호) → 게임 id. 배정 없는 문은 그냥 바닥이다 */
-export const DOOR_GAMES: Readonly<Record<number, string>> = {};
+export const DOOR_GAMES: Readonly<Record<number, string>> = {
+  1: 'whiteboard-3d', // 가운데 문 — 시작점에서 가장 가깝다
+};
