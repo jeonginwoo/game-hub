@@ -1,5 +1,5 @@
 // 로비 진입점 — 직교 카메라 위에 타일맵과 내 캐릭터를 그린다 (결정 2026-10-13: 직교 + 2D 스프라이트).
-// 타일은 Ninja Adventure 스프라이트 시트 (CC0, docs/assets.md), 캐릭터는 꾸미기 값으로 직접 그린 2등신 (chibi.ts). 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
+// 타일은 Mage City Arcanos 스프라이트 시트 (CC0, docs/assets.md), 캐릭터는 꾸미기 값으로 직접 그린 2등신 (chibi.ts). 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
 import * as THREE from 'three';
 import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './entry';
 import { AVATAR_STORAGE_KEY, avatarFromStored } from './avatar';
@@ -31,12 +31,10 @@ camera.position.z = 10;
 
 // --- 스프라이트 시트 -----------------------------------------------------------
 
-const ASSET_DIR = `${import.meta.env.BASE_URL}assets/ninja-adventure/`;
+const ASSET_DIR = `${import.meta.env.BASE_URL}assets/mage-city/`;
 // 크기는 원본 PNG 그대로 — UV 를 텍스처 로드 전에 계산하려고 적어 둔다
 const SHEETS: Record<Sheet, { file: string; w: number; h: number }> = {
-  floor: { file: 'TilesetFloor.png', w: 352, h: 417 },
-  house: { file: 'TilesetHouse.png', w: 528, h: 368 },
-  nature: { file: 'TilesetNature.png', w: 384, h: 336 },
+  city: { file: 'magecity.png', w: 256, h: 1450 },
 };
 
 const loader = new THREE.TextureLoader();

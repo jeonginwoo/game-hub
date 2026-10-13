@@ -1,12 +1,12 @@
 // 타일 외형 — 맵의 칸마다 스프라이트 시트의 어느 칸을 그릴지 고른다. Three.js 와 무관한 순수 함수.
-// 에셋: Ninja Adventure (CC0, docs/assets.md). 시트는 16×16 칸, (col, row) 는 왼쪽 위가 (0, 0).
+// 에셋: Mage City Arcanos (Hyptosis, CC0, docs/assets.md). 시트는 32×32 칸, (col, row) 는 왼쪽 위가 (0, 0).
 // 맵 문자열(#·.·D·S)은 그대로 두고 주변 칸을 보고 외형을 정한다:
-//   문이 있는 줄의 벽 = 건물 정면, 그 위의 벽 = 지붕, 나머지 벽 = 풀밭 위 덤불.
+//   문이 있는 줄의 벽 = 건물 정면, 그 위의 벽 = 지붕, 나머지 벽 = 덤불.
 import type { Pos, TileMap } from './map';
 
-export const CELL_PX = 16;
+export const CELL_PX = 32;
 
-export type Sheet = 'floor' | 'house' | 'nature';
+export type Sheet = 'city';
 
 export interface Cell {
   readonly sheet: Sheet;
@@ -20,17 +20,17 @@ export interface TileLook {
   readonly over?: Cell;
 }
 
-const GRASS: Cell = { sheet: 'floor', col: 0, row: 12 };
-// 무늬 있는 풀 — 같은 칸만 반복되면 이동량이 눈에 안 들어온다
-const GRASS_VARIANTS: readonly Cell[] = [1, 2, 3, 4].map((col) => ({ sheet: 'floor', col, row: 12 }));
-const BUSH: Cell = { sheet: 'nature', col: 10, row: 9 };
-const FACADE: Cell = { sheet: 'house', col: 2, row: 2 };
-const ROOF_A: Cell = { sheet: 'house', col: 1, row: 1 }; // 지붕은 두 칸을 번갈아 — 기와 무늬가 이어지게
-const ROOF_B: Cell = { sheet: 'house', col: 2, row: 1 };
-const DOOR_OPEN: Cell = { sheet: 'house', col: 1, row: 2 }; // 게임이 배정된 문 — 열린 입구
-const DOOR_SHUT: Cell = { sheet: 'house', col: 1, row: 3 }; // 배정 없는 문 — 창살 문
+const cell = (col: number, row: number): Cell => ({ sheet: 'city', col, row });
 
-/** 위치마다 고정된 값 — 새로고침해도 풀 무늬가 같은 자리에 있게 */
+const FLAGSTONE = cell(1, 0); // 밝은 판석
+const FLAGSTONE_GRASS = cell(1, 1); // 틈에 풀 난 판석 — 같은 칸만 반복되면 이동량이 눈에 안 들어온다
+const HEDGE = cell(0, 0); // 빽빽한 잎
+const FACADE = cell(5, 27); // 회색 벽돌
+const ROOF = cell(1, 24); // 갈색 지붕 판자
+const DOOR_OPEN = cell(6, 40); // 게임이 배정된 문 — 어두운 입구
+const DOOR_SHUT = cell(2, 37); // 배정 없는 문 — 닫힌 나무판
+
+/** 위치마다 고정된 값 — 새로고침해도 무늬가 같은 자리에 있게 */
 function hash(x: number, y: number): number {
   return (Math.imul(x, 73856093) ^ Math.imul(y, 19349663)) >>> 0;
 }
@@ -47,14 +47,11 @@ function isFacade(map: TileMap, p: Pos): boolean {
 export function tileLook(map: TileMap, p: Pos, isOpenDoor: (p: Pos) => boolean): TileLook {
   const tile = map.tileAt(p);
   if (tile === 'door') return { base: isOpenDoor(p) ? DOOR_OPEN : DOOR_SHUT };
-  if (tile === 'floor') {
-    const h = hash(p.x, p.y) % 16; // 무늬 칸은 4/16 — 더 많으면 지저분하다
-    return { base: GRASS_VARIANTS[h] ?? GRASS };
-  }
+  if (tile === 'floor') return { base: hash(p.x, p.y) % 7 === 0 ? FLAGSTONE_GRASS : FLAGSTONE };
   if (isFacade(map, p)) return { base: FACADE };
   const below = { x: p.x, y: p.y + 1 };
-  if (isFacade(map, below) || map.tileAt(below) === 'door') return { base: p.x % 2 === 0 ? ROOF_A : ROOF_B };
-  return { base: GRASS, over: BUSH };
+  if (isFacade(map, below) || map.tileAt(below) === 'door') return { base: ROOF };
+  return { base: HEDGE };
 }
 
 /**
