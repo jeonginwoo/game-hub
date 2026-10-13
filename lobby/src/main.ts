@@ -1,7 +1,10 @@
 // 로비 진입점 — 직교 카메라 위에 타일맵과 내 캐릭터를 그린다 (결정 2026-10-13: 직교 + 2D 스프라이트).
-// 타일은 Ninja Adventure 스프라이트 시트 (CC0, docs/assets.md), 캐릭터는 아직 색 사각형. 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
+// 타일은 Ninja Adventure 스프라이트 시트 (CC0, docs/assets.md), 캐릭터는 꾸미기 값으로 직접 그린 2등신 (chibi.ts). 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
 import * as THREE from 'three';
 import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './entry';
+import { AVATAR_STORAGE_KEY, avatarFromStored } from './avatar';
+import { characterFrame } from './character';
+import { FRAME_H, FRAME_W, SHEET_H, SHEET_W, renderChibiSheet } from './chibi';
 import { DOOR_GAMES, GAMES } from './games';
 import { LOBBY_ROWS } from './lobby-map';
 import { parseMap, type Pos } from './map';
@@ -39,7 +42,9 @@ const SHEETS: Record<Sheet, { file: string; w: number; h: number }> = {
 const loader = new THREE.TextureLoader();
 /** 픽셀아트 텍스처 — 확대해도 번지지 않게 최근접 샘플링, 밉맵 없음 */
 function pixelTexture(file: string): THREE.Texture {
-  const tex = loader.load(ASSET_DIR + file);
+  return pixelate(loader.load(ASSET_DIR + file));
+}
+function pixelate<T extends THREE.Texture>(tex: T): T {
   tex.magFilter = THREE.NearestFilter;
   tex.minFilter = THREE.NearestFilter;
   tex.generateMipmaps = false;
@@ -89,21 +94,32 @@ for (let y = 0; y < map.height; y++) {
 
 // --- 캐릭터 -------------------------------------------------------------------
 
-const player = new THREE.Group();
-const body = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), new THREE.MeshBasicMaterial({ color: 0x5e81ac }));
-// 바라보는 방향 표시 — 기본은 오른쪽(+x)을 가리키고 facing 에 맞춰 돌린다
-const nose = new THREE.Mesh(
-  new THREE.CircleGeometry(0.16, 3),
-  new THREE.MeshBasicMaterial({ color: 0xeceff4 }),
+// 캐릭터 그림은 32px = 1칸 — 프레임(32×40)은 폭 1칸, 높이 1.25칸이고 발이 칸 바닥에 닿는다
+const CHAR_W = FRAME_W / 32;
+const CHAR_H = FRAME_H / 32;
+
+function readStoredAvatar(): string | null {
+  try {
+    return localStorage.getItem(AVATAR_STORAGE_KEY);
+  } catch {
+    return null; // 저장소를 막아 둔 브라우저 — 기본 캐릭터
+  }
+}
+
+const charCanvas = document.createElement('canvas');
+charCanvas.width = SHEET_W;
+charCanvas.height = SHEET_H;
+charCanvas
+  .getContext('2d')
+  ?.putImageData(new ImageData(renderChibiSheet(avatarFromStored(readStoredAvatar())), SHEET_W, SHEET_H), 0, 0);
+const charTex = pixelate(new THREE.CanvasTexture(charCanvas));
+charTex.repeat.set(FRAME_W / SHEET_W, FRAME_H / SHEET_H); // 한 칸만 보이게, 칸은 offset 으로 고른다
+const player = new THREE.Mesh(
+  new THREE.PlaneGeometry(CHAR_W, CHAR_H),
+  new THREE.MeshBasicMaterial({ map: charTex, alphaTest: 0.5 }),
 );
-nose.position.x = 0.22;
-const noseHolder = new THREE.Group();
-noseHolder.add(nose);
-player.add(body, noseHolder);
 player.position.z = 1;
 scene.add(player);
-
-const FACING_ANGLE: Record<Dir, number> = { right: 0, up: Math.PI / 2, left: Math.PI, down: -Math.PI / 2 };
 
 // 게임에서 돌아왔으면(hub_door) 들어갔던 문 앞에 선다. 주소창에서는 지워 새로고침하면 시작점에서 시작하게
 const spawn = spawnFromSearch(map, location.search);
@@ -113,6 +129,7 @@ let pos: Pos = spawn.pos; // 논리 위치 — 걷는 중이면 도착할 칸
 let from: Pos = spawn.pos; // 걷기 시작한 칸
 let t = 1; // from → pos 보간 진행도 (1 이면 정지)
 let facing: Dir = spawn.facing;
+let stride = 0; // 걸은 거리(칸) — 걷기 애니메이션 프레임을 고른다
 let leaving = false; // 게임으로 이동 중 — 페이지가 바뀔 때까지 입력·재입장을 막는다
 
 // --- 게임 입장 (docs/game-entry-contract.md) ----------------------------------
@@ -196,6 +213,7 @@ renderer.setAnimationLoop((now) => {
   // 한 칸을 끝내고 남은 시간은 다음 칸으로 넘긴다 — 버리면 프레임률에 따라 걷는 속도가 달라진다
   let carry = 0;
   if (t < 1) {
+    stride += Math.min(dt / STEP_MS, 1 - t);
     t += dt / STEP_MS;
     if (t >= 1) {
       carry = (t - 1) * STEP_MS;
@@ -218,8 +236,10 @@ renderer.setAnimationLoop((now) => {
 
   const x = from.x + (pos.x - from.x) * t;
   const y = from.y + (pos.y - from.y) * t;
-  player.position.set(x, -y, 1);
-  noseHolder.rotation.z = FACING_ANGLE[facing];
+  // 프레임 바닥 = 칸 바닥 → 프레임 중심은 칸 중심보다 (CHAR_H - 1) / 2 위
+  player.position.set(x, -y + (CHAR_H - 1) / 2, 1);
+  const frame = characterFrame(facing, t < 1, stride);
+  charTex.offset.set((frame.col * FRAME_W) / SHEET_W, 1 - ((frame.row + 1) * FRAME_H) / SHEET_H);
 
   const viewX = camera.right - camera.left;
   camera.position.x = clampAxis(x, map.width, viewX);
