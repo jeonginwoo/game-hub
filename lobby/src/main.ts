@@ -1,6 +1,8 @@
 // 로비 진입점 — 직교 카메라 위에 타일맵과 내 캐릭터를 그린다 (결정 2026-10-13: 직교 + 2D 스프라이트).
 // 에셋 전까지 타일·캐릭터는 색 사각형. 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
 import * as THREE from 'three';
+import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './entry';
+import { DOOR_GAMES, GAMES } from './games';
 import { LOBBY_ROWS } from './lobby-map';
 import { parseMap, type Pos, type Tile } from './map';
 import { step, type Dir } from './movement';
@@ -61,10 +63,43 @@ scene.add(player);
 
 const FACING_ANGLE: Record<Dir, number> = { right: 0, up: Math.PI / 2, left: Math.PI, down: -Math.PI / 2 };
 
-let pos: Pos = map.start; // 논리 위치 — 걷는 중이면 도착할 칸
-let from: Pos = map.start; // 걷기 시작한 칸
+// 게임에서 돌아왔으면(hub_door) 들어갔던 문 앞에 선다. 주소창에서는 지워 새로고침하면 시작점에서 시작하게
+const spawn = spawnFromSearch(map, location.search);
+history.replaceState(history.state, '', withoutDoorParam(location.href));
+
+let pos: Pos = spawn.pos; // 논리 위치 — 걷는 중이면 도착할 칸
+let from: Pos = spawn.pos; // 걷기 시작한 칸
 let t = 1; // from → pos 보간 진행도 (1 이면 정지)
-let facing: Dir = 'down';
+let facing: Dir = spawn.facing;
+let leaving = false; // 게임으로 이동 중 — 페이지가 바뀔 때까지 입력·재입장을 막는다
+
+// --- 게임 입장 (docs/game-entry-contract.md) ----------------------------------
+
+/** 도착한 칸이 게임이 배정된 문이면 그 게임으로 페이지를 옮긴다 */
+function enterIfDoor(p: Pos): void {
+  const door = doorIndexAt(map, p);
+  if (door === undefined) return;
+  const game = gameAtDoor(door, GAMES, DOOR_GAMES);
+  if (!game) return;
+  const back = returnUrl(location.href, door); // URL 을 다 만든 뒤에 leaving — 여기서 던지면 입력이 굳지 않게
+  const target = entryUrl(game.url, back, location.href);
+  leaving = true;
+  // 현재 기록도 복귀 URL 로 바꿔 둔다 — 브라우저 뒤로 가기로 와도 문 앞에 서게
+  history.replaceState(history.state, '', back);
+  location.assign(target);
+}
+
+// 뒤로 가기로 bfcache 에서 되살아나면 문 위에 멈춘 상태 그대로다 — 문 앞으로 다시 세운다
+window.addEventListener('pageshow', (e) => {
+  if (!e.persisted || !leaving) return;
+  const back = spawnFromSearch(map, location.search);
+  history.replaceState(history.state, '', withoutDoorParam(location.href));
+  pos = from = back.pos;
+  facing = back.facing;
+  t = 1;
+  held.length = 0;
+  leaving = false;
+});
 
 // --- 입력 ---------------------------------------------------------------------
 // 여러 키를 누르고 있으면 가장 나중에 누른 방향을 따른다 (쯔꾸르와 같은 감각)
@@ -123,9 +158,10 @@ renderer.setAnimationLoop((now) => {
     if (t >= 1) {
       carry = (t - 1) * STEP_MS;
       t = 1;
+      enterIfDoor(pos);
     }
   }
-  if (t >= 1) {
+  if (t >= 1 && !leaving) {
     const dir = held[held.length - 1];
     if (dir) {
       const r = step(map, pos, dir);
