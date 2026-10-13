@@ -36,8 +36,8 @@ is simply skipped.
 
 1. The lobby and the games are independent: the lobby never imports a game's internals, and a
    game never imports the lobby or another game. They meet only at the **game entry contract**
-   (how the lobby launches a game and how the player comes back) — defined once, in one place,
-   before the first game is plugged in.
+   (how the lobby launches a game and how the player comes back) — defined once, in
+   `docs/game-entry-contract.md`. Lobby code that launches or receives a game follows it exactly.
 2. A game's form is free. The lobby must never require a game to use its stack, scene graph, or
    input handling — the lobby adapts to the contract, never the game to the lobby.
 
