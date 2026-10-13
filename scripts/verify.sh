@@ -100,6 +100,7 @@ step "script line endings" check_script_eol
 # with --if-present, so a game that uses its own stack simply has no such script.
 step "typecheck" npm run --silent typecheck
 if [ "$QUICK" != "--quick" ]; then
+  step "unit tests" npm run --silent test
   step "build" npm run --silent build
 fi
 
