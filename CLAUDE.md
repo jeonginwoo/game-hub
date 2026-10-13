@@ -22,6 +22,7 @@ bash scripts/verify.sh            # full verification (--quick: fast tier)
 bash scripts/ralph.sh 2           # autonomous queue loop — only with a human watching
 npm run dev                       # lobby dev server (Vite, http://localhost:5173)
 npm install                       # once after clone, and whenever package-lock.json changes
+bash scripts/shot.sh              # look at the lobby: headless screenshot → build/shot/lobby.png (skill: run-lobby)
 ```
 
 ## Layout

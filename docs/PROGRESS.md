@@ -2,13 +2,13 @@
 
 > **모든 세션은 이 파일을 읽는 것으로 시작하고, 이 파일을 갱신하는 것으로 끝난다.**
 
-## 현재 상태 (2026-10-09)
+## 현재 상태 (2026-10-13)
 
 - **목적:** Three.js 로 만드는 멀티플레이 게임 모음. 쯔꾸르(RPG Maker)식 로비에서 여러 명이 함께 돌아다니다가 문을 통해 각자 만든 게임으로 입장한다. 게임의 형식은 자유.
 - **진행:** 로비 스캐폴드 완료. `lobby/` 에 Vite + TypeScript + three 로 빈 씬 하나(임시 원근 카메라 + 격자). 멀티플레이 서버·게임 폴더는 아직 없음
 - **검증 기준선:** `bash scripts/verify.sh` 5단계 PASS (docs · reviewer model · script line endings · typecheck · build). full 약 5초, `--quick` 약 2초. 번들 527 kB (gzip 131 kB) — three 전체가 한 청크라 Vite 의 500 kB 경고가 찍히지만 실패는 아님
-- **다음 작업:** 게임 입장 계약 문서 1장(`docs/`) — 결정 기록 「입장 계약」을 게임 담당자가 로비 코드를 읽지 않고도 붙일 수 있는 수준으로 적는다 (후보 일감, 사용자 승인 필요). 그 다음 `server/`(Node + ws) 스캐폴드와 로비 접속
-- **차단 요소:** 없음. 열린 질문 4(로비 렌더링)는 타일맵·캐릭터 작업 전에만 정하면 됨
+- **다음 작업:** 로비 구현 (사용자 2026-10-13: 입장 계약 문서보다 먼저). 첫 단계는 열린 질문 4(로비 렌더링) 결정 → 타일맵 + 내 캐릭터 이동
+- **차단 요소:** 로비 구현은 열린 질문 4(로비 렌더링) 결정이 선행
 
 ## 열린 질문 (다음 세션에서 사용자와 결정)
 
@@ -33,6 +33,8 @@
 | 2026-10-09 | **멀티플레이 전송 = Node + `ws` 자체 서버.** 위치는 클라이언트 권위, 서버는 명단 관리와 중계만. 전송은 로비 안의 모듈 하나 뒤에 숨겨 교체 가능하게. 호스팅은 열린 질문 5(원격 저장소)와 함께 정한다 | 로비는 경쟁이 없어 서버 권위가 불필요. `ws` 가 의존성과 마법이 가장 적다 (Socket.IO 는 번들·프로토콜이 크고, Colyseus 는 서버 구조가 프레임워크에 묶이고, WebRTC 는 NAT 문제). 사용자 결정 — 열린 질문 2 종결 |
 | 2026-10-09 | **모노레포 + npm workspaces, Vite + TypeScript.** `lobby/` · `server/` · `games/<이름>/` 을 워크스페이스로 두되 폴더는 필요한 세션에서 만든다(지금은 `lobby/` 만). 루트 스크립트가 `--workspaces --if-present` 로 퍼뜨린다 | 한 저장소여야 verify 하나로 불변식 1(교차 import 금지)을 기계화할 수 있다. 게임은 URL 로만 연결되므로 다른 스택이어도 폴더 하나로 들어오고, 스크립트가 없으면 `--if-present` 가 그냥 건너뛴다. 사용자 결정 — 열린 질문 3 종결 |
 | 2026-10-09 | verify 단계 등록 · Stop 훅 `CODE_PATHS` · settings allow 는 「규칙 변경」이 아니라 「부품 적용」으로 보고 `feat:` 스캐폴드 커밋에 함께 넣는다 | CLAUDE.md 는 규칙 변경을 별도 `chore:` 로 먼저 올리라 하지만, typecheck·build 단계는 코드가 있어야 통과하므로 먼저 올릴 수 없다. 규칙(verify 통과 의무) 자체는 바뀌지 않았다 |
+| 2026-10-13 | **로비 구현을 게임 입장 계약 문서보다 먼저** 한다. 계약 문서는 첫 게임이 붙기 전까지만 있으면 된다 | 사용자 결정 2026-10-13. 불변식 1 은 "첫 게임이 붙기 전" 에 계약을 요구하므로 순서를 바꿔도 위반 아님 |
+| 2026-10-13 | 시각 확인 절차를 `scripts/shot.sh` + 프로젝트 스킬 `run-lobby` 로 둔다 (headless Chrome `--screenshot`, chromium-cli·Playwright 없음). 이미 떠 있는 dev 서버는 재사용하고 끄지 않는다 | 첫 세션에 수작업으로 조립한 절차를 사용자가 "계속 필요" 하다고 판단. 사용자가 띄운 서버를 스크립트가 죽이면 안 된다 |
 
 ## 작업 큐 (ralph 루프용)
 
@@ -44,13 +46,13 @@
 ## 후보 일감 (사용자 승인 후 작업 큐로 이동)
 
 - 저장소 이름 `game-hub` 는 하네스 적용 시 임시로 붙인 것 — 원격을 만들기 전에 확정 (폴더명 변경 + CLAUDE.md 제목 + 루트 `package.json` name)
-- **게임 입장 계약 문서 1장** (`docs/`) — 결정 기록 「입장 계약」(URL 이동 + 복귀 URL 쿼리)을 게임 담당자가 로비 코드를 읽지 않고도 붙일 수 있게 적는다. 쿼리 파라미터 이름·게임 URL 등록 방법·게임이 워크스페이스(`games/<이름>/`)일 수도 독립 폴더·외부 URL 일 수도 있음을 명시. 첫 게임이 붙기 전에 필수 (CLAUDE.md 불변식 1)
+- **게임 입장 계약 문서 1장** (`docs/`, 로비 구현 뒤 — 결정 2026-10-13) — 결정 기록 「입장 계약」(URL 이동 + 복귀 URL 쿼리)을 게임 담당자가 로비 코드를 읽지 않고도 붙일 수 있게 적는다. 쿼리 파라미터 이름·게임 URL 등록 방법·게임이 워크스페이스(`games/<이름>/`)일 수도 독립 폴더·외부 URL 일 수도 있음을 명시. 첫 게임이 붙기 전에 필수 (CLAUDE.md 불변식 1)
 - `server/` 스캐폴드 (Node + `ws`, 워크스페이스 추가) 와 로비의 접속·명단 표시 — 계약 문서 뒤
 - 게임이 2개 이상 붙으면 `scripts/verify.sh` 에 "게임 ↔ 로비 · 게임 ↔ 게임 import 없음" 검사 (불변식 1 의 기계화)
 - `server/` `games/` 폴더가 생기면 `scripts/hooks/stop-verify.sh` 의 `CODE_PATHS` 에 추가
 - 열린 질문 4 결정 뒤 `lobby/src/main.ts` 의 임시 원근 카메라·격자 교체
 - 번들 527 kB 경고 (three 전체가 한 청크) — 로비가 커지면 코드 분할 또는 `build.chunkSizeWarningLimit` 판단. 지금은 무시
-- 앱 실행·스크린샷 절차(`npm run dev` + 헤드리스 Chrome `--screenshot`, chromium-cli 없음)를 프로젝트 스킬로 — 시각 확인이 반복되면
+- `scripts/shot.sh` 에 키 입력 시뮬레이션(CDP `--remote-debugging-port`) — 걷기·문 입장을 눈으로 확인해야 할 때
 
 ## 세션 로그
 
@@ -73,3 +75,8 @@
 - 완료: 열린 질문 1~3 을 사용자와 결정(독립 페이지 URL 이동 · Node + ws · 모노레포 Vite + TS + npm) → 결정 기록으로 이동. 불변식 1·2 확정. 루트 `package.json`(workspaces) + `lobby/`(Vite 8 · TypeScript 7 · three 0.186) 빈 씬. `scripts/verify.sh` 에 typecheck(quick)·build(full) 등록, Stop 훅 `CODE_PATHS` → `lobby package.json package-lock.json`, settings allow 에 npm/npx 러너 명령. CLAUDE.md 에 Layout 절과 dev 명령 추가. `bash scripts/verify.sh` 5단계 PASS (full 5초 · quick 2초). `npm run dev` 를 띄워 헤드리스 Chrome 스크린샷으로 격자 렌더 확인, 콘솔 오류 없음. reviewer(sonnet) APPROVE
 - 미해결: 번들 500 kB 경고(three 전체). 열린 질문 4·5 미결. 실제 GPU 브라우저 창·HMR 은 보지 않음(헤드리스 소프트웨어 렌더만). reviewer 메모: settings allow 의 `npm install:*` 는 임의 패키지 설치를 허용하므로 좁힐지 사용자 판단 — 그대로 둠
 - 다음 작업: 게임 입장 계약 문서 1장 — 후보 일감에 있음, 사용자 승인 후 작업 큐로
+
+### 2026-10-13 — 시각 확인 스킬 + 우선순위 변경
+- 완료: `scripts/shot.sh`(dev 서버 기동/재사용 → headless Chrome 스크린샷 → 콘솔 출력 → 띄운 경우만 정리) + `.claude/skills/run-lobby/SKILL.md`. 실제 실행으로 격자 화면·콘솔 오류 없음 확인. 사용자 결정: 로비 구현을 입장 계약 문서보다 먼저 → 결정 기록
+- 미해결: 스크립트는 키 입력을 못 보냄(후보 일감). 열린 질문 4 미결
+- 다음 작업: 열린 질문 4 결정 → 로비 타일맵 + 내 캐릭터 이동
