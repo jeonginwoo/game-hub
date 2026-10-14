@@ -1,11 +1,14 @@
-// 로비 진입점 — 직교 카메라 위에 타일맵과 내 캐릭터를 그린다 (결정 2026-10-13: 직교 + 2D 스프라이트).
-// 에셋 전까지 타일·캐릭터는 색 사각형. 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
+// 로비 진입점 — 직교 카메라 위에 ZEP 식 층(배경 한 장·물체·캐릭터)을 그린다 (결정 2026-10-13: 직교 + 2D 스프라이트,
+// 2026-10-14: ZEP 식 층). 에셋 전까지 그림은 임시 색. 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
 import * as THREE from 'three';
 import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './entry';
 import { DOOR_GAMES, GAMES } from './games';
+import { AVATAR_PX, drawZ, TILE_PX } from './layers';
+import { LOBBY_OBJECTS } from './lobby-objects';
 import { LOBBY_ROWS } from './lobby-map';
 import { parseMap, type Pos, type Tile } from './map';
 import { step, type Dir } from './movement';
+import { checkObjects, objectRect, objectZ } from './objects';
 import { clampAxis } from './view';
 
 const VIEW_TILES_Y = 11; // 화면 세로에 보이는 타일 수
@@ -25,43 +28,103 @@ scene.background = new THREE.Color(0x10131b);
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
 camera.position.z = 10;
 
-// --- 타일맵 -------------------------------------------------------------------
+// --- 층 (layers.ts) -----------------------------------------------------------
+// 깊이는 z 로 준다 — 그림이 모두 불투명이거나 alphaTest 라 깊이 버퍼가 앞뒤를 가린다
 
-const tileGeo = new THREE.PlaneGeometry(1, 1);
-const tileMat: Record<Tile | 'floorAlt', THREE.MeshBasicMaterial> = {
-  wall: new THREE.MeshBasicMaterial({ color: 0x3b4252 }),
-  floor: new THREE.MeshBasicMaterial({ color: 0x8fa36b }),
-  floorAlt: new THREE.MeshBasicMaterial({ color: 0x86995f }), // 바닥 체크무늬 — 이동량을 눈으로 읽게
-  door: new THREE.MeshBasicMaterial({ color: 0xd08770 }),
-};
+/** 픽셀 캔버스를 도트가 번지지 않는 텍스처로 */
+function pixelTexture(c: HTMLCanvasElement): THREE.CanvasTexture {
+  const tex = new THREE.CanvasTexture(c);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
 
-for (let y = 0; y < map.height; y++) {
-  for (let x = 0; x < map.width; x++) {
-    const tile = map.tileAt({ x, y });
-    const mat = tile === 'floor' && (x + y) % 2 === 1 ? tileMat.floorAlt : tileMat[tile];
-    const mesh = new THREE.Mesh(tileGeo, mat);
-    mesh.position.set(x, -y, 0);
-    scene.add(mesh);
+/** 크기 w×h(칸)인 사각형을 타일 좌표 가장자리(left, bottom)에 맞춰 놓는다 */
+function placeRect(mesh: THREE.Mesh, left: number, bottom: number, w: number, h: number, z: number): void {
+  mesh.position.set(left + w / 2, -(bottom - h / 2), z);
+}
+
+// 배경 한 장 — 지금은 문자 맵을 칸마다 색칠한 임시 그림. 나중에 맵 크기 × 32px 그림 한 장으로 바꾼다
+const TILE_COLOR: Readonly<Record<Tile, string>> = { wall: '#3b4252', floor: '#8fa36b', door: '#d08770' };
+const FLOOR_ALT = '#86995f'; // 바닥 체크무늬 — 이동량을 눈으로 읽게
+
+function placeholderBackground(): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = map.width * TILE_PX;
+  c.height = map.height * TILE_PX;
+  const g = c.getContext('2d');
+  if (!g) throw new Error('2d 캔버스를 만들 수 없다');
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      const tile = map.tileAt({ x, y });
+      g.fillStyle = tile === 'floor' && (x + y) % 2 === 1 ? FLOOR_ALT : TILE_COLOR[tile];
+      g.fillRect(x * TILE_PX, y * TILE_PX, TILE_PX, TILE_PX);
+    }
   }
+  return c;
+}
+
+const background = new THREE.Mesh(
+  new THREE.PlaneGeometry(map.width, map.height),
+  new THREE.MeshBasicMaterial({ map: pixelTexture(placeholderBackground()) }),
+);
+placeRect(background, -0.5, map.height - 0.5, map.width, map.height, drawZ('background'));
+scene.add(background);
+
+// 물체 — 바닥·정렬·상단 층. 앞화면 층은 그릴 그림이 생기면 배경처럼 맵 크기 한 장으로 얹는다
+checkObjects(map, LOBBY_OBJECTS);
+for (const o of LOBBY_OBJECTS) {
+  const r = objectRect(o);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(o.w, o.h), new THREE.MeshBasicMaterial({ color: o.color }));
+  placeRect(mesh, r.left, r.bottom, o.w, o.h, objectZ(o));
+  scene.add(mesh);
 }
 
 // --- 캐릭터 -------------------------------------------------------------------
+// 48×64 프레임(1.5×2칸), 발이 칸 아래 가운데. 지금은 방향마다 몸·머리·방향 점을 그린 임시 프레임
 
-const player = new THREE.Group();
-const body = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), new THREE.MeshBasicMaterial({ color: 0x5e81ac }));
-// 바라보는 방향 표시 — 기본은 오른쪽(+x)을 가리키고 facing 에 맞춰 돌린다
-const nose = new THREE.Mesh(
-  new THREE.CircleGeometry(0.16, 3),
-  new THREE.MeshBasicMaterial({ color: 0xeceff4 }),
-);
-nose.position.x = 0.22;
-const noseHolder = new THREE.Group();
-noseHolder.add(nose);
-player.add(body, noseHolder);
-player.position.z = 1;
+const AVATAR_W = AVATAR_PX.w / TILE_PX; // 칸
+const AVATAR_H = AVATAR_PX.h / TILE_PX; // 칸
+
+function placeholderAvatar(facing: Dir): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = AVATAR_PX.w;
+  c.height = AVATAR_PX.h;
+  const g = c.getContext('2d');
+  if (!g) throw new Error('2d 캔버스를 만들 수 없다');
+  g.fillStyle = '#5e81ac'; // 몸
+  g.fillRect(12, 34, 24, 26);
+  g.fillStyle = '#e5c3a0'; // 머리
+  g.beginPath();
+  g.arc(24, 22, 14, 0, Math.PI * 2);
+  g.fill();
+  // 바라보는 쪽 표시 — 뒷모습(up)은 머리 전체를 머리카락 색으로
+  g.fillStyle = '#3b2a20';
+  const eye: Readonly<Record<Dir, readonly [number, number] | undefined>> = {
+    down: [24, 26], left: [15, 22], right: [33, 22], up: undefined,
+  };
+  const p = eye[facing];
+  if (p) {
+    g.fillRect(p[0] - 3, p[1] - 3, 6, 6);
+  } else {
+    g.beginPath();
+    g.arc(24, 22, 14, 0, Math.PI * 2);
+    g.fill();
+  }
+  return c;
+}
+
+const AVATAR_TEX: Readonly<Record<Dir, THREE.CanvasTexture>> = {
+  up: pixelTexture(placeholderAvatar('up')),
+  down: pixelTexture(placeholderAvatar('down')),
+  left: pixelTexture(placeholderAvatar('left')),
+  right: pixelTexture(placeholderAvatar('right')),
+};
+const playerMat = new THREE.MeshBasicMaterial({ map: AVATAR_TEX.down, alphaTest: 0.5 });
+const player = new THREE.Mesh(new THREE.PlaneGeometry(AVATAR_W, AVATAR_H), playerMat);
 scene.add(player);
-
-const FACING_ANGLE: Record<Dir, number> = { right: 0, up: Math.PI / 2, left: Math.PI, down: -Math.PI / 2 };
 
 // 게임에서 돌아왔으면(hub_door) 들어갔던 문 앞에 선다. 주소창에서는 지워 새로고침하면 시작점에서 시작하게
 const spawn = spawnFromSearch(map, location.search);
@@ -176,8 +239,9 @@ renderer.setAnimationLoop((now) => {
 
   const x = from.x + (pos.x - from.x) * t;
   const y = from.y + (pos.y - from.y) * t;
-  player.position.set(x, -y, 1);
-  noseHolder.rotation.z = FACING_ANGLE[facing];
+  const foot = y + 0.5; // 칸 y 에 선 캐릭터의 발 선
+  placeRect(player, x - AVATAR_W / 2, foot, AVATAR_W, AVATAR_H, drawZ('sorted', foot));
+  playerMat.map = AVATAR_TEX[facing];
 
   const viewX = camera.right - camera.left;
   camera.position.x = clampAxis(x, map.width, viewX);

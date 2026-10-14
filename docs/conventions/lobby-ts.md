@@ -54,7 +54,17 @@
 - World space: 1 unit = 1 tile, world `y = -tile y` (screen up = map top row). Convert
   only in `main.ts`; pure modules never see world coordinates.
 
-## 6. Comments & errors
+## 6. Layers & drawing
+
+- Draw order is ZEP-style and decided only by `layers.ts`: background (one map-sized
+  image) → floor objects → sorted (objects and characters by foot y) → top objects →
+  foreground. Every mesh gets its z from `drawZ` / `objectZ` — no hand-picked z values.
+- Pixel sizes are `TILE_PX` (32) and `AVATAR_PX` (48×64, feet at the cell's bottom centre).
+  Pixel textures use nearest filtering, no mipmaps, sRGB (`pixelTexture` in `main.ts`).
+- Drawing never blocks movement: what is passable is the character map (`#`) alone.
+  An object that should block stands on `#` cells.
+
+## 7. Comments & errors
 
 - Code comments are Korean (CLAUDE.md language rule).
 - Every `src/` file opens with a 1–2 line comment: what the module is, whether it is pure, and
@@ -67,7 +77,7 @@
 - Thrown errors are `new Error('<한국어 설명>')` and include the offending value
   (`` `(${x}, ${y}) 의 모르는 문자 '${ch}'` ``).
 
-## 7. Dependencies
+## 8. Dependencies
 
 - Runtime dependency is `three` only. Adding a package is a decision — it goes to the
   PROGRESS 결정 기록 with 근거 first.
