@@ -112,10 +112,11 @@ export function showEntryScreen(screen: Exclude<Screen, 'lobby'>, room: string |
   });
 }
 
-/** 로비 왼쪽 위 — 방 코드·내 이름·「초대 링크 복사」 */
-export function showRoomBadge(entered: Entered, lobbyHref: string): void {
+/** 로비 왼쪽 위 — 방 코드·내 이름·접속 상태·「초대 링크 복사」. 접속 상태 글자를 바꾸는 함수를 돌려준다 */
+export function showRoomBadge(entered: Entered, lobbyHref: string): (status: string) => void {
   const badge = el('div', 'hub-badge');
-  badge.append(el('span', 'hub-badge-room', `로비 ${entered.room}`), el('span', 'hub-badge-name', entered.name));
+  const status = el('span', 'hub-badge-status');
+  badge.append(el('span', 'hub-badge-room', `로비 ${entered.room}`), el('span', 'hub-badge-name', entered.name), status);
   const copy = el('button', 'hub-btn hub-small', '초대 링크 복사');
   copy.type = 'button';
   const link = inviteUrl(lobbyHref, entered.room);
@@ -137,4 +138,7 @@ export function showRoomBadge(entered: Entered, lobbyHref: string): void {
   });
   badge.append(copy);
   document.body.append(badge);
+  return (text) => {
+    status.textContent = text;
+  };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, isRoomCode, normalizeName, parseClientMsg, roomFromPath } from '../src/protocol.ts';
+import { cleanName, isRoomCode, normalizeName, parseClientMsg, parseServerMsg, roomFromPath } from '../src/protocol.ts';
 
 const at = { x: 3, y: 4, dir: 'down' };
 
@@ -79,5 +79,35 @@ describe('normalizeName', () => {
   it('비면 빈 문자열 — 기본 이름을 넣지 않는다', () => {
     expect(normalizeName(' \u0007 ')).toBe('');
     expect(normalizeName(' 영희 ')).toBe('영희');
+  });
+});
+
+describe('parseServerMsg', () => {
+  const player = { id: 'p1', name: 'A', ...at };
+
+  it('서버가 보내는 네 가지를 받는다', () => {
+    expect(parseServerMsg(JSON.stringify({ t: 'welcome', id: 'p1', players: [player] }))).toEqual({
+      t: 'welcome',
+      id: 'p1',
+      players: [player],
+    });
+    expect(parseServerMsg(JSON.stringify({ t: 'join', player }))).toEqual({ t: 'join', player });
+    expect(parseServerMsg(JSON.stringify({ t: 'move', id: 'p1', at }))).toEqual({ t: 'move', id: 'p1', at });
+    expect(parseServerMsg(JSON.stringify({ t: 'leave', id: 'p1' }))).toEqual({ t: 'leave', id: 'p1' });
+  });
+
+  it('형식이 틀리면 null — 명단에 틀린 사람이 하나라도 있으면 통째로', () => {
+    expect(parseServerMsg('nope')).toBeNull();
+    expect(parseServerMsg(JSON.stringify({ t: 'welcome', id: 'p1', players: [player, { id: 'p2' }] }))).toBeNull();
+    expect(parseServerMsg(JSON.stringify({ t: 'join', player: { ...player, x: -1 } }))).toBeNull();
+    expect(parseServerMsg(JSON.stringify({ t: 'move', id: 3, at }))).toBeNull();
+    expect(parseServerMsg(JSON.stringify({ t: 'leave' }))).toBeNull();
+  });
+
+  it('이름은 다시 다듬는다 — 화면에 그대로 나가는 값이라', () => {
+    expect(parseServerMsg(JSON.stringify({ t: 'join', player: { ...player, name: ' B\u0000 ' } }))).toEqual({
+      t: 'join',
+      player: { ...player, name: 'B' },
+    });
   });
 });

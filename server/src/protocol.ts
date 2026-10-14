@@ -1,4 +1,4 @@
-// 로비 ↔ 멀티 서버 메시지 (JSON over WebSocket, 경로 /ws) — 순수 모듈, node·DOM 을 import 하지 않는다.
+// 로비 ↔ 멀티 서버 메시지 (JSON over WebSocket, 경로 /ws) — 순수 모듈, node·DOM 을 import 하지 않는다 (로비 src/ 도 쓴다).
 // 위치는 클라이언트 권위(결정 2026-10-09): 서버는 형식만 검사하고 명단 관리·중계만 한다. 좌표는 타일 단위.
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
@@ -92,6 +92,47 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       return typeof v.name === 'string' ? { t: 'hello', name: cleanName(v.name), at } : null;
     case 'move':
       return { t: 'move', at };
+    default:
+      return null;
+  }
+}
+
+function parsePlayer(v: unknown): Player | null {
+  if (!isRecord(v) || typeof v.id !== 'string' || typeof v.name !== 'string') return null;
+  const at = parseSpot(v);
+  return at ? { id: v.id, name: cleanName(v.name), ...at } : null;
+}
+
+/** 로비가 받은 서버 메시지. 형식이 틀리면 null — 로비는 그 메시지를 버린다 (서버 쪽과 같은 규칙) */
+export function parseServerMsg(raw: string): ServerMsg | null {
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isRecord(v)) return null;
+  switch (v.t) {
+    case 'welcome': {
+      if (typeof v.id !== 'string' || !Array.isArray(v.players)) return null;
+      const players: Player[] = [];
+      for (const p of v.players) {
+        const player = parsePlayer(p);
+        if (!player) return null;
+        players.push(player);
+      }
+      return { t: 'welcome', id: v.id, players };
+    }
+    case 'join': {
+      const player = parsePlayer(v.player);
+      return player ? { t: 'join', player } : null;
+    }
+    case 'move': {
+      const at = parseSpot(v.at);
+      return typeof v.id === 'string' && at ? { t: 'move', id: v.id, at } : null;
+    }
+    case 'leave':
+      return typeof v.id === 'string' ? { t: 'leave', id: v.id } : null;
     default:
       return null;
   }

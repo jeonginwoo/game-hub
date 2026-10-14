@@ -41,6 +41,13 @@
       }
       .hub-badge-room { font-weight: 600; letter-spacing: 0.05em; }
       .hub-badge-name { color: #a3adc2; }
+      .hub-badge-status { color: #a3be8c; font-size: 13px; }
+      /* 캐릭터 머리 위 이름표 (main.ts 가 매 프레임 자리를 옮긴다) */
+      .hub-tag {
+        position: fixed; left: 0; top: 0; transform: translate(-50%, -100%); padding: 1px 6px;
+        border-radius: 6px; background: rgb(46 52 64 / 0.75); font-size: 12px; white-space: nowrap;
+        pointer-events: none;
+      }
       .hub-small { padding: 6px 10px; font-size: 13px; }
     </style>
   </head>

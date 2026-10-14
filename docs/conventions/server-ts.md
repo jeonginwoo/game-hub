@@ -30,6 +30,8 @@
 - JSON over WebSocket, one object per message, discriminated by `t`.
 - Positions are client-authoritative, in **tile units** (`x` right, `y` down — same as
   `lobby-ts.md` §5). The server checks shape and bounds only; it never knows the map.
+- The lobby side mirrors this: every message it receives goes through `parseServerMsg`
+  (names re-cleaned, since they are shown on screen).
 - Every incoming message goes through `parseClientMsg`; a malformed one is dropped silently
   (no error reply). It returns new objects holding only known fields.
 - The first message must be `hello`; anything before it is dropped. Changing a message is a

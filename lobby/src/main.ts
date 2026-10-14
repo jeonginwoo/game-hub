@@ -1,6 +1,7 @@
 // 로비 진입점 — 직교 카메라 위에 ZEP 식 층(배경 한 장·물체·캐릭터)을 그린다 (결정 2026-10-13: 직교 + 2D 스프라이트,
 // 2026-10-14: ZEP 식 층). 에셋 전까지 그림은 임시 색. 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
 import * as THREE from 'three';
+import type { Spot } from '../../server/src/protocol';
 import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './entry';
 import { loadName, showEntryScreen, showRoomBadge, type Entered } from './entry-screen';
 import { DOOR_GAMES, GAMES } from './games';
@@ -9,7 +10,9 @@ import { LOBBY_OBJECTS } from './lobby-objects';
 import { LOBBY_ROWS } from './lobby-map';
 import { parseMap, type Pos, type Tile } from './map';
 import { step, type Dir } from './movement';
+import { connect, statusText, type Connection, type NetStatus } from './net';
 import { checkObjects, objectRect, objectZ } from './objects';
+import { advance, applyMsg, colorFor, NO_OTHERS, remotePos, type Others } from './others';
 import { roomFromSearch, screenFor, withRoom } from './room';
 import { clampAxis } from './view';
 
@@ -90,13 +93,15 @@ for (const o of LOBBY_OBJECTS) {
 const AVATAR_W = AVATAR_PX.w / TILE_PX; // 칸
 const AVATAR_H = AVATAR_PX.h / TILE_PX; // 칸
 
-function placeholderAvatar(facing: Dir): HTMLCanvasElement {
+const MY_BODY = '#5e81ac'; // 내 몸 색 — 다른 사람은 others.ts colorFor
+
+function placeholderAvatar(facing: Dir, body: string): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = AVATAR_PX.w;
   c.height = AVATAR_PX.h;
   const g = c.getContext('2d');
   if (!g) throw new Error('2d 캔버스를 만들 수 없다');
-  g.fillStyle = '#5e81ac'; // 몸
+  g.fillStyle = body; // 몸
   g.fillRect(12, 34, 24, 26);
   g.fillStyle = '#e5c3a0'; // 머리
   g.beginPath();
@@ -118,15 +123,55 @@ function placeholderAvatar(facing: Dir): HTMLCanvasElement {
   return c;
 }
 
-const AVATAR_TEX: Readonly<Record<Dir, THREE.CanvasTexture>> = {
-  up: pixelTexture(placeholderAvatar('up')),
-  down: pixelTexture(placeholderAvatar('down')),
-  left: pixelTexture(placeholderAvatar('left')),
-  right: pixelTexture(placeholderAvatar('right')),
-};
-const playerMat = new THREE.MeshBasicMaterial({ map: AVATAR_TEX.down, alphaTest: 0.5 });
-const player = new THREE.Mesh(new THREE.PlaneGeometry(AVATAR_W, AVATAR_H), playerMat);
+// 몸 색마다 방향 4장 — 같은 색끼리 텍스처를 나눠 쓴다
+const avatarTexCache = new Map<string, Readonly<Record<Dir, THREE.CanvasTexture>>>();
+
+function avatarTextures(body: string): Readonly<Record<Dir, THREE.CanvasTexture>> {
+  let tex = avatarTexCache.get(body);
+  if (!tex) {
+    tex = {
+      up: pixelTexture(placeholderAvatar('up', body)),
+      down: pixelTexture(placeholderAvatar('down', body)),
+      left: pixelTexture(placeholderAvatar('left', body)),
+      right: pixelTexture(placeholderAvatar('right', body)),
+    };
+    avatarTexCache.set(body, tex);
+  }
+  return tex;
+}
+
+const avatarGeo = new THREE.PlaneGeometry(AVATAR_W, AVATAR_H);
+const MY_TEX = avatarTextures(MY_BODY);
+const playerMat = new THREE.MeshBasicMaterial({ map: MY_TEX.down, alphaTest: 0.5 });
+const player = new THREE.Mesh(avatarGeo, playerMat);
 scene.add(player);
+
+/** 타일 좌표 (x, y) 에 선 캐릭터를 놓는다 — 발 선으로 정렬 층 깊이를 정한다 */
+function placeAvatar(mesh: THREE.Mesh, x: number, y: number): void {
+  const foot = y + 0.5; // 칸 y 에 선 캐릭터의 발 선
+  placeRect(mesh, x - AVATAR_W / 2, foot, AVATAR_W, AVATAR_H, drawZ('sorted', foot));
+}
+
+// 이름표 — 화면 글자라 DOM(textContent)으로 띄우고 매 프레임 머리 위로 옮긴다. 그림처럼 확대되어 번지지 않게
+const tagPoint = new THREE.Vector3();
+
+function makeTag(name: string): HTMLDivElement {
+  const tag = document.createElement('div');
+  tag.className = 'hub-tag';
+  tag.textContent = name;
+  tag.style.visibility = 'hidden'; // 첫 placeTag 전에 왼쪽 위에 한 프레임 보이지 않게
+  document.body.append(tag);
+  return tag;
+}
+
+function placeTag(tag: HTMLElement, x: number, y: number): void {
+  const headTop = -(y + 0.5 - AVATAR_H); // 월드 y — 발 선에서 캐릭터 키만큼 위
+  tagPoint.set(x, headTop, 0).project(camera);
+  const sx = ((tagPoint.x + 1) / 2) * window.innerWidth;
+  const sy = ((1 - tagPoint.y) / 2) * window.innerHeight;
+  tag.style.transform = `translate(${sx}px, ${sy}px) translate(-50%, -100%)`;
+  tag.style.visibility = 'visible';
+}
 
 // 게임에서 돌아왔으면(hub_door) 들어갔던 문 앞에 선다. 주소창에서는 지워 새로고침하면 시작점에서 시작하게
 const spawn = spawnFromSearch(map, location.search);
@@ -154,9 +199,15 @@ function enterIfDoor(p: Pos): void {
   location.assign(target);
 }
 
-// 뒤로 가기로 bfcache 에서 되살아나면 문 위에 멈춘 상태 그대로다 — 문 앞으로 다시 세운다
+// 뒤로 가기로 bfcache 에서 되살아나면 문 위에 멈춘 상태 그대로다 — 문 앞으로 다시 세운다.
+// 떠날 때 끊은 멀티도 다시 붙는다 (hello 가 문 앞 자리를 싣도록 자리를 먼저 고친 뒤)
 window.addEventListener('pageshow', (e) => {
-  if (!e.persisted || !leaving) return;
+  if (!e.persisted) return;
+  if (leaving) resetAfterReturn();
+  if (entered && conn === null) startNet(entered);
+});
+
+function resetAfterReturn(): void {
   const back = spawnFromSearch(map, location.search);
   history.replaceState(history.state, '', withoutDoorParam(location.href));
   pos = from = back.pos;
@@ -164,18 +215,117 @@ window.addEventListener('pageshow', (e) => {
   t = 1;
   held.length = 0;
   leaving = false;
+}
+
+// --- 멀티 (net.ts · others.ts) ------------------------------------------------
+// 같은 방의 다른 사람을 그린다. 내 자리는 바뀔 때만 보낸다 (위치는 클라이언트 권위 — 결정 2026-10-09)
+
+interface RemoteView {
+  readonly mesh: THREE.Mesh;
+  readonly mat: THREE.MeshBasicMaterial;
+  readonly tex: Readonly<Record<Dir, THREE.CanvasTexture>>;
+  readonly tag: HTMLDivElement;
+}
+
+let others: Others = NO_OTHERS;
+let netStatus: NetStatus = 'connecting';
+let conn: Connection | null = null;
+let lastSent = ''; // 마지막으로 보낸 자리 — 같은 자리를 또 보내지 않게
+let setStatus: (text: string) => void = () => {};
+const views = new Map<string, RemoteView>();
+
+function spotKey(s: Spot): string {
+  return `${s.x},${s.y},${s.dir}`;
+}
+
+function here(): Spot {
+  return { x: pos.x, y: pos.y, dir: facing };
+}
+
+/** 내 자리가 마지막으로 보낸 것과 다르면 보낸다 — 걷기 시작(도착할 칸)·방향 바뀜·문 앞 복귀 모두 여기로 */
+function sendIfMoved(): void {
+  const at = here();
+  const key = spotKey(at);
+  if (key === lastSent || netStatus !== 'open') return;
+  lastSent = key;
+  conn?.send({ t: 'move', at });
+}
+
+function refreshStatus(): void {
+  setStatus(statusText(netStatus, others.players.size + 1));
+}
+
+/** others 명단에 맞춰 메시·이름표를 만들고 지운다 */
+function syncViews(): void {
+  for (const [id, v] of views) {
+    if (others.players.has(id)) continue;
+    scene.remove(v.mesh);
+    v.mat.dispose();
+    v.tag.remove();
+    views.delete(id);
+  }
+  for (const [id, r] of others.players) {
+    if (views.has(id)) continue;
+    const tex = avatarTextures(colorFor(id));
+    const mat = new THREE.MeshBasicMaterial({ map: tex[r.at.dir], alphaTest: 0.5 });
+    const mesh = new THREE.Mesh(avatarGeo, mat);
+    scene.add(mesh);
+    views.set(id, { mesh, mat, tex, tag: makeTag(r.name) });
+  }
+}
+
+function startNet(e: Entered): void {
+  conn?.close();
+  others = NO_OTHERS;
+  syncViews();
+  conn = connect(
+    location.href,
+    e.room,
+    () => {
+      const at = here();
+      lastSent = spotKey(at);
+      return { t: 'hello', name: e.name, at };
+    },
+    (msg) => {
+      others = applyMsg(others, msg);
+      syncViews();
+      refreshStatus();
+    },
+    (s) => {
+      netStatus = s;
+      if (s === 'closed') {
+        // 끊긴 뒤에는 다른 사람 자리를 알 수 없다 — 멈춘 유령을 남기지 않는다
+        others = NO_OTHERS;
+        syncViews();
+      }
+      refreshStatus();
+    },
+  );
+}
+
+// 페이지를 떠날 때(게임 입장·뒤로 가기) 바로 끊어 다른 사람 화면에서 곧장 사라지게.
+// bfcache 로 되살아나면 pageshow 에서 다시 붙는다 (conn === null 이 「다시 붙어야 함」 표시)
+window.addEventListener('pagehide', () => {
+  conn?.close();
+  conn = null;
+  netStatus = 'closed';
+  others = NO_OTHERS;
+  syncViews();
 });
 
 // --- 방·이름 (room.ts) --------------------------------------------------------
 // 방 코드와 이름이 정해지기 전에는 로비가 뒤에 그려지기만 하고 움직이지 않는다
 
 let entered: Entered | null = null;
+let myTag: HTMLDivElement | null = null;
 
 function enterLobby(e: Entered): void {
   entered = e;
   // 주소창에 방 코드를 남겨 둔다 — 새로고침·게임 복귀 URL(returnUrl 이 location.href 를 쓴다)이 같은 방으로 오게
   history.replaceState(history.state, '', withRoom(location.href, e.room));
-  showRoomBadge(e, location.href);
+  setStatus = showRoomBadge(e, location.href);
+  myTag = makeTag(e.name);
+  startNet(e);
 }
 
 const urlRoom = roomFromSearch(location.search);
@@ -267,15 +417,34 @@ renderer.setAnimationLoop((now) => {
     }
   }
 
+  if (entered && !leaving) sendIfMoved();
+
   const x = from.x + (pos.x - from.x) * t;
   const y = from.y + (pos.y - from.y) * t;
-  const foot = y + 0.5; // 칸 y 에 선 캐릭터의 발 선
-  placeRect(player, x - AVATAR_W / 2, foot, AVATAR_W, AVATAR_H, drawZ('sorted', foot));
-  playerMat.map = AVATAR_TEX[facing];
+  placeAvatar(player, x, y);
+  playerMat.map = MY_TEX[facing];
+
+  others = advance(others, dt, STEP_MS);
+  for (const [id, r] of others.players) {
+    const v = views.get(id);
+    if (!v) continue;
+    const p = remotePos(r);
+    placeAvatar(v.mesh, p.x, p.y);
+    v.mat.map = v.tex[r.at.dir];
+  }
 
   const viewX = camera.right - camera.left;
   camera.position.x = clampAxis(x, map.width, viewX);
   camera.position.y = -clampAxis(y, map.height, VIEW_TILES_Y);
 
   renderer.render(scene, camera);
+
+  // 이름표는 렌더 뒤에 — 카메라 행렬이 이번 프레임 위치로 갱신된 다음 화면 좌표로 옮긴다
+  if (myTag) placeTag(myTag, x, y);
+  for (const [id, r] of others.players) {
+    const v = views.get(id);
+    if (!v) continue;
+    const p = remotePos(r);
+    placeTag(v.tag, p.x, p.y);
+  }
 });
