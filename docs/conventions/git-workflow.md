@@ -6,8 +6,13 @@
 
 ## 1. Branches
 
-- **No commit lands on `main` directly** — code, docs and harness changes alike.
-  Every task starts with `git switch main && git switch -c <type>/<short-name>`.
+- **No code or rule change lands on `main` directly.** Every such task starts with
+  `git switch main && git switch -c <type>/<short-name>`. "Rule" = CLAUDE.md, `docs/conventions/`,
+  `.claude/`, `scripts/`, and `docs/game-entry-contract.md`.
+- **Exception — record-only doc edits go straight to `main`** (`docs:` commit, `bash scripts/verify.sh`
+  green first, no merge question): PROGRESS updates (state, session log, 후보 일감, a decision-log
+  entry recording a decision already made), and typo or stale-line fixes in `docs/` records.
+  If the edit changes what anyone must do, it is a rule change — use a branch.
 - **Naming**: `<type>/<short-name>`, type = the commit type of the work
   (`feat/` `fix/` `refactor/` `test/` `docs/` `chore/`). Examples: `feat/zep-layers`,
   `chore/branch-workflow`.

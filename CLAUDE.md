@@ -46,8 +46,10 @@ is simply skipped.
 
 - One task = one session = one commit. Keep the unit small enough to review in one diff.
 - Every task runs on its own branch cut from `main` (`<type>/<short-name>`, e.g. `feat/zep-layers`;
-  design 시안 use `design/<name>`). Never commit to `main` directly — merge a branch into `main`
-  only after the user approves. Details: `docs/conventions/git-workflow.md`.
+  design 시안 use `design/<name>`). Never commit code or rule changes to `main` directly — merge a
+  branch into `main` only after the user approves. Exception: record-only doc edits (PROGRESS,
+  typo/stale-line fixes in `docs/` records) go straight to `main` after verify passes.
+  Details: `docs/conventions/git-workflow.md`.
 - Code follows `docs/conventions/` (`lobby-ts.md` for `lobby/`). Games are not governed by it.
 - Never claim a task done unless `bash scripts/verify.sh` passes. On FAIL, read only
   the failing part of `build/last-verify.log` (grep/tail) — never the whole log.
