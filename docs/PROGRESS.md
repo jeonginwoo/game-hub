@@ -5,10 +5,10 @@
 ## 현재 상태 (2026-10-14)
 
 - **목적:** Three.js 로 만드는 멀티플레이 게임 모음. 쯔꾸르(RPG Maker)식 로비에서 여러 명이 함께 돌아다니다가 문을 통해 각자 만든 게임으로 입장한다. 게임의 형식은 자유.
-- **진행:** 로비에 ZEP 식 층 구조(배경 한 장 → 바닥 물체 → 발 y 정렬 층 → 상단 물체 → 앞화면) + 내 캐릭터 이동. 직교 카메라, 32px 칸·48×64 캐릭터 규격, 그림은 모두 임시 색(배경은 문자 맵을 칠한 캔버스, 물체 4개 — 깔개·나무 2·들보, 앞화면은 자리만), 방향키/WASD 칸 단위 이동·벽 충돌·카메라 추적. 게임 입장 계약 문서 v1(`docs/game-entry-contract.md`). 문 입장 로비 쪽 구현 — 게임이 배정된 문에 올라서면 계약대로 게임 URL 로 이동, 복귀 시 그 문 앞에 등장. 첫 게임 `whiteboard-3d`(독립 저장소, 개발 URL `http://localhost:5174/`)를 1번(가운데) 문에 등록 — 입장·뒤로 가기·「로비로」 복귀 왕복 확인됨. 멀티 서버 `server/`(Node + `ws`) — 명단·위치 중계(프로토콜 v0), `npm run dev` 하나로 Vite 에 `/ws` 가 붙고, 배포 모양은 `npm run build && npm start`(로비 빌드 + `/ws` 한 포트). **로비 화면은 아직 서버에 접속하지 않음**(다른 플레이어 표시 전). 게임 폴더는 아직 없음. 원격 `origin` = GitHub `jeonginwoo/game-hub`
+- **진행:** 로비에 ZEP 식 층 구조(배경 한 장 → 바닥 물체 → 발 y 정렬 층 → 상단 물체 → 앞화면) + 내 캐릭터 이동. 직교 카메라, 32px 칸·48×64 캐릭터 규격, 그림은 모두 임시 색(배경은 문자 맵을 칠한 캔버스, 물체 4개 — 깔개·나무 2·들보, 앞화면은 자리만), 방향키/WASD 칸 단위 이동·벽 충돌·카메라 추적. 게임 입장 계약 문서 v2(`docs/game-entry-contract.md` — v2 에서 `hub_name` 추가, **로비 쪽 구현은 아직**). 문 입장 로비 쪽 구현 — 게임이 배정된 문에 올라서면 계약대로 게임 URL 로 이동, 복귀 시 그 문 앞에 등장. 첫 게임 `whiteboard-3d`(독립 저장소, 개발 URL `http://localhost:5174/`)를 1번(가운데) 문에 등록 — 입장·뒤로 가기·「로비로」 복귀 왕복 확인됨. 멀티 서버 `server/`(Node + `ws`) — 명단·위치 중계(프로토콜 v0), `npm run dev` 하나로 Vite 에 `/ws` 가 붙고, 배포 모양은 `npm run build && npm start`(로비 빌드 + `/ws` 한 포트). **로비 화면은 아직 서버에 접속하지 않음**(다른 플레이어 표시 전). 게임 폴더는 아직 없음. 원격 `origin` = GitHub `jeonginwoo/game-hub`
 - **검증 기준선:** `bash scripts/verify.sh` 6단계 PASS (docs · reviewer model · script line endings · typecheck · unit tests · build). 테스트 로비 42개 + 서버 14개(소켓 통합 1개 포함). 번들 500 kB 경고는 그대로(실패 아님)
 - **디자인 브랜치 (시안마다 하나, 모두 `main` 에서 땀):** 시안 A `design/lobby` — 32px 타일셋(Mage City Arcanos, CC0) + 코드로 그린 32×40 2등신 캐릭터·꾸미기 값. 시안 B `design/zep-style` — ZEP 식 배경 한 장 + 물체 스프라이트 + 앞화면, 48×64·방향당 5프레임 시트 캐릭터. 사용자가 고른 시안만 `main` 에 합친다 (세부는 각 브랜치 PROGRESS)
-- **다음 작업:** 로비 접속·다른 플레이어 표시 (`lobby/src/` 에 전송 모듈 하나 + 다른 캐릭터 그리기) — 서버 스캐폴드의 짝
+- **다음 작업:** 로비 접속·다른 플레이어 표시·이름 정하기 (`lobby/src/` 에 전송 모듈 하나 + 다른 캐릭터 그리기 + 이름을 브라우저에 기억) → 그다음 문 입장 시 `hub_name` 붙이기
 - **차단 요소:** 없음
 
 ## 열린 질문 (다음 세션에서 사용자와 결정)
@@ -49,6 +49,7 @@
 | 2026-10-14 | **멀티 서버는 로비와 한 포트·한 프로세스로 뜬다 (whiteboard-3d 방식).** `server/src/ws.ts` `attachLobby` 를 개발에서는 `lobby/vite.config.ts` 플러그인이 Vite 서버에, 배포에서는 `server/src/main.ts` 가 `lobby/dist` 정적 서빙과 함께 붙인다. 로비는 늘 「같은 주소의 `/ws`」. 로비가 `server/` 를 import 하는 곳은 `vite.config.ts` 하나뿐(`src/` 는 안 함). 서버는 로비 전용 — 게임 서버(whiteboard 의 `/ws`)와 합치지 않는다 | 사용자 결정. 명령 하나·주소 하나라 실행과 배포 설정이 쉽고, whiteboard-3d 에서 이미 검증된 모양. 서버를 게임과 합치면 한쪽 프로토콜 변경이 다른 쪽을 깨므로 불변식 1 위반 — 인프라(호스팅 계정)만 같이 쓰는 것은 괜찮다 |
 | 2026-10-14 | **로비 프로토콜 v0** (`server/src/protocol.ts`): 클라이언트 `hello{name, at}` · `move{at}`, 서버 `welcome{id, players}`(본인 포함) · `join` · `move` · `leave`. `at = {x, y, dir}` 타일 정수(0 ≤ 좌표 < 1000), 이름은 제어 문자 제거·16자·빈 이름 「손님」. 첫 메시지는 `hello`, 그 전 메시지·형식 틀린 메시지는 조용히 버림. 메시지 4 KB 상한, 30초 심장박동 | 위치는 클라이언트 권위(2026-10-09)라 서버는 형식만 본다 — 맵을 모르므로 좌표는 넉넉한 상한만. `hello` 에 위치를 실어 명단의 모든 사람이 처음부터 자리를 갖는다(`hub_door` 복귀 위치 그대로). `protocol.ts` 는 node 를 import 하지 않아 로비가 그대로 가져다 쓸 수 있다 |
 | 2026-10-14 | 서버는 Node 내장 TS 실행(`node src/main.ts`)으로 빌드 단계 없이 돈다 → 루트 `engines` 를 `>=22.18.0` 으로 올림. 의존성: `server` 에 `ws`(런타임) · `@types/ws` · `@types/node`, `lobby` 에 `@types/node`(개발 — `vite.config.ts` 를 `tsconfig.node.json` 으로 검사). `tsx` 는 쓰지 않음 | 22.18 부터 타입 제거 실행이 기본이라 `tsx`·빌드 산출물이 필요 없다(whiteboard-3d 와 같은 선택). 설정 파일도 typecheck 에 넣어야 `attachLobby` 시그니처가 바뀔 때 잡힌다. `as` 를 피하려고 `attachLobby` 는 `upgrade` 이벤트만 요구하는 구조 타입 `UpgradeSource` 를 받는다 |
+| 2026-10-14 | **입장 계약 v2: `hub_name`** — 로비가 플레이어 이름(1~16자, 제어 문자·앞뒤 공백 없음 — 로비 서버 규칙과 같음)을 붙이고, 게임은 써도 되고(MAY) 무시해도 된다. 표시용 힌트일 뿐 — 신원·권한에 쓰지 말고, 텍스트로만 표시. 이름이 없으면 붙이지 않음. ID·외형은 넘기지 않음. 로비 구현은 이름 정하기 UI 다음 일감 | 사용자 요청(「플레이어 정보가 이어지면 좋겠다」). 2026-10-13 「입장 계약 v1 세부」 줄의 「플레이어 정보 전달 없음」을 이름에 한해 대체. v1 이 열어 둔 확장 방식(`hub_` 파라미터 추가) 그대로라 v1 게임은 그대로 동작 — 불변식 2. 인증이 없어 주소창에서 바꿀 수 있으므로 힌트로만 정의. 로비 서버의 접속 번호는 게임 서버에 의미가 없어 ID 는 뺐다. whiteboard-3d 는 이미 `?name=` 으로 이름을 미리 채우고 있어 `hub_name` 한 줄이면 이어진다 |
 
 ## 작업 큐 (ralph 루프용)
 
@@ -64,13 +65,14 @@
 - 앞화면 층 그림 한 장 얹기 (지금은 자리만) · 배경을 실제 그림 한 장으로 교체 (그림 제작은 `design/*`)
 - `lobby-map.ts` 머리 주석 「D 문 자리(아직 동작 없음)」 은 낡음 — 문 입장은 구현됨
 
-- 로비의 접속·다른 플레이어 표시 — `lobby/src/` 에 전송 모듈 하나(교체 가능하게), `protocol.ts` 타입 재사용, 다른 캐릭터도 `drawZ` 정렬 층에. 이름 입력 UI 는 그 뒤
+- 로비의 접속·다른 플레이어 표시·이름 정하기 — `lobby/src/` 에 전송 모듈 하나(교체 가능하게), `protocol.ts` 타입 재사용, 다른 캐릭터도 `drawZ` 정렬 층에, 이름은 브라우저에 기억(`localStorage`, 실패해도 동작)
+- 문 입장 시 `hub_name` 붙이기 (계약 v2 — `entry.ts` `entryUrl`, 테스트 포함). 위 일감 뒤
 - 게임이 2개 이상 붙으면 `scripts/verify.sh` 에 "게임 ↔ 로비 · 게임 ↔ 게임 import 없음" 검사 (불변식 1 의 기계화)
 - `games/` 폴더가 생기면 `scripts/hooks/stop-verify.sh` 의 `CODE_PATHS` 에 추가 (`server` 는 추가됨)
 - `server/src/main.ts` 의 `MIME` 표는 지금 빌드 산출물(html·js·css·svg·png·ico)만 — 로비에 폰트·jpg·webp·json 에셋이 들어오면 추가 (reviewer 2026-10-14)
 - 개발 포트 충돌: 5173 이 차 있으면 Vite 가 조용히 5174(whiteboard-3d 개발 포트)로 옮겨 간다 — `server.strictPort` 로 실패시킬지 판단. `shot.sh` 는 이미 떠 있는 5173 을 재사용하므로 `vite.config.ts` 이전에 띄운 서버면 `/ws` 가 없다(재시작 필요)
 - 로비 에셋(타일셋·캐릭터 시트) — 무료(CC0 등, 라이선스 `docs/` 기록) 또는 직접 제작. 그 전까지 색 사각형
-- whiteboard-3d 저장소에 알릴 것 (그쪽 일): CLAUDE.md·PROGRESS 의 game-hub 경로가 `C:\Projects\playground\game-hub` 로 적혀 있음(실제 `C:\Projects\game-hub`), 그쪽 후보 일감 「game-hub 쪽 등록」은 완료됨
+- whiteboard-3d 저장소에 알릴 것 (그쪽 일): 계약 v2 — 지금 `client/lobby-link.ts` 는 `?name=` 을 읽으므로 `hub_name` 도 읽게(로비는 `hub_` 접두어만 붙인다). 그쪽 후보 일감 「game-hub 쪽 등록」은 완료됨. (예전 메모의 「경로가 틀림」은 잘못 — 이 저장소는 실제로 `C:\Projects\playground\game-hub`)
 - 문 앞에 게임 제목 표시 (계약 등록 정보 `title` — 지금은 쓰이지 않음)
 - 채팅 등 텍스트 입력 UI 가 생기면 로비 키 입력이 입력창 포커스 중에는 꺼지게 (지금은 window 에서 방향키·WASD 를 모두 가로챔)
 - 번들 500 kB 경고 (실측 527 kB, three 전체가 한 청크) — 로비가 커지면 코드 분할 또는 `build.chunkSizeWarningLimit` 판단. 지금은 무시
@@ -86,6 +88,11 @@
 - 미해결: <다음 세션으로 넘기는 것 · 확인하지 못한 것>
 - 다음 작업: <구체적으로>
 ```
+
+### 2026-10-14 — 입장 계약 v2 (`hub_name`)
+- 완료: `feat/server-scaffold` 를 `main` 에 합침. 사용자와 방향 확인 — 로비·게임은 서버를 각자, 플레이어 이름은 계약으로 잇는다. `docs/game-entry-contract.md` v2(`hub_name` MAY · 로비 보장 · 버전 표 · 자가 점검 1줄) → 결정 기록. 후보 일감에 로비 쪽 두 일감과 whiteboard 알림, 낡은 경로 메모 바로잡음
+- 미해결: 로비가 아직 `hub_name` 을 붙이지 않음 — 이름 정하기 UI 가 먼저. whiteboard 쪽 변경은 그 저장소에서
+- 다음 작업: 로비 접속·다른 플레이어 표시·이름 정하기
 
 ### 2026-10-14 — `server/` 스캐폴드 (멀티 서버, 로비 접속 전)
 - 완료: `chore/next-korean` 을 `main` 에 합침. 호스팅 논의(Vercel 단독 불가 → 열린 질문 5 에 조건 기록). `server/` 워크스페이스 — `protocol.ts`·`roster.ts`(순수) · `ws.ts`(`attachLobby`) · `main.ts`(배포) + 테스트 14개. `lobby/vite.config.ts` 플러그인 · `tsconfig.node.json`. `docs/conventions/server-ts.md`, CLAUDE.md Layout·Commands, reviewer 참조, Stop 훅 `CODE_PATHS`. verify 6단계 PASS. 일회용 탐침(scratchpad, 커밋 안 함)으로 실제 `npm run dev` 서버와 `npm run build && npm start`(PORT=8099) 서버에 클라이언트 둘을 붙여 welcome·join·move·leave 와 `GET /` 200 확인, 배포 서버의 `../` 탈출·없는 파일 404 · `/ws` 밖 업그레이드 끊김 확인. 띄운 서버는 모두 끔. reviewer(sonnet) BLOCKER — 연결별 `'error'` 리스너가 없어 4 KB 초과 메시지 하나로 서버(개발 중엔 Vite)가 죽음 — 테스트로 재현 후 수정, 정적 파일 스트림도 `pipeline` 으로
