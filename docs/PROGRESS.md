@@ -8,7 +8,7 @@
 - **진행:** 로비에 ZEP 식 층 구조(배경 한 장 → 바닥 물체 → 발 y 정렬 층 → 상단 물체 → 앞화면) + 내 캐릭터 이동. 직교 카메라, 32px 칸·48×64 캐릭터 규격, 그림은 모두 임시 색(배경은 문자 맵을 칠한 캔버스, 물체 4개 — 깔개·나무 2·들보, 앞화면은 자리만), 방향키/WASD 칸 단위 이동·벽 충돌·카메라 추적. 게임 입장 계약 문서 v3(`docs/game-entry-contract.md` — v2 `hub_name`, v3 `hub_room` 추가, 로비가 문 입장 때 둘 다 붙임). 문 입장 로비 쪽 구현 — 게임이 배정된 문에 올라서면 계약대로 게임 URL 로 이동, 복귀 시 그 문 앞에 등장. 첫 게임 `whiteboard-3d`(독립 저장소, 개발 URL `http://localhost:5174/`)를 1번(가운데) 문에 등록 — 입장·뒤로 가기·「로비로」 복귀 왕복 확인됨. 멀티 서버 `server/`(Node + `ws`) — 방 코드(`/ws?room=<6자>`)별 명단·위치 중계(프로토콜 v0), `npm run dev` 하나로 Vite 에 `/ws` 가 붙고, 배포 모양은 `npm run build && npm start`(로비 빌드 + `/ws` 한 포트). 로비 첫 화면 — 닉네임 + 「로비 만들기」(6자 방 코드) 또는 코드·초대 링크로 참여, 초대 링크로 오면 이름만, 저장된 이름 + `?room=` 이면 바로 로비(게임 복귀 포함). 왼쪽 위에 방 코드·이름·인원(또는 「연결 끊김」)·「초대 링크 복사」. 같은 방 사람이 서로 보인다 — 다른 몸 색·머리 위 이름표, 한 칸씩 걷는 모습, 문으로 나가면 사라지고 돌아오면 문 앞에 나타남. 끊기면 표시만(자동 재접속 없음). 게임 폴더는 아직 없음. 원격 `origin` = GitHub `jeonginwoo/game-hub`
 - **검증 기준선:** `bash scripts/verify.sh` 6단계 PASS (docs · reviewer model · script line endings · typecheck · unit tests · build). 테스트 로비 75개 + 서버 27개(소켓 통합 포함). 번들 500 kB 경고는 그대로(실패 아님)
 - **디자인 브랜치 (시안마다 하나, 모두 `main` 에서 땀):** 시안 A `design/lobby` — 32px 타일셋(Mage City Arcanos, CC0) + 코드로 그린 32×40 2등신 캐릭터·꾸미기 값. 시안 B `design/zep-style` — ZEP 식 배경 한 장 + 물체 스프라이트 + 앞화면, 48×64·방향당 5프레임 시트 캐릭터. 사용자가 고른 시안만 `main` 에 합친다 (세부는 각 브랜치 PROGRESS)
-- **다음 작업:** 로비 ↔ whiteboard-3d 두 창 왕복으로 같은 방에 모이는지 확인(whiteboard 쪽 v3 반영 완료 — 그쪽 `8434a45`). 이 저장소의 승인된 순서는 모두 끝남 — 그 뒤는 후보 일감에서 사용자가 고른다
+- **다음 작업:** 승인된 순서는 모두 끝남(계약 v3 왕복까지 확인) — 후보 일감에서 사용자가 고른다
 - **차단 요소:** 없음
 
 ## 열린 질문 (다음 세션에서 사용자와 결정)
@@ -77,7 +77,7 @@
 - `server/src/main.ts` 의 `MIME` 표는 지금 빌드 산출물(html·js·css·svg·png·ico)만 — 로비에 폰트·jpg·webp·json 에셋이 들어오면 추가 (reviewer 2026-10-14)
 - 개발 포트 충돌: 5173 이 차 있으면 Vite 가 조용히 5174(whiteboard-3d 개발 포트)로 옮겨 간다 — `server.strictPort` 로 실패시킬지 판단. `shot.sh` 는 이미 떠 있는 5173 을 재사용하므로 `vite.config.ts` 이전에 띄운 서버면 `/ws` 가 없다(재시작 필요)
 - 로비 에셋(타일셋·캐릭터 시트) — 무료(CC0 등, 라이선스 `docs/` 기록) 또는 직접 제작. 그 전까지 색 사각형
-- 로비 ↔ whiteboard-3d 를 두 창으로 열어 같은 로비 방에서 들어간 사람끼리 같은 화이트보드에 모이는지 확인 (whiteboard 는 계약 v3 반영됨 — 그쪽 `8434a45`, `hub_room` → `room` 순, 형식 틀리면 무시)
+- whiteboard-3d 에 알릴 것 (그쪽 일): 시작 버튼·캔버스 클릭의 `void canvas.requestPointerLock()` 이 거부되면 `Uncaught (in promise)` — headless 왕복 시험에서 매번 1건. 실제 브라우저에서도 포인터 잠금이 막히면(나간 직후 다시 클릭 등) 날 수 있음 — `.catch` 한 줄
 - 문 앞에 게임 제목 표시 (계약 등록 정보 `title` — 지금은 쓰이지 않음)
 - 번들 500 kB 경고 (실측 527 kB, three 전체가 한 청크) — 로비가 커지면 코드 분할 또는 `build.chunkSizeWarningLimit` 판단. 지금은 무시
 - `scripts/shot.sh` 에 키 입력 시뮬레이션(CDP `--remote-debugging-port`) — 걷기·문 입장을 눈으로 확인해야 할 때. 2026-10-13 일회용 스크립트로 가능함 확인: Node 22 내장 `WebSocket`·`fetch` 만으로 CDP 연결, `Input.dispatchKeyEvent`(rawKeyDown/keyUp) 로 칸 이동, `Page.captureScreenshot` — 추가 의존성 없음
@@ -92,6 +92,11 @@
 - 미해결: <다음 세션으로 넘기는 것 · 확인하지 못한 것>
 - 다음 작업: <구체적으로>
 ```
+
+### 2026-10-14 — 계약 v3 로비 ↔ whiteboard 두 창 왕복 확인
+- 완료: whiteboard-3d 쪽 v3 반영(그쪽 `8434a45`, 사용자 작업) 뒤 일회용 CDP 스크립트(scratchpad, 커밋 안 함)로 headless Chrome 둘(프로필 따로). A 가 로비 만들고(이름 `<b>철수</b>`) B 가 초대 링크로(「영희」) → 둘 다 1번 문 → 게임 URL 에 `hub_return`·`hub_name`·`hub_room` 이 실림 · whiteboard 이름 칸이 각자 로비 이름(태그는 글자 그대로) · 상태 「방: <로비 코드> · 참가자 2명」 — 같은 방에 모임 · A 「로비로 돌아가기」 → 같은 방 문 앞(B 가 아직 게임이라 「1명」) · B 브라우저 뒤로 가기 → 같은 방 문 앞, A 「2명」. 로비 콘솔 오류 없음. whiteboard 쪽 `Uncaught (in promise)` 1건씩(포인터 잠금 거부 — 후보 일감, 그쪽 일). 띄운 dev 서버·Chrome 은 끔(5174 는 사용자가 띄운 것이라 둠)
+- 미해결: 실제 기기 두 대·다른 네트워크는 안 봄. 같은 문 앞에 둘이 서면 이름표가 겹침(기존 후보 일감 그대로)
+- 다음 작업: 후보 일감에서 사용자가 고른다
 
 ### 2026-10-14 — 입장 계약 v3 `hub_room` + 로비가 `hub_name`·`hub_room` 붙이기
 - 완료: 계약 문서 v3(요약·흐름·MAY·로비가 지키는 것·v3 에 없는 것·버전 표·자가 점검). `entry.ts` `entryUrl` 에 `player?: HubPlayer` — `hub_return` 뒤에 `hub_name`(다시 다듬어 비면 뺌)·`hub_room`(`isRoomCode` 아니면 뺌), `main.ts` 는 `entered` 를 넘김. 테스트 5개 추가. verify 6단계 PASS. reviewer(sonnet) PASS — 지적 반영: `entry.ts` 머리 주석
