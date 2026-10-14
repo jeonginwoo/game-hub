@@ -12,4 +12,6 @@ End the current session.
    - any new decisions → 결정 기록, always with 근거
    - follow-up work discovered → 후보 일감
 4. If `CLAUDE.md` drifted from reality during this session, fix it now.
-5. Commit in the format from CLAUDE.md. Never end a session with uncommitted work.
+5. Commit on the task branch in the format from CLAUDE.md. Never end a session with uncommitted work.
+6. Ask the user whether to merge the branch into `main`. Merge only on an explicit yes;
+   otherwise leave the branch as is and say so.

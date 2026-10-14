@@ -11,12 +11,14 @@ Start a work session.
    whether to proceed on an assumption or wait.
 4. Present a plan for the next task (or the task the user gives) and wait for
    user approval before writing any code or harness file.
+   Once approved, cut the task branch from `main` (naming in CLAUDE.md) before the first edit.
 5. Keep the unit of work small: one feature/fix = one session = one commit.
 
 ## Loop mode (`/next --loop` — used by scripts/ralph.sh, no human approval)
 
 1. Read `docs/PROGRESS.md`. Take the FIRST unchecked `- [ ]` item in 작업 큐.
-   If the queue is empty, stop immediately.
+   If the queue is empty, stop immediately. If the current branch is `main`, stop —
+   the human picks the branch before starting the loop.
 2. Implement exactly that one item, tests first where tests exist. If you discover
    follow-up work, append it to 후보 일감 — never to the queue, and never do it silently.
 3. Run `bash scripts/verify.sh` until green.
