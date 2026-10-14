@@ -6,7 +6,9 @@
 > session, or the code is fixed; a convention that describes a past state of the repo rots.
 >
 > **Not for games.** A game under `games/<name>/` or in its own repo follows its own
-> conventions (CLAUDE.md invariant 2). The server gets its own file when `server/` exists.
+> conventions (CLAUDE.md invariant 2). The server has its own file, `server-ts.md`.
+> `vite.config.ts` is the only lobby file that imports `server/` (dev `/ws` plugin); its
+> types are checked through `tsconfig.node.json`.
 
 ## 1. Pure logic vs. wiring
 

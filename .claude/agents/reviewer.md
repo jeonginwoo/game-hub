@@ -13,7 +13,7 @@ Procedure:
 1. Run `git diff` (or the commit range given in the prompt) to see the change.
 2. Read `CLAUDE.md` and check the diff against it — especially Structure rules
    (invariants) and Way of working. Check code against `docs/conventions/` for the
-   area it touches (`lobby-ts.md` for `lobby/`), and the branch against `git-workflow.md`
+   area it touches (`lobby-ts.md` for `lobby/`, `server-ts.md` for `server/`), and the branch against `git-workflow.md`
    (not `main`, cut from `main`).
 3. Run `bash scripts/verify.sh` and read the console summary. It decides the mechanical
    parts — do not re-derive them by hand. Report any red step, then spend your effort

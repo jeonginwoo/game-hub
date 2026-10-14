@@ -20,7 +20,8 @@ Read `docs/PROGRESS.md` first — current state, 열린 질문, decision log, wo
 bash scripts/verify.sh            # full verification (--quick: fast tier)
                                   # full log → build/last-verify.log; on FAIL read only the failing part
 bash scripts/ralph.sh 2           # autonomous queue loop — only with a human watching
-npm run dev                       # lobby dev server (Vite, http://localhost:5173)
+npm run dev                       # lobby dev server + multiplayer /ws in one process (Vite, http://localhost:5173)
+npm run build && npm start        # deploy shape: server/ serves lobby/dist + /ws on one port (PORT, default 8080)
 npm install                       # once after clone, and whenever package-lock.json changes
 bash scripts/shot.sh              # look at the lobby: headless screenshot → build/shot/lobby.png (skill: run-lobby)
 ```
@@ -28,7 +29,7 @@ bash scripts/shot.sh              # look at the lobby: headless screenshot → b
 ## Layout
 
 One repo, npm workspaces (root `package.json`): `lobby/` (Three.js + Vite + TypeScript), `server/` (Node + ws —
-not yet), `games/<name>/` (one per game, any stack — reached by URL only). A folder is created in the session that
+lobby multiplayer only, attached to Vite in dev via `lobby/vite.config.ts`), `games/<name>/` (one per game, any stack — reached by URL only). A folder is created in the session that
 first needs it. Root `typecheck`/`build` fan out with `--workspaces --if-present`, so a game without those scripts
 is simply skipped.
 

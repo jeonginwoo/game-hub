@@ -6,7 +6,7 @@
 # Guard: only act when code was actually touched — doc-only or chat-only sessions
 # must never be blocked. CODE_PATHS is the one line to adapt per project.
 
-CODE_PATHS="lobby package.json package-lock.json"
+CODE_PATHS="lobby server package.json package-lock.json"
 
 # shellcheck disable=SC2086
 if git status --porcelain -- $CODE_PATHS 2>/dev/null | grep -q .; then
