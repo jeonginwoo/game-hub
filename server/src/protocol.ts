@@ -28,6 +28,23 @@ export const NAME_MAX = 16; // 글자
 export const COORD_MAX = 1000; // 타일 — 맵 크기를 서버가 모르므로 넉넉한 상한만 둔다
 export const DEFAULT_NAME = '손님';
 
+// 방 코드 — 접속 주소 `/ws?room=<코드>`. 로비가 만들고 서버는 형식만 본다 (결정 2026-10-14: 로그인 없이 방 + 초대 링크).
+// 헷갈리는 글자(0·o, 1·l·i)는 뺀다 — 사람이 보고 옮겨 적는 값이라
+export const ROOM_ALPHABET = '23456789abcdefghjkmnpqrstuvwxyz';
+export const ROOM_CODE_LENGTH = 6; // 글자
+export const ROOM_PARAM = 'room';
+const ROOM_CODE_RE = new RegExp(`^[${ROOM_ALPHABET}]{${ROOM_CODE_LENGTH}}$`);
+
+export function isRoomCode(v: string): boolean {
+  return ROOM_CODE_RE.test(v);
+}
+
+/** 접속 요청 경로(`/ws?room=…`)의 방 코드. 없거나 형식이 틀리면 null */
+export function roomFromPath(path: string): string | null {
+  const code = new URL(path, 'http://x').searchParams.get(ROOM_PARAM);
+  return code !== null && isRoomCode(code) ? code : null;
+}
+
 const DIRS: readonly string[] = ['up', 'down', 'left', 'right'];
 
 function isRecord(v: unknown): v is Record<string, unknown> {

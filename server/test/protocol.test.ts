@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, parseClientMsg } from '../src/protocol.ts';
+import { cleanName, isRoomCode, parseClientMsg, roomFromPath } from '../src/protocol.ts';
 
 const at = { x: 3, y: 4, dir: 'down' };
 
@@ -27,6 +27,32 @@ describe('parseClientMsg', () => {
     expect(parseClientMsg(JSON.stringify({ t: 'move', at: { ...at, x: -1 } }))).toBeNull();
     expect(parseClientMsg(JSON.stringify({ t: 'move', at: { ...at, y: 1000 } }))).toBeNull();
     expect(parseClientMsg(JSON.stringify({ t: 'move', at: { ...at, y: '4' } }))).toBeNull();
+  });
+});
+
+describe('isRoomCode', () => {
+  it('허용 글자 6자만', () => {
+    expect(isRoomCode('abc234')).toBe(true);
+    expect(isRoomCode('abc23')).toBe(false);
+    expect(isRoomCode('abc2345')).toBe(false);
+    expect(isRoomCode('ABC234')).toBe(false);
+  });
+
+  it('헷갈리는 글자(0·o·1·l·i)는 받지 않는다', () => {
+    for (const ch of ['0', 'o', '1', 'l', 'i']) expect(isRoomCode(`abc23${ch}`)).toBe(false);
+  });
+});
+
+describe('roomFromPath', () => {
+  it('room 쿼리의 코드를 꺼낸다', () => {
+    expect(roomFromPath('/ws?room=abc234')).toBe('abc234');
+    expect(roomFromPath('/ws?x=1&room=abc234')).toBe('abc234');
+  });
+
+  it('없거나 틀리면 null', () => {
+    expect(roomFromPath('/ws')).toBeNull();
+    expect(roomFromPath('/ws?room=')).toBeNull();
+    expect(roomFromPath('/ws?room=../etc')).toBeNull();
   });
 });
 

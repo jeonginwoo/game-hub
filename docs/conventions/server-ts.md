@@ -15,7 +15,8 @@
 - **Wiring** is `ws.ts` (`attachLobby` — upgrades on `WS_PATH` only, heartbeat) and `main.ts`
   (deploy entry: serves `lobby/dist` + `/ws` on one port, `PORT` env).
 - Dev and deploy share `attachLobby`: dev attaches it to the Vite server through
-  `lobby/vite.config.ts` — the **only** place the lobby touches `server/`.
+  `lobby/vite.config.ts`. Besides that, lobby `src/` may import `protocol.ts` — so it must
+  stay free of `node:*`, `ws` and the DOM.
 - Every socket and stream gets an `'error'` listener (`ws.on('error', …)`, `pipeline(…, cb)`):
   an unhandled `'error'` kills the process — in dev, Vite with it.
 - `attachLobby` leaves other upgrade paths alone (Vite HMR needs them); whoever owns the
@@ -23,6 +24,9 @@
 
 ## 2. Protocol
 
+- Connect URL is `/ws?room=<code>`. The code format (`isRoomCode`) lives in `protocol.ts`;
+  a missing or malformed code is refused at the upgrade with 400. A room exists while
+  someone is in it (`Rooms` in `roster.ts`) — no create call, no persistence.
 - JSON over WebSocket, one object per message, discriminated by `t`.
 - Positions are client-authoritative, in **tile units** (`x` right, `y` down — same as
   `lobby-ts.md` §5). The server checks shape and bounds only; it never knows the map.

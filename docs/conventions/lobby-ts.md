@@ -7,8 +7,9 @@
 >
 > **Not for games.** A game under `games/<name>/` or in its own repo follows its own
 > conventions (CLAUDE.md invariant 2). The server has its own file, `server-ts.md`.
-> `vite.config.ts` is the only lobby file that imports `server/` (dev `/ws` plugin); its
-> types are checked through `tsconfig.node.json`.
+> The lobby touches `server/` in two places only: `vite.config.ts` (dev `/ws` plugin, types
+> checked through `tsconfig.node.json`) and `src/` importing `server/src/protocol.ts` — the
+> pure message/room-code module, shared so both ends parse the same way. Nothing else in `server/`.
 
 ## 1. Pure logic vs. wiring
 

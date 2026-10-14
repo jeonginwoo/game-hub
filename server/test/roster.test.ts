@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ServerMsg, Spot } from '../src/protocol.ts';
-import { Roster } from '../src/roster.ts';
+import { Rooms, Roster } from '../src/roster.ts';
 
 function peer(): { got: ServerMsg[]; send: (m: ServerMsg) => void } {
   const got: ServerMsg[] = [];
@@ -69,5 +69,32 @@ describe('Roster', () => {
     const count = a.got.length;
     roster.handle(idb, { t: 'hello', name: 'C', at: spot(3, 3) });
     expect(a.got.length).toBe(count);
+  });
+});
+
+describe('Rooms', () => {
+  it('같은 방끼리만 서로를 본다', () => {
+    const rooms = new Rooms();
+    const a = peer();
+    const b = peer();
+    rooms.join('aaaaaa', a, { t: 'hello', name: 'A', at: spot(1, 1) });
+    const idb = rooms.join('bbbbbb', b, { t: 'hello', name: 'B', at: spot(2, 2) });
+    rooms.handle('bbbbbb', idb, { t: 'move', at: spot(3, 3) });
+    expect(a.got.map((m) => m.t)).toEqual(['welcome']);
+    expect(b.got[0]).toMatchObject({ t: 'welcome', players: [{ name: 'B' }] });
+  });
+
+  it('마지막 사람이 나가면 방이 사라진다', () => {
+    const rooms = new Rooms();
+    const ida = rooms.join('aaaaaa', peer(), { t: 'hello', name: 'A', at: spot(1, 1) });
+    const idb = rooms.join('aaaaaa', peer(), { t: 'hello', name: 'B', at: spot(2, 2) });
+    expect(rooms.count).toBe(1);
+    rooms.leave('aaaaaa', ida);
+    expect(rooms.count).toBe(1);
+    rooms.leave('aaaaaa', idb);
+    expect(rooms.count).toBe(0);
+    // 없는 방은 무시
+    rooms.leave('aaaaaa', idb);
+    rooms.handle('aaaaaa', idb, { t: 'move', at: spot(3, 3) });
   });
 });
