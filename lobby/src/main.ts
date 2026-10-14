@@ -192,7 +192,7 @@ function enterIfDoor(p: Pos): void {
   const game = gameAtDoor(door, GAMES, DOOR_GAMES);
   if (!game) return;
   const back = returnUrl(location.href, door); // URL 을 다 만든 뒤에 leaving — 여기서 던지면 입력이 굳지 않게
-  const target = entryUrl(game.url, back, location.href);
+  const target = entryUrl(game.url, back, location.href, entered ?? undefined);
   leaving = true;
   // 현재 기록도 복귀 URL 로 바꿔 둔다 — 브라우저 뒤로 가기로 와도 문 앞에 서게
   history.replaceState(history.state, '', back);

@@ -41,6 +41,37 @@ describe('entryUrl', () => {
     const url = new URL(entryUrl('/g/?a=1', back, LOBBY));
     expect(url.searchParams.get('hub_return')).toBe(back);
   });
+
+  it('플레이어가 있으면 hub_return 뒤에 hub_name·hub_room 을 인코딩해 붙인다 (계약 v3)', () => {
+    const url = entryUrl('/g/?mode=a#lv2', 'http://x/', LOBBY, { name: '철수 a&b', room: 'abc234' });
+    expect(url).toBe(
+      'http://localhost:5173/g/?mode=a&hub_return=http%3A%2F%2Fx%2F&hub_name=%EC%B2%A0%EC%88%98%20a%26b&hub_room=abc234#lv2',
+    );
+  });
+
+  it('게임이 읽으면 이름이 글자 그대로 나온다', () => {
+    const url = new URL(entryUrl('/g/', 'http://x/', LOBBY, { name: '<b>철수</b>', room: 'abc234' }));
+    expect(url.searchParams.get('hub_name')).toBe('<b>철수</b>');
+    expect(url.searchParams.get('hub_room')).toBe('abc234');
+  });
+
+  it('이름은 제어 문자를 빼고 다듬어 16자로, 다듬어 비면 빼고 붙이지 않는다', () => {
+    const long = new URL(entryUrl('/g/', 'http://x/', LOBBY, { name: ' 가\n나다라마바사아자차카타파하abcd ', room: 'abc234' }));
+    expect(long.searchParams.get('hub_name')).toBe('가나다라마바사아자차카타파하ab');
+    const blank = new URL(entryUrl('/g/', 'http://x/', LOBBY, { name: ' \t ', room: 'abc234' }));
+    expect(blank.searchParams.has('hub_name')).toBe(false);
+    expect(blank.searchParams.get('hub_room')).toBe('abc234');
+  });
+
+  it('방 코드 형식이 틀리면 hub_room 을 붙이지 않는다', () => {
+    const url = new URL(entryUrl('/g/', 'http://x/', LOBBY, { name: '철수', room: 'ABC10l' }));
+    expect(url.searchParams.has('hub_room')).toBe(false);
+    expect(url.searchParams.get('hub_name')).toBe('철수');
+  });
+
+  it('플레이어가 없으면 v1 과 같다 — hub_return 만', () => {
+    expect(entryUrl('/g/', 'http://x/', LOBBY)).toBe('http://localhost:5173/g/?hub_return=http%3A%2F%2Fx%2F');
+  });
 });
 
 describe('returnUrl', () => {

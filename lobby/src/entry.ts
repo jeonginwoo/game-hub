@@ -1,11 +1,21 @@
 // 게임 입장·복귀 — 계약(docs/game-entry-contract.md)의 로비 쪽 구현. Three.js·DOM 과 무관한 순수 함수.
 // 복귀 URL 에는 로비 전용 `hub_door` 를 넣어 들어갔던 문 앞에 다시 세운다 (게임에게는 불투명한 값).
+// 게임 URL 에는 `hub_return`·`hub_name`·`hub_room` 을 붙인다 (계약 v3).
+import { isRoomCode, normalizeName } from '../../server/src/protocol';
 import type { GameEntry } from './games';
 import type { Pos, TileMap } from './map';
 import { DIR_DELTA, type Dir } from './movement';
 
 const RETURN_PARAM = 'hub_return';
 const DOOR_PARAM = 'hub_door';
+const NAME_PARAM = 'hub_name';
+const ROOM_PARAM = 'hub_room';
+
+/** 게임에 넘기는 플레이어 힌트 (계약 v2 `hub_name`, v3 `hub_room`) */
+export interface HubPlayer {
+  readonly name: string;
+  readonly room: string;
+}
 
 /** 문 번호에 배정된 게임. 배정이 없거나 등록 표에 없는 id 면 undefined */
 export function gameAtDoor(
@@ -24,13 +34,20 @@ export function doorIndexAt(map: TileMap, p: Pos): number | undefined {
 }
 
 /**
- * 게임으로 갈 URL. 등록 URL 의 기존 쿼리·해시는 손대지 않고 `hub_return` 만 덧붙인다.
+ * 게임으로 갈 URL. 등록 URL 의 기존 쿼리·해시는 손대지 않고 `hub_` 파라미터만 덧붙인다.
  * searchParams.set 은 기존 쿼리를 다시 직렬화하므로(`?flag` → `?flag=`) 문자열로 붙인다.
+ * 이름은 다듬어 비면, 방은 코드 형식이 아니면 빼고 붙인다 — 계약의 「로비가 지키는 것」.
  */
-export function entryUrl(gameUrl: string, returnUrl: string, lobbyHref: string): string {
+export function entryUrl(gameUrl: string, returnUrl: string, lobbyHref: string, player?: HubPlayer): string {
   const url = new URL(gameUrl, lobbyHref);
-  const sep = url.search ? '&' : '?';
-  url.search = `${url.search}${sep}${RETURN_PARAM}=${encodeURIComponent(returnUrl)}`;
+  const params: [string, string][] = [[RETURN_PARAM, returnUrl]];
+  if (player) {
+    const name = normalizeName(player.name);
+    if (name) params.push([NAME_PARAM, name]);
+    if (isRoomCode(player.room)) params.push([ROOM_PARAM, player.room]);
+  }
+  const added = params.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+  url.search = url.search ? `${url.search}&${added}` : `?${added}`;
   return url.href;
 }
 
