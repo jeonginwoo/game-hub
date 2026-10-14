@@ -5,10 +5,10 @@
 ## 현재 상태 (2026-10-14)
 
 - **목적:** Three.js 로 만드는 멀티플레이 게임 모음. 쯔꾸르(RPG Maker)식 로비에서 여러 명이 함께 돌아다니다가 문을 통해 각자 만든 게임으로 입장한다. 게임의 형식은 자유.
-- **진행:** 로비에 ZEP 식 층 구조(배경 한 장 → 바닥 물체 → 발 y 정렬 층 → 상단 물체 → 앞화면) + 내 캐릭터 이동. 직교 카메라, 32px 칸·48×64 캐릭터 규격, 그림은 모두 임시 색(배경은 문자 맵을 칠한 캔버스, 물체 4개 — 깔개·나무 2·들보, 앞화면은 자리만), 방향키/WASD 칸 단위 이동·벽 충돌·카메라 추적. 게임 입장 계약 문서 v2(`docs/game-entry-contract.md` — v2 에서 `hub_name` 추가, **로비 쪽 구현은 아직**). 문 입장 로비 쪽 구현 — 게임이 배정된 문에 올라서면 계약대로 게임 URL 로 이동, 복귀 시 그 문 앞에 등장. 첫 게임 `whiteboard-3d`(독립 저장소, 개발 URL `http://localhost:5174/`)를 1번(가운데) 문에 등록 — 입장·뒤로 가기·「로비로」 복귀 왕복 확인됨. 멀티 서버 `server/`(Node + `ws`) — 방 코드(`/ws?room=<6자>`)별 명단·위치 중계(프로토콜 v0), `npm run dev` 하나로 Vite 에 `/ws` 가 붙고, 배포 모양은 `npm run build && npm start`(로비 빌드 + `/ws` 한 포트). **로비 화면은 아직 서버에 접속하지 않음**(다른 플레이어 표시 전). 게임 폴더는 아직 없음. 원격 `origin` = GitHub `jeonginwoo/game-hub`
-- **검증 기준선:** `bash scripts/verify.sh` 6단계 PASS (docs · reviewer model · script line endings · typecheck · unit tests · build). 테스트 로비 42개 + 서버 22개(소켓 통합 포함). 번들 500 kB 경고는 그대로(실패 아님)
+- **진행:** 로비에 ZEP 식 층 구조(배경 한 장 → 바닥 물체 → 발 y 정렬 층 → 상단 물체 → 앞화면) + 내 캐릭터 이동. 직교 카메라, 32px 칸·48×64 캐릭터 규격, 그림은 모두 임시 색(배경은 문자 맵을 칠한 캔버스, 물체 4개 — 깔개·나무 2·들보, 앞화면은 자리만), 방향키/WASD 칸 단위 이동·벽 충돌·카메라 추적. 게임 입장 계약 문서 v2(`docs/game-entry-contract.md` — v2 에서 `hub_name` 추가, **로비 쪽 구현은 아직**). 문 입장 로비 쪽 구현 — 게임이 배정된 문에 올라서면 계약대로 게임 URL 로 이동, 복귀 시 그 문 앞에 등장. 첫 게임 `whiteboard-3d`(독립 저장소, 개발 URL `http://localhost:5174/`)를 1번(가운데) 문에 등록 — 입장·뒤로 가기·「로비로」 복귀 왕복 확인됨. 멀티 서버 `server/`(Node + `ws`) — 방 코드(`/ws?room=<6자>`)별 명단·위치 중계(프로토콜 v0), `npm run dev` 하나로 Vite 에 `/ws` 가 붙고, 배포 모양은 `npm run build && npm start`(로비 빌드 + `/ws` 한 포트). 로비 첫 화면 — 닉네임 + 「로비 만들기」(6자 방 코드) 또는 코드·초대 링크로 참여, 초대 링크로 오면 이름만, 저장된 이름 + `?room=` 이면 바로 로비(게임 복귀 포함). 왼쪽 위에 방 코드·이름·「초대 링크 복사」. **로비 화면은 아직 서버에 접속하지 않음**(다른 플레이어 표시 전). 게임 폴더는 아직 없음. 원격 `origin` = GitHub `jeonginwoo/game-hub`
+- **검증 기준선:** `bash scripts/verify.sh` 6단계 PASS (docs · reviewer model · script line endings · typecheck · unit tests · build). 테스트 로비 58개 + 서버 24개(소켓 통합 포함). 번들 500 kB 경고는 그대로(실패 아님)
 - **디자인 브랜치 (시안마다 하나, 모두 `main` 에서 땀):** 시안 A `design/lobby` — 32px 타일셋(Mage City Arcanos, CC0) + 코드로 그린 32×40 2등신 캐릭터·꾸미기 값. 시안 B `design/zep-style` — ZEP 식 배경 한 장 + 물체 스프라이트 + 앞화면, 48×64·방향당 5프레임 시트 캐릭터. 사용자가 고른 시안만 `main` 에 합친다 (세부는 각 브랜치 PROGRESS)
-- **다음 작업:** 승인된 순서(2026-10-14) ② `feat/lobby-entry-screen` 첫 화면(닉네임·로비 만들기·코드로 참여·초대 링크) → ③ `feat/lobby-others` 접속·다른 플레이어 표시 → 계약 v3 `hub_room` + 문 입장 시 `hub_room`·`hub_name`
+- **다음 작업:** 승인된 순서(2026-10-14) ③ `feat/lobby-others` 접속·다른 플레이어 표시 → 계약 v3 `hub_room` + 문 입장 시 `hub_room`·`hub_name`
 - **차단 요소:** 없음
 
 ## 열린 질문 (다음 세션에서 사용자와 결정)
@@ -68,7 +68,6 @@
 - `lobby-map.ts` 머리 주석 「D 문 자리(아직 동작 없음)」 은 낡음 — 문 입장은 구현됨
 
 - **승인된 순서 (2026-10-14, 커밋 하나씩):**
-  - ② 첫 화면 — 방 코드 없으면 [닉네임][로비 만들기][코드 입력+참여], 초대 링크(`?room=`)인데 이름 없으면 [닉네임][입장], 둘 다 있으면 바로 로비. 이름은 `localStorage`(실패해도 동작). 로비 구석에 방 코드·「초대 링크 복사」. 입력창 포커스 중 이동 키 끄기. 판정은 순수 `room.ts` + 테스트. 네트워크 없음
   - ③ 접속·다른 플레이어 — `net.ts` 전송 모듈 하나(교체 가능), 걷기 시작·방향 바뀜에 `move`, 순수 `others.ts` + 테스트, 다른 캐릭터도 `drawZ` 정렬 층 + 이름표, 끊기면 표시만(자동 재접속은 나중)
   - 계약 v3 `hub_room` + 문 입장 시 `hub_room`·`hub_name` 붙이기 (`entry.ts` `entryUrl`, 테스트 포함). whiteboard 는 `?room=` 을 이미 지원 — `hub_room` 읽기 한 줄(그쪽 일)
 - 코드로 참여할 때 없는 방이면 알려 주기 — 지금은 틀린 코드면 빈 방에 혼자 들어간다(방은 들어오면 생김). 불편해지면 서버에 「방 있음?」 확인 추가
@@ -79,7 +78,6 @@
 - 로비 에셋(타일셋·캐릭터 시트) — 무료(CC0 등, 라이선스 `docs/` 기록) 또는 직접 제작. 그 전까지 색 사각형
 - whiteboard-3d 저장소에 알릴 것 (그쪽 일): 계약 v2 — 지금 `client/lobby-link.ts` 는 `?name=` 을 읽으므로 `hub_name` 도 읽게(로비는 `hub_` 접두어만 붙인다). 그쪽 후보 일감 「game-hub 쪽 등록」은 완료됨. (예전 메모의 「경로가 틀림」은 잘못 — 이 저장소는 실제로 `C:\Projects\playground\game-hub`)
 - 문 앞에 게임 제목 표시 (계약 등록 정보 `title` — 지금은 쓰이지 않음)
-- 채팅 등 텍스트 입력 UI 가 생기면 로비 키 입력이 입력창 포커스 중에는 꺼지게 (지금은 window 에서 방향키·WASD 를 모두 가로챔)
 - 번들 500 kB 경고 (실측 527 kB, three 전체가 한 청크) — 로비가 커지면 코드 분할 또는 `build.chunkSizeWarningLimit` 판단. 지금은 무시
 - `scripts/shot.sh` 에 키 입력 시뮬레이션(CDP `--remote-debugging-port`) — 걷기·문 입장을 눈으로 확인해야 할 때. 2026-10-13 일회용 스크립트로 가능함 확인: Node 22 내장 `WebSocket`·`fetch` 만으로 CDP 연결, `Input.dispatchKeyEvent`(rawKeyDown/keyUp) 로 칸 이동, `Page.captureScreenshot` — 추가 의존성 없음
 
@@ -93,6 +91,12 @@
 - 미해결: <다음 세션으로 넘기는 것 · 확인하지 못한 것>
 - 다음 작업: <구체적으로>
 ```
+
+### 2026-10-14 — 로비 첫 화면 (②)
+- 완료: `feat/lobby-rooms` 를 `main` 에 합침. 순수 `room.ts`(어떤 화면·방 코드 만들기/읽기·초대 링크·이름 다듬기) + 테스트 16개, DOM 연결 `entry-screen.ts`(첫 화면·왼쪽 위 방 표시·이름 `localStorage` `game-hub:name`), `main.ts` 에 방·이름 절 — 들어가기 전·입력 칸 포커스 중에는 이동 키를 받지 않음. 이름 규칙을 서버와 같게 하려고 `protocol.ts` 에 `normalizeName` 을 꺼냄(잘린 끝 공백도 정리 — 계약 v2 「앞뒤 공백 없음」). 로비 컨벤션에 HTML UI·키 입력 규칙. verify 6단계 PASS. `shot.sh` 로 시작·초대 화면, 일회용 CDP 스크립트(scratchpad, 커밋 안 함)로 headless Chrome 조작 — 이름 없이 Enter → 안내 · 입력 칸에서 `w` 가 글자로 들어감 · Enter 로 로비 만들기 → `?room=<코드>` + 방 표시 · 걸어서 이동 · 새로고침과 `&hub_door=1` 복귀가 바로 로비(같은 방, hub_door 제거) · 틀린 `?room=BAD` 는 시작 화면(이름은 채워짐 — 이후 대문자 코드 링크는 받도록 바꿈, reviewer) · `ABC-234` 로 참여 → `abc234` · 복사 버튼 → 클립보드에 `?room=abc234` 만. 콘솔 오류 없음. 띄운 서버·Chrome 은 끔
+- 조작 중 찾은 버그: 입력 칸이 둘이고 submit 버튼이 없는 폼은 Enter 로 제출되지 않음 → 입력 칸 Enter 를 직접 받고, 한글 조합 중 Enter(`isComposing`, Safari 는 `keyCode 229`)는 무시
+- 미해결: 실제 한글 입력기로 이름을 쳐서 Enter 는 확인 못 함(headless 는 IME 없음). http 로 연 사설 IP 등에서 클립보드 대신 뜨는 `prompt` 는 보지 않음. 휴대폰 화면(터치로 이동 불가)은 범위 밖
+- 다음 작업: ③ 접속·다른 플레이어 표시
 
 ### 2026-10-14 — 서버를 방 단위로 (①)
 - 완료: `docs/contract-v2` 를 `main` 에 합침. 사용자와 방향 결정 — 로그인 보류, 방 + 닉네임 + 초대 링크, 계약 v3 `hub_room` → 결정 기록. `protocol.ts` 에 방 코드(`isRoomCode`·`roomFromPath`), `roster.ts` 에 `Rooms`(빈 방 삭제), `ws.ts` 는 `/ws?room=` 으로 방을 고르고 틀리면 400. 테스트 22개(방 격리·빈 방 삭제·거절 포함). 컨벤션 두 파일에 `protocol.ts` 공유 예외·방 규칙

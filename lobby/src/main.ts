@@ -2,6 +2,7 @@
 // 2026-10-14: ZEP 식 층). 에셋 전까지 그림은 임시 색. 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
 import * as THREE from 'three';
 import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './entry';
+import { loadName, showEntryScreen, showRoomBadge, type Entered } from './entry-screen';
 import { DOOR_GAMES, GAMES } from './games';
 import { AVATAR_PX, drawZ, TILE_PX } from './layers';
 import { LOBBY_OBJECTS } from './lobby-objects';
@@ -9,6 +10,7 @@ import { LOBBY_ROWS } from './lobby-map';
 import { parseMap, type Pos, type Tile } from './map';
 import { step, type Dir } from './movement';
 import { checkObjects, objectRect, objectZ } from './objects';
+import { roomFromSearch, screenFor, withRoom } from './room';
 import { clampAxis } from './view';
 
 const VIEW_TILES_Y = 11; // 화면 세로에 보이는 타일 수
@@ -164,8 +166,35 @@ window.addEventListener('pageshow', (e) => {
   leaving = false;
 });
 
+// --- 방·이름 (room.ts) --------------------------------------------------------
+// 방 코드와 이름이 정해지기 전에는 로비가 뒤에 그려지기만 하고 움직이지 않는다
+
+let entered: Entered | null = null;
+
+function enterLobby(e: Entered): void {
+  entered = e;
+  // 주소창에 방 코드를 남겨 둔다 — 새로고침·게임 복귀 URL(returnUrl 이 location.href 를 쓴다)이 같은 방으로 오게
+  history.replaceState(history.state, '', withRoom(location.href, e.room));
+  showRoomBadge(e, location.href);
+}
+
+const urlRoom = roomFromSearch(location.search);
+const savedName = loadName();
+const screen = screenFor(urlRoom, savedName);
+if (screen === 'lobby' && urlRoom !== null && savedName !== null) {
+  enterLobby({ room: urlRoom, name: savedName });
+} else if (screen !== 'lobby') {
+  void showEntryScreen(screen, urlRoom, savedName).then(enterLobby);
+}
+
 // --- 입력 ---------------------------------------------------------------------
 // 여러 키를 누르고 있으면 가장 나중에 누른 방향을 따른다 (쯔꾸르와 같은 감각)
+
+/** 글자를 치는 중이면 방향키·WASD 를 가로채지 않는다 */
+function isTyping(target: EventTarget | null): boolean {
+  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
+    || (target instanceof HTMLElement && target.isContentEditable);
+}
 
 const KEY_DIR: Record<string, Dir> = {
   ArrowUp: 'up', KeyW: 'up',
@@ -177,6 +206,7 @@ const held: Dir[] = [];
 
 window.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return; // Ctrl+S·Ctrl+D 같은 브라우저 단축키는 건드리지 않는다
+  if (entered === null || isTyping(e.target)) return;
   const dir = KEY_DIR[e.code];
   if (!dir) return;
   e.preventDefault();

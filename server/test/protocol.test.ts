@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, isRoomCode, parseClientMsg, roomFromPath } from '../src/protocol.ts';
+import { cleanName, isRoomCode, normalizeName, parseClientMsg, roomFromPath } from '../src/protocol.ts';
 
 const at = { x: 3, y: 4, dir: 'down' };
 
@@ -67,5 +67,17 @@ describe('cleanName', () => {
 
   it('비면 기본 이름', () => {
     expect(cleanName('   ')).toBe('손님');
+  });
+
+  it('잘린 끝에 공백이 남지 않는다', () => {
+    // 16번째 글자가 공백이면 자른 뒤 다시 다듬는다 — 계약 v2 「앞뒤 공백 없음」
+    expect(cleanName(`${'가'.repeat(15)} 나`)).toBe('가'.repeat(15));
+  });
+});
+
+describe('normalizeName', () => {
+  it('비면 빈 문자열 — 기본 이름을 넣지 않는다', () => {
+    expect(normalizeName(' \u0007 ')).toBe('');
+    expect(normalizeName(' 영희 ')).toBe('영희');
   });
 });

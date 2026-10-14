@@ -66,10 +66,14 @@ function parseSpot(v: unknown): Spot | null {
   return { x, y, dir };
 }
 
-/** 제어 문자를 빼고 앞뒤 공백을 자른 뒤 NAME_MAX 글자로 — 비면 DEFAULT_NAME */
+/** 제어 문자를 빼고 앞뒤 공백을 자른 뒤 NAME_MAX 글자로 — 빈 문자열일 수 있다 (로비 이름 칸이 쓴다) */
+export function normalizeName(raw: string): string {
+  return raw.replace(/\p{Cc}/gu, '').trim().slice(0, NAME_MAX).trim();
+}
+
+/** normalizeName 에 더해, 비면 DEFAULT_NAME (서버가 받은 hello 에 쓴다) */
 export function cleanName(raw: string): string {
-  const name = raw.replace(/\p{Cc}/gu, '').trim().slice(0, NAME_MAX);
-  return name || DEFAULT_NAME;
+  return normalizeName(raw) || DEFAULT_NAME;
 }
 
 /** 형식이 틀리면 null — 서버는 그 메시지를 조용히 버린다 */

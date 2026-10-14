@@ -7,6 +7,41 @@
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1f2a; }
       #app { display: block; width: 100vw; height: 100vh; }
+
+      /* 첫 화면·방 표시 (src/entry-screen.ts) — 그림이 들어오기 전 임시 모양 */
+      body { font-family: system-ui, sans-serif; color: #eceff4; }
+      .hub-overlay {
+        position: fixed; inset: 0; display: grid; place-items: center; padding: 16px;
+        background: rgb(16 19 27 / 0.6);
+      }
+      .hub-card {
+        display: flex; flex-direction: column; gap: 10px; width: min(320px, 100%);
+        padding: 24px; border-radius: 12px; background: #2e3440; box-shadow: 0 8px 32px rgb(0 0 0 / 0.4);
+      }
+      .hub-title { margin: 0 0 4px; font-size: 22px; text-align: center; }
+      .hub-sub { margin: 0; text-align: center; color: #a3adc2; font-size: 14px; }
+      .hub-input {
+        min-width: 0; flex: 1; padding: 10px 12px; border: 1px solid #4c566a; border-radius: 8px;
+        background: #3b4252; color: inherit; font: inherit;
+      }
+      .hub-input:focus { outline: 2px solid #88c0d0; outline-offset: 0; }
+      .hub-row { display: flex; gap: 8px; }
+      .hub-btn {
+        padding: 10px 14px; border: 0; border-radius: 8px; background: #4c566a; color: inherit;
+        font: inherit; cursor: pointer;
+      }
+      .hub-btn:hover { background: #5e6a82; }
+      .hub-primary { background: #5e81ac; font-weight: 600; }
+      .hub-primary:hover { background: #6d90bb; }
+      .hub-or { text-align: center; color: #a3adc2; font-size: 13px; }
+      .hub-error { margin: 0; min-height: 1.2em; color: #e5a0a0; font-size: 13px; }
+      .hub-badge {
+        position: fixed; top: 12px; left: 12px; display: flex; align-items: center; gap: 10px;
+        padding: 6px 8px 6px 12px; border-radius: 10px; background: rgb(46 52 64 / 0.85); font-size: 14px;
+      }
+      .hub-badge-room { font-weight: 600; letter-spacing: 0.05em; }
+      .hub-badge-name { color: #a3adc2; }
+      .hub-small { padding: 6px 10px; font-size: 13px; }
     </style>
   </head>
   <body>

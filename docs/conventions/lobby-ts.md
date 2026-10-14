@@ -20,6 +20,13 @@
 - **`main.ts` is wiring only**: scene setup, input, the animation loop. It calls the pure
   modules and holds the mutable state. When a branch in `main.ts` starts deciding
   something, move the decision into a pure module.
+- **HTML UI over the canvas** (entry screen, room badge) is wiring too, in its own module
+  (`entry-screen.ts`); what to show is decided in a pure module (`room.ts`). Text goes in
+  with `textContent`, never `innerHTML`. Storage (`localStorage`) is read/written inside
+  `try/catch` and the lobby works without it. Styles live in `index.html` (`hub-` classes).
+- Keyboard handlers skip events whose target is a text field (`isTyping` in `main.ts`), and an
+  Enter handler on a text field ignores `isComposing` and `keyCode === 229` (Korean IME confirms
+  a syllable with Enter; Safari reports only the keyCode).
 - Data the lobby is configured with (map rows, game table) is its own module
   (`lobby-map.ts`, `games.ts`) — one place per kind of data.
 
