@@ -46,7 +46,8 @@ is simply skipped.
 - One task = one session = one commit. Keep the unit small enough to review in one diff.
 - Every task runs on its own branch cut from `main` (`<type>/<short-name>`, e.g. `feat/zep-layers`;
   design 시안 use `design/<name>`). Never commit to `main` directly — merge a branch into `main`
-  only after the user approves.
+  only after the user approves. Details: `docs/conventions/git-workflow.md`.
+- Code follows `docs/conventions/` (`lobby-ts.md` for `lobby/`). Games are not governed by it.
 - Never claim a task done unless `bash scripts/verify.sh` passes. On FAIL, read only
   the failing part of `build/last-verify.log` (grep/tail) — never the whole log.
 - Say what you could NOT verify (visual result, live multiplayer behaviour) instead of implying it works.
@@ -57,6 +58,6 @@ is simply skipped.
   A harness rule change is its own `chore:` commit, landed before the work that needs it.
 - The `reviewer` agent never runs on the author's model — its `model:` stays pinned to a
   different family (blind-spot separation; `scripts/verify.sh` checks it).
-- Language: instruction files (this file, commands, agents, scripts) in English;
-  records (`docs/`) and code comments in Korean.
+- Language: instruction files (this file, commands, agents, scripts, `docs/conventions/`) in English;
+  records (the rest of `docs/`) and code comments in Korean.
 - Commit message: `type: 한국어 요약` (+ `- ` bullet lines). Types: `feat` `fix` `refactor` `test` `docs` `chore`.

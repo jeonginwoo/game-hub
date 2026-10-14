@@ -11,7 +11,8 @@ Start a work session.
    whether to proceed on an assumption or wait.
 4. Present a plan for the next task (or the task the user gives) and wait for
    user approval before writing any code or harness file.
-   Once approved, cut the task branch from `main` (naming in CLAUDE.md) before the first edit.
+   Read the `docs/conventions/` file for the area you will touch before planning.
+   Once approved, cut the task branch from `main` (`docs/conventions/git-workflow.md`) before the first edit.
 5. Keep the unit of work small: one feature/fix = one session = one commit.
 
 ## Loop mode (`/next --loop` — used by scripts/ralph.sh, no human approval)
