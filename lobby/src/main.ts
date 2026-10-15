@@ -18,8 +18,8 @@ import { CELL_PX, tileLook, type Cell, type Sheet } from './tiles';
 import { clampAxis } from './view';
 
 // 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 칸 = TILE_PX × VIEW_ZOOM). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
-// 정수여야 픽셀 그림이 고르게 커진다
-const VIEW_ZOOM = 2;
+// 1.5 면 한 칸 48px — 16px 타일(Ninja Adventure)은 원본 1px 이 화면 3px 로 고르다. 32px 기준 그림(임시 캐릭터)은 1.5배라 고르지 않다
+const VIEW_ZOOM = 1.5;
 const STEP_MS = 160; // 한 칸 걷는 시간 (대각선은 거리만큼 √2 배)
 
 const canvas = document.querySelector<HTMLCanvasElement>('#app');
