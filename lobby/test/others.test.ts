@@ -40,6 +40,13 @@ describe('applyMsg', () => {
     expect(s.players.get('b')?.at.dir).toBe('up');
   });
 
+  it('대각선 이웃 칸도 걷고, √2 배 시간이 걸린다', () => {
+    let s = applyMsg(withB(), { t: 'move', id: 'b', at: spot(6, 6, 'right') });
+    expect(s.players.get('b')?.t).toBe(0);
+    s = advance(s, 160, 160);
+    expect(s.players.get('b')?.t).toBeCloseTo(1 / Math.SQRT2);
+  });
+
   it('걷는 도중에 다음 칸이 오면 지금 자리에서 이어 걷는다', () => {
     let s = applyMsg(withB(), { t: 'move', id: 'b', at: spot(6, 5, 'right') });
     s = advance(s, 80, 160);

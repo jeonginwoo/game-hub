@@ -9,7 +9,7 @@ import { AVATAR_PX, drawZ, TILE_PX } from './layers';
 import { LOBBY_OBJECTS } from './lobby-objects';
 import { LOBBY_ROWS } from './lobby-map';
 import { parseMap, type Pos, type Tile } from './map';
-import { step, type Dir } from './movement';
+import { reversesWalk, stepHeld, type Dir } from './movement';
 import { connect, statusText, type Connection, type NetStatus } from './net';
 import { checkObjects, objectRect, objectZ } from './objects';
 import { advance, applyMsg, colorFor, NO_OTHERS, remotePos, type Others } from './others';
@@ -17,7 +17,7 @@ import { roomFromSearch, screenFor, withRoom } from './room';
 import { clampAxis } from './view';
 
 const VIEW_TILES_Y = 11; // 화면 세로에 보이는 타일 수
-const STEP_MS = 160; // 한 칸 걷는 시간
+const STEP_MS = 160; // 한 칸 걷는 시간 (대각선은 거리만큼 √2 배)
 
 const canvas = document.querySelector<HTMLCanvasElement>('#app');
 if (!canvas) throw new Error('#app 캔버스가 없다');
@@ -180,6 +180,12 @@ history.replaceState(history.state, '', withoutDoorParam(location.href));
 let pos: Pos = spawn.pos; // 논리 위치 — 걷는 중이면 도착할 칸
 let from: Pos = spawn.pos; // 걷기 시작한 칸
 let t = 1; // from → pos 보간 진행도 (1 이면 정지)
+let tapped: Dir | null = null; // 서 있을 때 누른 방향 — 다음 프레임 전에 떼어 버리는 짧은 탭도 한 칸 가게
+
+/** 지금 걷는 한 칸(from → pos)에 걸리는 시간 — 대각선은 √2 배라 속도가 일정하다 */
+function walkMs(): number {
+  return STEP_MS * Math.hypot(pos.x - from.x, pos.y - from.y);
+}
 let facing: Dir = spawn.facing;
 let leaving = false; // 게임으로 이동 중 — 페이지가 바뀔 때까지 입력·재입장을 막는다
 
@@ -214,6 +220,7 @@ function resetAfterReturn(): void {
   facing = back.facing;
   t = 1;
   held.length = 0;
+  tapped = null;
   leaving = false;
 }
 
@@ -361,6 +368,15 @@ window.addEventListener('keydown', (e) => {
   if (!dir) return;
   e.preventDefault();
   if (!held.includes(dir)) held.push(dir);
+  if (e.repeat || leaving) return;
+  if (t >= 1) {
+    tapped = dir;
+  } else if (reversesWalk(from, pos, dir)) {
+    // 걷는 중 정반대 키 — 그 자리에서 돌아 출발한 칸으로 되돌아간다
+    [from, pos] = [pos, from];
+    t = 1 - t;
+    facing = dir;
+  }
 });
 window.addEventListener('keyup', (e) => {
   const dir = KEY_DIR[e.code];
@@ -368,7 +384,7 @@ window.addEventListener('keyup', (e) => {
   const i = held.indexOf(dir);
   if (i >= 0) held.splice(i, 1);
 });
-window.addEventListener('blur', () => { held.length = 0; }); // 포커스를 잃으면 키가 눌린 채로 남지 않게
+window.addEventListener('blur', () => { held.length = 0; tapped = null; }); // 포커스를 잃으면 키가 눌린 채로 남지 않게
 
 // --- 카메라 -------------------------------------------------------------------
 
@@ -397,22 +413,22 @@ renderer.setAnimationLoop((now) => {
   // 한 칸을 끝내고 남은 시간은 다음 칸으로 넘긴다 — 버리면 프레임률에 따라 걷는 속도가 달라진다
   let carry = 0;
   if (t < 1) {
-    t += dt / STEP_MS;
+    t += dt / walkMs();
     if (t >= 1) {
-      carry = (t - 1) * STEP_MS;
+      carry = (t - 1) * walkMs();
       t = 1;
       enterIfDoor(pos);
     }
   }
   if (t >= 1 && !leaving) {
-    const dir = held[held.length - 1];
-    if (dir) {
-      const r = step(map, pos, dir);
+    const r = stepHeld(map, pos, held.length > 0 ? held : tapped ? [tapped] : []);
+    tapped = null;
+    if (r) {
       facing = r.facing;
       if (r.moved) {
         from = pos;
         pos = r.pos;
-        t = Math.min(carry / STEP_MS, 1);
+        t = Math.min(carry / walkMs(), 1);
       }
     }
   }

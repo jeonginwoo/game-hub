@@ -9,6 +9,7 @@ export interface Remote {
   readonly fromX: number; // 걷기 시작한 자리 — 걷는 도중에 새 칸이 오면 그때의 중간 위치
   readonly fromY: number;
   readonly t: number; // from → at 진행도, 1 이면 정지
+  readonly len: number; // 이번 걸음의 길이 배율 — 대각선 한 칸은 √2 라 그만큼 오래 걷는다
 }
 
 export interface Others {
@@ -19,7 +20,7 @@ export interface Others {
 export const NO_OTHERS: Others = { me: null, players: new Map() };
 
 function standing(p: Player): Remote {
-  return { id: p.id, name: p.name, at: { x: p.x, y: p.y, dir: p.dir }, fromX: p.x, fromY: p.y, t: 1 };
+  return { id: p.id, name: p.name, at: { x: p.x, y: p.y, dir: p.dir }, fromX: p.x, fromY: p.y, t: 1, len: 1 };
 }
 
 /** 지금 그릴 자리(타일 단위, 걷는 중이면 칸 사이) */
@@ -29,10 +30,11 @@ export function remotePos(r: Remote): { readonly x: number; readonly y: number }
 
 function moved(r: Remote, at: Spot): Remote {
   const now = remotePos(r);
-  const step = Math.abs(at.x - r.at.x) + Math.abs(at.y - r.at.y);
-  // 이웃 칸이면 걷는다. 같은 칸(방향만 바뀜)이나 먼 칸(문 앞 등장 등)은 바로 그 자리
-  if (step === 1) return { ...r, at, fromX: now.x, fromY: now.y, t: 0 };
-  return { ...r, at, fromX: at.x, fromY: at.y, t: 1 };
+  const dx = Math.abs(at.x - r.at.x);
+  const dy = Math.abs(at.y - r.at.y);
+  // 이웃 칸(대각선 포함)이면 걷는다. 같은 칸(방향만 바뀜)이나 먼 칸(문 앞 등장 등)은 바로 그 자리
+  if (Math.max(dx, dy) === 1) return { ...r, at, fromX: now.x, fromY: now.y, t: 0, len: Math.hypot(dx, dy) };
+  return { ...r, at, fromX: at.x, fromY: at.y, t: 1, len: 1 };
 }
 
 /** 서버 메시지 하나를 반영한 새 상태. 나 자신은 명단에 넣지 않는다 */
@@ -65,14 +67,14 @@ export function applyMsg(state: Others, msg: ServerMsg): Others {
   }
 }
 
-/** dtMs 만큼 걷기를 진행한 새 상태 — stepMs 는 한 칸 걷는 시간(내 캐릭터와 같게) */
+/** dtMs 만큼 걷기를 진행한 새 상태 — stepMs 는 가로·세로 한 칸 걷는 시간(내 캐릭터와 같게) */
 export function advance(state: Others, dtMs: number, stepMs: number): Others {
   let changed = false;
   const players = new Map<string, Remote>();
   for (const [id, r] of state.players) {
     if (r.t < 1) {
       changed = true;
-      players.set(id, { ...r, t: Math.min(1, r.t + dtMs / stepMs) });
+      players.set(id, { ...r, t: Math.min(1, r.t + dtMs / (stepMs * r.len)) });
     } else {
       players.set(id, r);
     }
