@@ -109,12 +109,13 @@ function placeholderAvatar(facing: Dir, body: string): HTMLCanvasElement {
   g.fill();
   // 바라보는 쪽 표시 — 뒷모습(up)은 머리 전체를 머리카락 색으로
   g.fillStyle = '#3b2a20';
-  const eye: Readonly<Record<Dir, readonly [number, number] | undefined>> = {
-    down: [24, 26], left: [15, 22], right: [33, 22], up: undefined,
+  // 눈 위치(가운데) — 정면은 두 눈, 옆모습은 보이는 쪽 한 눈
+  const eyes: Readonly<Record<Dir, readonly (readonly [number, number])[] | undefined>> = {
+    down: [[18, 24], [30, 24]], left: [[15, 22]], right: [[33, 22]], up: undefined,
   };
-  const p = eye[facing];
-  if (p) {
-    g.fillRect(p[0] - 3, p[1] - 3, 6, 6);
+  const ps = eyes[facing];
+  if (ps) {
+    for (const p of ps) g.fillRect(p[0] - 2, p[1] - 3, 4, 6);
   } else {
     g.beginPath();
     g.arc(24, 22, 14, 0, Math.PI * 2);
