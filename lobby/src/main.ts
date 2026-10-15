@@ -96,6 +96,8 @@ const AVATAR_H = AVATAR_PX.h / TILE_PX; // 칸
 // 방에 들어가기 전(welcome 전) 내 몸 색. 들어간 뒤에는 남들 화면과 같게 colorFor(내 id)
 const MY_BODY = '#5e81ac';
 
+const HEAD = [10, 8, 28, 28] as const; // 머리 네모 x, y, w, h (프레임 픽셀)
+
 function placeholderAvatar(facing: Dir, body: string): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = AVATAR_PX.w;
@@ -104,10 +106,8 @@ function placeholderAvatar(facing: Dir, body: string): HTMLCanvasElement {
   if (!g) throw new Error('2d 캔버스를 만들 수 없다');
   g.fillStyle = body; // 몸
   g.fillRect(12, 34, 24, 26);
-  g.fillStyle = '#e5c3a0'; // 머리
-  g.beginPath();
-  g.arc(24, 22, 14, 0, Math.PI * 2);
-  g.fill();
+  g.fillStyle = '#e5c3a0'; // 머리 — 28×28 네모
+  g.fillRect(HEAD[0], HEAD[1], HEAD[2], HEAD[3]);
   // 바라보는 쪽 표시 — 뒷모습(up)은 머리 전체를 머리카락 색으로
   g.fillStyle = '#3b2a20';
   // 눈 위치(가운데) — 정면은 두 눈, 옆모습은 보이는 쪽 한 눈
@@ -118,9 +118,7 @@ function placeholderAvatar(facing: Dir, body: string): HTMLCanvasElement {
   if (ps) {
     for (const p of ps) g.fillRect(p[0] - 2, p[1] - 3, 4, 6);
   } else {
-    g.beginPath();
-    g.arc(24, 22, 14, 0, Math.PI * 2);
-    g.fill();
+    g.fillRect(HEAD[0], HEAD[1], HEAD[2], HEAD[3]);
   }
   return c;
 }
