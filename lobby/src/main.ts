@@ -16,7 +16,9 @@ import { advance, applyMsg, colorFor, NO_OTHERS, remotePos, type Others } from '
 import { roomFromSearch, screenFor, withRoom } from './room';
 import { clampAxis } from './view';
 
-const VIEW_TILES_Y = 11; // 화면 세로에 보이는 타일 수
+// 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 칸 = TILE_PX × VIEW_ZOOM). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
+// 정수여야 픽셀 그림이 고르게 커진다
+const VIEW_ZOOM = 2;
 const STEP_MS = 160; // 한 칸 걷는 시간 (대각선은 거리만큼 √2 배)
 
 const canvas = document.querySelector<HTMLCanvasElement>('#app');
@@ -393,8 +395,9 @@ function resize(): void {
   const w = window.innerWidth;
   const h = window.innerHeight;
   renderer.setSize(w, h, false);
-  const halfY = VIEW_TILES_Y / 2;
-  const halfX = halfY * (w / h);
+  const tileScreenPx = TILE_PX * VIEW_ZOOM;
+  const halfY = h / tileScreenPx / 2;
+  const halfX = w / tileScreenPx / 2;
   camera.left = -halfX;
   camera.right = halfX;
   camera.top = halfY;
@@ -452,7 +455,7 @@ renderer.setAnimationLoop((now) => {
 
   const viewX = camera.right - camera.left;
   camera.position.x = clampAxis(x, map.width, viewX);
-  camera.position.y = -clampAxis(y, map.height, VIEW_TILES_Y);
+  camera.position.y = -clampAxis(y, map.height, camera.top - camera.bottom);
 
   renderer.render(scene, camera);
 
