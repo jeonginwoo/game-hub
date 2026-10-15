@@ -5,7 +5,7 @@ import { LOBBY_ROWS } from '../src/lobby-map';
 import { parseMap } from '../src/map';
 import { checkObjects, objectRect, objectZ, type MapObject } from '../src/objects';
 
-const tree: MapObject = { id: 'tree', layer: 'sorted', x: 4, y: 5, w: 2, h: 3, color: 0 };
+const tree: MapObject = { id: 'tree', layer: 'sorted', x: 4, y: 5, w: 2, h: 3, sprite: { sheet: 'nature', col: 0, row: 0 } };
 
 describe('objectRect', () => {
   // 칸 중심이 정수 — 칸 4·5 를 덮으면 왼쪽 선 3.5, 오른쪽 선 5.5. 발은 칸 5 의 아래 선 5.5

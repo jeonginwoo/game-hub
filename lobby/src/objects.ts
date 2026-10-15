@@ -1,7 +1,8 @@
-// 맵 위 물체 — 배경 그림과 따로 그려지는 것(나무·깔개·들보 등)의 자리와 층. 순수 데이터 + 검사.
+// 맵 위 물체 — 배경 그림과 따로 그려지는 것(나무·마당·도리이 등)의 자리와 층. 순수 데이터 + 검사.
 // 그림일 뿐 충돌은 없다 — 지나갈 수 없는 칸은 문자 맵의 '#' 가 정한다 (ZEP 의 통과 불가 타일처럼 그림과 별개).
 import { drawZ, type Layer } from './layers';
 import type { TileMap } from './map';
+import type { Cell } from './tiles';
 
 export type ObjectLayer = Extract<Layer, 'floor' | 'sorted' | 'top'>;
 
@@ -14,8 +15,8 @@ export interface MapObject {
   /** 칸 단위 크기 */
   readonly w: number;
   readonly h: number;
-  /** 에셋 전 임시 색 */
-  readonly color: number;
+  /** 그림 — 타일 시트에서 이 칸을 왼쪽 위로 w×h 칸을 잘라 쓴다 */
+  readonly sprite: Cell;
 }
 
 /** 타일 좌표의 가장자리 — 칸 중심이 정수라 칸 x 의 왼쪽 선은 x - 0.5 */
