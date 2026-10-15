@@ -17,8 +17,11 @@ export interface MapObject {
   readonly h: number;
   /** 그림 — 타일 시트에서 이 칸을 왼쪽 위로 w×h 칸을 잘라 쓴다 */
   readonly sprite: Cell;
-  /** 지나갈 수 없는 칸 — 물체의 왼쪽 아래 칸에서 오른쪽(w)·위쪽(h)으로. 없으면 그림만 있고 지나갈 수 있다 */
-  readonly solid?: { readonly w: number; readonly h: number };
+  /**
+   * 지나갈 수 없는 칸들 — 물체의 왼쪽 아래 칸 기준 (x 는 오른쪽, y 는 위쪽으로 0 부터). 예: 나무 밑둥 줄 [{0,0},{1,0}],
+   * 도리이 두 기둥 [{0,0},{2,0}]. 없으면 그림만 있고 지나갈 수 있다
+   */
+  readonly solid?: readonly Pos[];
 }
 
 /** 타일 좌표의 가장자리 — 칸 중심이 정수라 칸 x 의 왼쪽 선은 x - 0.5 */
@@ -41,12 +44,7 @@ export function objectZ(o: MapObject): number {
 
 /** 물체가 막는 칸들 */
 export function solidCells(o: MapObject): Pos[] {
-  const cells: Pos[] = [];
-  if (!o.solid) return cells;
-  for (let dy = 0; dy < o.solid.h; dy++) {
-    for (let dx = 0; dx < o.solid.w; dx++) cells.push({ x: o.x + dx, y: o.y - dy });
-  }
-  return cells;
+  return (o.solid ?? []).map((c) => ({ x: o.x + c.x, y: o.y - c.y }));
 }
 
 /** 걷기 판정용 맵 — 물체의 solid 칸을 벽으로 본다. 그림(배경 타일)은 원래 맵으로 그린다 */
@@ -69,8 +67,10 @@ export function checkObjects(map: TileMap, objects: readonly MapObject[]): void 
     if (r.left < -0.5 || r.top < -0.5 || r.right > map.width - 0.5 || r.bottom > map.height - 0.5) {
       throw new Error(`물체 '${o.id}' 가 맵 밖으로 나간다 — (${o.x}, ${o.y}) ${o.w}×${o.h}`);
     }
-    if (o.solid && (o.solid.w <= 0 || o.solid.h <= 0 || o.solid.w > o.w || o.solid.h > o.h)) {
-      throw new Error(`물체 '${o.id}' 의 solid ${o.solid.w}×${o.solid.h} — 물체 ${o.w}×${o.h} 안이어야 한다`);
+    for (const c of o.solid ?? []) {
+      if (c.x < 0 || c.y < 0 || c.x >= o.w || c.y >= o.h) {
+        throw new Error(`물체 '${o.id}' 의 solid 칸 (${c.x}, ${c.y}) — 물체 ${o.w}×${o.h} 안이어야 한다`);
+      }
     }
     for (const p of solidCells(o)) {
       const isStart = p.x === map.start.x && p.y === map.start.y;
