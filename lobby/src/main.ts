@@ -9,7 +9,7 @@ import { AVATAR_PX, drawZ, TILE_PX } from './layers';
 import { LOBBY_OBJECTS } from './lobby-objects';
 import { LOBBY_ROWS } from './lobby-map';
 import { parseMap, type Pos, type Tile } from './map';
-import { reversesWalk, stepHeld, type Dir } from './movement';
+import { facingOf, reversesWalk, stepHeld, type Dir } from './movement';
 import { connect, statusText, type Connection, type NetStatus } from './net';
 import { checkObjects, objectRect, objectZ } from './objects';
 import { advance, applyMsg, colorFor, NO_OTHERS, remotePos, type Others } from './others';
@@ -369,13 +369,14 @@ window.addEventListener('keydown', (e) => {
   e.preventDefault();
   if (!held.includes(dir)) held.push(dir);
   if (e.repeat || leaving) return;
+  // 누르는 즉시 돌아본다 (걷는 중이어도) — 여러 키가 눌려 있으면 좌우가 먼저
+  facing = facingOf(held) ?? dir;
   if (t >= 1) {
     tapped = dir;
   } else if (reversesWalk(from, pos, dir)) {
     // 걷는 중 정반대 키 — 그 자리에서 돌아 출발한 칸으로 되돌아간다
     [from, pos] = [pos, from];
     t = 1 - t;
-    facing = dir;
   }
 });
 window.addEventListener('keyup', (e) => {

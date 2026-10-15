@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseMap } from '../src/map';
-import { reversesWalk, step, stepHeld } from '../src/movement';
+import { facingOf, reversesWalk, step, stepHeld } from '../src/movement';
 
 const map = parseMap([
   '#####',
@@ -48,8 +48,8 @@ describe('stepHeld', () => {
     expect(stepHeld(open, { x: 1, y: 1 }, ['right'])).toEqual(step(open, { x: 1, y: 1 }, 'right'));
   });
 
-  it('가로·세로를 같이 누르면 대각선, 모습은 나중에 누른 쪽', () => {
-    expect(stepHeld(open, { x: 1, y: 1 }, ['right', 'down'])).toEqual({ pos: { x: 2, y: 2 }, facing: 'down', moved: true });
+  it('가로·세로를 같이 누르면 대각선, 모습은 누른 순서와 상관없이 좌우', () => {
+    expect(stepHeld(open, { x: 1, y: 1 }, ['right', 'down'])).toEqual({ pos: { x: 2, y: 2 }, facing: 'right', moved: true });
     expect(stepHeld(open, { x: 1, y: 1 }, ['down', 'right'])).toEqual({ pos: { x: 2, y: 2 }, facing: 'right', moved: true });
   });
 
@@ -68,7 +68,24 @@ describe('stepHeld', () => {
 
   it('옆 칸 하나가 벽이면 대각선 칸이 비어도 질러가지 않는다', () => {
     // (1,3) 에서 오른쪽 위 (2,2) 는 바닥이지만 옆 (2,3) 이 벽 — 위로만
-    expect(stepHeld(open, { x: 1, y: 3 }, ['right', 'up'])).toEqual({ pos: { x: 1, y: 2 }, facing: 'up', moved: true });
+    expect(stepHeld(open, { x: 1, y: 3 }, ['right', 'up'])).toEqual({ pos: { x: 1, y: 2 }, facing: 'right', moved: true });
+  });
+});
+
+describe('facingOf', () => {
+  it('키가 없으면 undefined, 하나면 그 방향', () => {
+    expect(facingOf([])).toBeUndefined();
+    expect(facingOf(['up'])).toBe('up');
+  });
+
+  it('가로 키가 있으면 가장 나중의 가로 키가 먼저', () => {
+    expect(facingOf(['left', 'up'])).toBe('left');
+    expect(facingOf(['up', 'left', 'down'])).toBe('left');
+    expect(facingOf(['left', 'right', 'up'])).toBe('right');
+  });
+
+  it('세로 키만 있으면 가장 나중의 세로 키', () => {
+    expect(facingOf(['up', 'down'])).toBe('down');
   });
 });
 
