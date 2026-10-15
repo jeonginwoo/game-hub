@@ -93,7 +93,8 @@ for (const o of LOBBY_OBJECTS) {
 const AVATAR_W = AVATAR_PX.w / TILE_PX; // 칸
 const AVATAR_H = AVATAR_PX.h / TILE_PX; // 칸
 
-const MY_BODY = '#5e81ac'; // 내 몸 색 — 다른 사람은 others.ts colorFor
+// 방에 들어가기 전(welcome 전) 내 몸 색. 들어간 뒤에는 남들 화면과 같게 colorFor(내 id)
+const MY_BODY = '#5e81ac';
 
 function placeholderAvatar(facing: Dir, body: string): HTMLCanvasElement {
   const c = document.createElement('canvas');
@@ -422,7 +423,7 @@ renderer.setAnimationLoop((now) => {
   const x = from.x + (pos.x - from.x) * t;
   const y = from.y + (pos.y - from.y) * t;
   placeAvatar(player, x, y);
-  playerMat.map = MY_TEX[facing];
+  playerMat.map = (others.me === null ? MY_TEX : avatarTextures(colorFor(others.me)))[facing];
 
   others = advance(others, dt, STEP_MS);
   for (const [id, r] of others.players) {
