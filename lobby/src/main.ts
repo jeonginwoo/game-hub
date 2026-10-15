@@ -1,5 +1,5 @@
 // 로비 진입점 — 직교 카메라 위에 ZEP 식 층(배경 한 장·물체·캐릭터)을 그린다 (결정 2026-10-13: 직교 + 2D 스프라이트,
-// 2026-10-14: ZEP 식 층). 에셋 전까지 그림은 임시 색. 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
+// 2026-10-14: ZEP 식 층). 배경은 Ninja Adventure 타일(docs/assets.md), 물체·캐릭터는 아직 임시 색. 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
 import * as THREE from 'three';
 import type { Spot } from '../../server/src/protocol';
 import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './entry';
@@ -8,12 +8,13 @@ import { DOOR_GAMES, GAMES } from './games';
 import { AVATAR_PX, drawZ, TILE_PX } from './layers';
 import { LOBBY_OBJECTS } from './lobby-objects';
 import { LOBBY_ROWS } from './lobby-map';
-import { parseMap, type Pos, type Tile } from './map';
+import { parseMap, type Pos } from './map';
 import { facingOf, reversesWalk, stepHeld, type Dir } from './movement';
 import { connect, statusText, type Connection, type NetStatus } from './net';
 import { checkObjects, objectRect, objectZ } from './objects';
 import { advance, applyMsg, colorFor, NO_OTHERS, remotePos, type Others } from './others';
 import { roomFromSearch, screenFor, withRoom } from './room';
+import { CELL_PX, tileLook, type Cell, type Sheet } from './tiles';
 import { clampAxis } from './view';
 
 const VIEW_TILES_Y = 11; // 화면 세로에 보이는 타일 수
@@ -51,29 +52,62 @@ function placeRect(mesh: THREE.Mesh, left: number, bottom: number, w: number, h:
   mesh.position.set(left + w / 2, -(bottom - h / 2), z);
 }
 
-// 배경 한 장 — 지금은 문자 맵을 칸마다 색칠한 임시 그림. 나중에 맵 크기 × 32px 그림 한 장으로 바꾼다
-const TILE_COLOR: Readonly<Record<Tile, string>> = { wall: '#3b4252', floor: '#8fa36b', door: '#d08770' };
-const FLOOR_ALT = '#86995f'; // 바닥 체크무늬 — 이동량을 눈으로 읽게
+// 배경 한 장 — 문자 맵의 칸마다 Ninja Adventure 시트(tiles.ts 가 고른 16px 칸)를 32px 로 키워 찍은 맵 크기 캔버스.
+// 캐릭터와 픽셀 밀도는 맞추지 않는다. 시트 세 장이 다 오기 전에는 비어 있다
+const TILE_SHEET_DIR = `${import.meta.env.BASE_URL}assets/ninja-adventure/`;
+const TILE_SHEET_FILE: Readonly<Record<Sheet, string>> = {
+  floor: 'TilesetFloor.png',
+  house: 'TilesetHouse.png',
+  nature: 'TilesetNature.png',
+};
 
-function placeholderBackground(): HTMLCanvasElement {
-  const c = document.createElement('canvas');
-  c.width = map.width * TILE_PX;
-  c.height = map.height * TILE_PX;
+/** 게임이 배정된 문인지 — 열린 문과 닫힌 문을 다르게 그린다 */
+function isOpenDoor(p: Pos): boolean {
+  const door = doorIndexAt(map, p);
+  return door !== undefined && gameAtDoor(door, GAMES, DOOR_GAMES) !== undefined;
+}
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.addEventListener('load', () => resolve(img));
+    img.addEventListener('error', () => reject(new Error(`타일 시트를 불러오지 못했다: ${url}`)));
+    img.src = url;
+  });
+}
+
+function paintBackground(c: HTMLCanvasElement, sheets: Readonly<Record<Sheet, HTMLImageElement>>): void {
   const g = c.getContext('2d');
   if (!g) throw new Error('2d 캔버스를 만들 수 없다');
+  g.imageSmoothingEnabled = false;
+  const draw = (cell: Cell, x: number, y: number): void => {
+    g.drawImage(sheets[cell.sheet], cell.col * CELL_PX, cell.row * CELL_PX, CELL_PX, CELL_PX, x * TILE_PX, y * TILE_PX, TILE_PX, TILE_PX);
+  };
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
-      const tile = map.tileAt({ x, y });
-      g.fillStyle = tile === 'floor' && (x + y) % 2 === 1 ? FLOOR_ALT : TILE_COLOR[tile];
-      g.fillRect(x * TILE_PX, y * TILE_PX, TILE_PX, TILE_PX);
+      const look = tileLook(map, { x, y }, isOpenDoor);
+      draw(look.base, x, y);
+      if (look.over) draw(look.over, x, y);
     }
   }
-  return c;
 }
+
+const backgroundCanvas = document.createElement('canvas');
+backgroundCanvas.width = map.width * TILE_PX;
+backgroundCanvas.height = map.height * TILE_PX;
+const backgroundTex = pixelTexture(backgroundCanvas);
+const SHEET_NAMES = Object.keys(TILE_SHEET_FILE) as Sheet[];
+Promise.all(SHEET_NAMES.map((k) => loadImage(TILE_SHEET_DIR + TILE_SHEET_FILE[k])))
+  .then((imgs) => {
+    const sheets = Object.fromEntries(SHEET_NAMES.map((k, i) => [k, imgs[i]])) as Record<Sheet, HTMLImageElement>;
+    paintBackground(backgroundCanvas, sheets);
+    backgroundTex.needsUpdate = true;
+  })
+  .catch((e: unknown) => console.error(e));
 
 const background = new THREE.Mesh(
   new THREE.PlaneGeometry(map.width, map.height),
-  new THREE.MeshBasicMaterial({ map: pixelTexture(placeholderBackground()) }),
+  new THREE.MeshBasicMaterial({ map: backgroundTex }),
 );
 placeRect(background, -0.5, map.height - 0.5, map.width, map.height, drawZ('background'));
 scene.add(background);
