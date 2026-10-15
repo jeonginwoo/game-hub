@@ -11,7 +11,7 @@ import { LOBBY_ROWS } from './lobby-map';
 import { parseMap, type Pos } from './map';
 import { facingOf, reversesWalk, stepHeld, type Dir } from './movement';
 import { connect, statusText, type Connection, type NetStatus } from './net';
-import { checkObjects, objectRect, objectZ, type MapObject } from './objects';
+import { checkObjects, objectRect, objectZ, withSolidObjects, type MapObject } from './objects';
 import { advance, applyMsg, colorFor, NO_OTHERS, remotePos, type Others } from './others';
 import { roomFromSearch, screenFor, withRoom } from './room';
 import { CELL_PX, tileLook, type Cell, type Sheet } from './tiles';
@@ -136,6 +136,7 @@ scene.add(background);
 
 // 물체 — 바닥·정렬·상단 층. 앞화면 층은 그릴 그림이 생기면 배경처럼 맵 크기 한 장으로 얹는다
 checkObjects(map, LOBBY_OBJECTS);
+const walkMap = withSolidObjects(map, LOBBY_OBJECTS); // 걷기 판정 — 맵의 벽 + 물체의 solid 칸
 for (const { o, tex } of objectArt) {
   const r = objectRect(o);
   // alphaTest: 투명 픽셀은 버린다 — 물체 그림의 빈 곳이 뒤를 가리지 않게 (정렬 없이)
@@ -480,7 +481,7 @@ renderer.setAnimationLoop((now) => {
     }
   }
   if (t >= 1 && !leaving) {
-    const r = stepHeld(map, pos, held.length > 0 ? held : tapped ? [tapped] : []);
+    const r = stepHeld(walkMap, pos, held.length > 0 ? held : tapped ? [tapped] : []);
     tapped = null;
     if (r) {
       facing = r.facing;

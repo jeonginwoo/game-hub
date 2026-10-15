@@ -1,7 +1,7 @@
 // 맵 위 물체 — 배경 그림과 따로 그려지는 것(나무·마당·도리이 등)의 자리와 층. 순수 데이터 + 검사.
-// 그림일 뿐 충돌은 없다 — 지나갈 수 없는 칸은 문자 맵의 '#' 가 정한다 (ZEP 의 통과 불가 타일처럼 그림과 별개).
+// 충돌은 두 가지 — 문자 맵의 '#'(맵 자체)와, 물체마다 정한 solid 칸(나무 밑둥 등). 그림 크기와는 별개다.
 import { drawZ, type Layer } from './layers';
-import type { TileMap } from './map';
+import type { Pos, TileMap } from './map';
 import type { Cell } from './tiles';
 
 export type ObjectLayer = Extract<Layer, 'floor' | 'sorted' | 'top'>;
@@ -17,6 +17,8 @@ export interface MapObject {
   readonly h: number;
   /** 그림 — 타일 시트에서 이 칸을 왼쪽 위로 w×h 칸을 잘라 쓴다 */
   readonly sprite: Cell;
+  /** 지나갈 수 없는 칸 — 물체의 왼쪽 아래 칸에서 오른쪽(w)·위쪽(h)으로. 없으면 그림만 있고 지나갈 수 있다 */
+  readonly solid?: { readonly w: number; readonly h: number };
 }
 
 /** 타일 좌표의 가장자리 — 칸 중심이 정수라 칸 x 의 왼쪽 선은 x - 0.5 */
@@ -37,7 +39,26 @@ export function objectZ(o: MapObject): number {
   return drawZ(o.layer, objectRect(o).bottom);
 }
 
-/** 물체 목록 검사 — id 중복, 크기 0 이하, 맵 밖으로 나간 물체를 거부한다 */
+/** 물체가 막는 칸들 */
+export function solidCells(o: MapObject): Pos[] {
+  const cells: Pos[] = [];
+  if (!o.solid) return cells;
+  for (let dy = 0; dy < o.solid.h; dy++) {
+    for (let dx = 0; dx < o.solid.w; dx++) cells.push({ x: o.x + dx, y: o.y - dy });
+  }
+  return cells;
+}
+
+/** 걷기 판정용 맵 — 물체의 solid 칸을 벽으로 본다. 그림(배경 타일)은 원래 맵으로 그린다 */
+export function withSolidObjects(map: TileMap, objects: readonly MapObject[]): TileMap {
+  const blocked = new Set(objects.flatMap(solidCells).map((p) => `${p.x},${p.y}`));
+  return {
+    ...map,
+    tileAt: (p) => (blocked.has(`${p.x},${p.y}`) ? 'wall' : map.tileAt(p)),
+  };
+}
+
+/** 물체 목록 검사 — id 중복, 크기 0 이하, 맵 밖으로 나간 물체, 물체를 벗어나거나 문·시작점을 막는 solid 를 거부한다 */
 export function checkObjects(map: TileMap, objects: readonly MapObject[]): void {
   const seen = new Set<string>();
   for (const o of objects) {
@@ -47,6 +68,13 @@ export function checkObjects(map: TileMap, objects: readonly MapObject[]): void 
     const r = objectRect(o);
     if (r.left < -0.5 || r.top < -0.5 || r.right > map.width - 0.5 || r.bottom > map.height - 0.5) {
       throw new Error(`물체 '${o.id}' 가 맵 밖으로 나간다 — (${o.x}, ${o.y}) ${o.w}×${o.h}`);
+    }
+    if (o.solid && (o.solid.w <= 0 || o.solid.h <= 0 || o.solid.w > o.w || o.solid.h > o.h)) {
+      throw new Error(`물체 '${o.id}' 의 solid ${o.solid.w}×${o.solid.h} — 물체 ${o.w}×${o.h} 안이어야 한다`);
+    }
+    for (const p of solidCells(o)) {
+      const isStart = p.x === map.start.x && p.y === map.start.y;
+      if (map.tileAt(p) === 'door' || isStart) throw new Error(`물체 '${o.id}' 가 (${p.x}, ${p.y}) 의 문·시작점을 막는다`);
     }
   }
 }

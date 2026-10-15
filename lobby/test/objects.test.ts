@@ -3,7 +3,7 @@ import { drawZ } from '../src/layers';
 import { LOBBY_OBJECTS } from '../src/lobby-objects';
 import { LOBBY_ROWS } from '../src/lobby-map';
 import { parseMap } from '../src/map';
-import { checkObjects, objectRect, objectZ, type MapObject } from '../src/objects';
+import { checkObjects, objectRect, objectZ, solidCells, withSolidObjects, type MapObject } from '../src/objects';
 
 const tree: MapObject = { id: 'tree', layer: 'sorted', x: 4, y: 5, w: 2, h: 3, sprite: { sheet: 'nature', col: 0, row: 0 } };
 
@@ -43,6 +43,32 @@ describe('checkObjects', () => {
   it('크기가 0 이하면 거부한다', () => {
     expect(() => checkObjects(map, [{ ...tree, x: 1, y: 1, w: 0, h: 1 }])).toThrow(/크기/);
   });
+
+  it('solid 가 물체를 벗어나거나 시작점·문을 막으면 거부한다', () => {
+    const small = { ...tree, x: 2, y: 1, w: 1, h: 1 };
+    expect(() => checkObjects(map, [{ ...small, solid: { w: 2, h: 1 } }])).toThrow(/solid/);
+    expect(() => checkObjects(map, [{ ...small, x: 1, solid: { w: 1, h: 1 } }])).toThrow(/시작점/);
+    expect(() => checkObjects(map, [{ ...small, solid: { w: 1, h: 1 } }])).not.toThrow();
+  });
+});
+
+describe('solidCells · withSolidObjects', () => {
+  const map = parseMap(['#####', '#S..#', '#...#', '#####']);
+  const post: MapObject = { ...tree, x: 2, y: 2, w: 2, h: 2, solid: { w: 2, h: 1 } };
+
+  it('solid 는 왼쪽 아래 칸에서 오른쪽·위로', () => {
+    expect(solidCells(post)).toEqual([{ x: 2, y: 2 }, { x: 3, y: 2 }]);
+    expect(solidCells({ ...post, solid: undefined })).toEqual([]);
+  });
+
+  it('solid 칸만 벽이 되고, 그림만 있는 칸과 원래 맵은 그대로', () => {
+    const walk = withSolidObjects(map, [post]);
+    expect(walk.tileAt({ x: 2, y: 2 })).toBe('wall');
+    expect(walk.tileAt({ x: 3, y: 2 })).toBe('wall');
+    expect(walk.tileAt({ x: 2, y: 1 })).toBe('floor'); // 물체 윗줄 — 그림 뒤로 지나간다
+    expect(walk.tileAt({ x: 0, y: 0 })).toBe('wall');
+    expect(map.tileAt({ x: 2, y: 2 })).toBe('floor');
+  });
 });
 
 describe('실제 로비 물체', () => {
@@ -50,10 +76,10 @@ describe('실제 로비 물체', () => {
     expect(() => checkObjects(parseMap(LOBBY_ROWS), LOBBY_OBJECTS)).not.toThrow();
   });
 
-  it('정렬 층 물체는 지나갈 수 없는 칸에 서 있다 — 캐릭터가 물체 안으로 걸어 들어가지 않게', () => {
-    const map = parseMap(LOBBY_ROWS);
+  it('정렬 층 물체는 밑둥 줄이 막혀 있다 — 캐릭터가 물체 안으로 걸어 들어가지 않게', () => {
+    const walk = withSolidObjects(parseMap(LOBBY_ROWS), LOBBY_OBJECTS);
     for (const o of LOBBY_OBJECTS.filter((x) => x.layer === 'sorted')) {
-      for (let dx = 0; dx < o.w; dx++) expect(map.tileAt({ x: o.x + dx, y: o.y })).toBe('wall');
+      for (let dx = 0; dx < o.w; dx++) expect(walk.tileAt({ x: o.x + dx, y: o.y })).toBe('wall');
     }
   });
 });
