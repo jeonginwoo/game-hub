@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LOOK, type Look, type Spot } from '../../../server/src/protocol';
+import { DEFAULT_ROOM } from '../../../server/src/room-templates';
 import { noticeText, peopleCount, rosterRows } from '../../src/hud/hud';
 import { bodyColor } from '../../src/avatar/look';
 import { applyMsg, NO_OTHERS, type Others } from '../../src/net/others';
@@ -13,6 +14,7 @@ function room(): Others {
     t: 'welcome',
     id: 'b',
     owner: 'a',
+    room: DEFAULT_ROOM,
     players: [
       { id: 'a', name: '영희', ...at, look: look(1) },
       { id: 'b', name: '철수', ...at, look: look(2) },

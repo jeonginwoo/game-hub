@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LOOK, type Player, type Spot } from '../../../server/src/protocol';
+import { DEFAULT_ROOM } from '../../../server/src/room-templates';
 import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from '../../src/net/others';
 
 const spot = (x: number, y: number, dir: Spot['dir'] = 'down'): Spot => ({ x, y, dir });
 const player = (id: string, x: number, y: number): Player => ({ id, name: id.toUpperCase(), ...spot(x, y), look: DEFAULT_LOOK });
 
 function withB(): Others {
-  return applyMsg(NO_OTHERS, { t: 'welcome', id: 'a', owner: 'a', players: [player('a', 1, 1), player('b', 5, 5)] });
+  return applyMsg(NO_OTHERS, { t: 'welcome', id: 'a', owner: 'a', players: [player('a', 1, 1), player('b', 5, 5)], room: DEFAULT_ROOM });
 }
 
 describe('applyMsg', () => {

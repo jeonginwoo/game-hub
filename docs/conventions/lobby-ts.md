@@ -60,6 +60,8 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   (`object-art.ts`, `games.ts`) — one place per kind of data. Room data (map rows, object
   placement, door → game id) is not lobby data: it lives in `server/src/room-templates.ts` and
   is checked by `buildRoom`; the lobby adds only art (`OBJECT_ART` by kind) and game URLs (`GAMES`).
+  The lobby draws `DEFAULT_ROOM` from the start (behind the first screen, and alone when the
+  server is unreachable); the room in `welcome` is checked against it (`checkRoom` in `main.ts`).
 
 ## 2. Tests
 
@@ -74,6 +76,8 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
 ## 3. Types
 
 - `tsconfig` is `strict` + `noUncheckedIndexedAccess` + `verbatimModuleSyntax` — keep them.
+  `allowImportingTsExtensions` is on only because the shared `server/src/` modules import each
+  other with `.ts` (Node runs them directly); lobby `src/` imports stay extensionless.
   Index results are `T | undefined`; handle it (`?? 'wall'`, early return), never `!`.
 - No `any`, no `as` to silence the checker. `@ts-ignore` / `@ts-expect-error` are forbidden.
 - String-literal unions instead of `enum` (`type Dir = 'up' | 'down' | 'left' | 'right'`).

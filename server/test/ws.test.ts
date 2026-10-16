@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import type { ServerMsg } from '../src/protocol.ts';
+import { DEFAULT_ROOM } from '../src/room-templates.ts';
 import { Rooms } from '../src/roster.ts';
 import { attachLobby } from '../src/ws.ts';
 
@@ -55,7 +56,7 @@ describe('attachLobby', () => {
     const port = await start();
     const a = await connect(port);
     a.ws.send(JSON.stringify({ t: 'hello', name: 'A', at: { x: 1, y: 1, dir: 'down' } }));
-    expect(await a.next()).toMatchObject({ t: 'welcome', players: [{ name: 'A' }] });
+    expect(await a.next()).toMatchObject({ t: 'welcome', players: [{ name: 'A' }], room: DEFAULT_ROOM });
 
     const b = await connect(port);
     // hello 전의 move 는 버려진다

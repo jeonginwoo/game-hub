@@ -3,7 +3,7 @@
 // 칸은 타일(그림 32px)의 1/2 — 걷기·충돌만 잘게, 그림 크기는 그대로 (결정 2026-10-16: 칸 2배 밀도).
 import * as THREE from 'three';
 import type { Look, Spot } from '../../server/src/protocol';
-import { buildRoom } from '../../server/src/room-map';
+import { buildRoom, type RoomData } from '../../server/src/room-map';
 import { DEFAULT_ROOM } from '../../server/src/room-templates';
 import { avatarCanvas } from './avatar/avatar-art';
 import { bubbleText, chatLine, say, type Bubble } from './chat/chat';
@@ -16,7 +16,7 @@ import { loadLook, showHud, type Hud } from './hud/hud-bar';
 import { AVATAR_PX, CELL_PX, drawZ } from './world/layers';
 import { OBJECT_ART } from './data/object-art';
 import { lookKey } from './avatar/look';
-import { TILE_CELLS, type Pos } from './world/map';
+import { sameRoomData, TILE_CELLS, type Pos } from './world/map';
 import { facingOf, reversesWalk, stepHeld, type Dir } from './world/movement';
 import { connect, type Connection, type NetStatus } from './net/net';
 import { objectRect, objectZ, withSolidObjects, type MapObject } from './world/objects';
@@ -33,8 +33,10 @@ const STEP_MS = 80; // 한 칸 걷는 시간 (대각선은 거리만큼 √2 배
 const canvas = document.querySelector<HTMLCanvasElement>('#app');
 if (!canvas) throw new Error('#app 캔버스가 없다');
 
-// 방 데이터 — 맵·물체 검사(buildRoom)는 서버와 같은 공용 모듈. 지금은 모두 기본 방 (결정 2026-10-16: 방이 상태를 갖는다)
-const room = buildRoom(DEFAULT_ROOM);
+// 방 데이터 — 맵·물체 검사(buildRoom)는 서버와 같은 공용 모듈. 서버 없이·welcome 전에도 그릴 수 있게 기본 방으로 시작한다.
+// 서버가 welcome 으로 보낸 방은 checkRoom 이 검사만 한다 — 지금은 서버도 모든 방이 기본 방 (결정 2026-10-16: 방이 상태를 갖는다)
+const roomData: RoomData = DEFAULT_ROOM;
+const room = buildRoom(roomData);
 const map = room.map;
 const objects: readonly MapObject[] = room.objects.map((o) => ({ ...o, ...OBJECT_ART[o.kind] }));
 
@@ -367,6 +369,20 @@ function syncViews(): void {
   }
 }
 
+/**
+ * 서버가 보낸 방을 지금 그린 방과 견준다. 받은 방으로 월드를 다시 만드는 일은 방마다 맵이 달라지는 6c(맵 선택) 몫이라
+ * 지금은 다르거나 검사를 통과하지 못하면 콘솔에 남기기만 한다
+ */
+function checkRoom(data: RoomData): void {
+  try {
+    buildRoom(data);
+  } catch (err) {
+    console.error('서버가 보낸 방 데이터가 검사를 통과하지 못했다 — 기본 방 그대로', err);
+    return;
+  }
+  if (!sameRoomData(data, roomData)) console.warn('서버가 보낸 방이 지금 그린 방과 다르다 — 다시 그리기는 아직 없다');
+}
+
 function startNet(e: Entered): void {
   conn?.close();
   others = NO_OTHERS;
@@ -390,6 +406,7 @@ function startNet(e: Entered): void {
         }
         return;
       }
+      if (msg.t === 'welcome') checkRoom(msg.room);
       others = applyMsg(others, msg);
       syncViews();
       refreshStatus();

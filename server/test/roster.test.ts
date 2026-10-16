@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LOOK, type ServerMsg, type Spot } from '../src/protocol.ts';
+import type { RoomData } from '../src/room-map.ts';
+import { DEFAULT_ROOM } from '../src/room-templates.ts';
 import { CHAT_BURST, CHAT_WINDOW_MS, Rooms, Roster } from '../src/roster.ts';
 
 function peer(): { got: ServerMsg[]; send: (m: ServerMsg) => void } {
@@ -10,6 +12,17 @@ function peer(): { got: ServerMsg[]; send: (m: ServerMsg) => void } {
 const spot = (x: number, y: number): Spot => ({ x, y, dir: 'down' });
 
 describe('Roster', () => {
+  it('방 데이터를 welcome 에 싣는다 — 처음엔 기본 방, 만들 때 준 방이면 그 방', () => {
+    const a = peer();
+    new Roster().join(a, { t: 'hello', name: 'A', at: spot(1, 1), look: DEFAULT_LOOK });
+    expect(a.got[0]).toMatchObject({ t: 'welcome', room: DEFAULT_ROOM });
+
+    const small: RoomData = { rows: ['#S.D#'], objects: [], doors: [] };
+    const b = peer();
+    new Roster(Date.now, small).join(b, { t: 'hello', name: 'B', at: spot(1, 0), look: DEFAULT_LOOK });
+    expect(b.got[0]).toMatchObject({ t: 'welcome', room: small });
+  });
+
   it('새 접속자는 본인 포함 명단을 받고, 나머지는 join 을 받는다', () => {
     const roster = new Roster();
     const a = peer();
@@ -25,6 +38,7 @@ describe('Roster', () => {
           { id: ida, name: 'A', ...spot(1, 1), look: DEFAULT_LOOK },
           { id: idb, name: 'B', ...spot(2, 2), look: DEFAULT_LOOK },
         ],
+        room: DEFAULT_ROOM,
       },
     ]);
     expect(a.got.at(-1)).toEqual({ t: 'join', player: { id: idb, name: 'B', ...spot(2, 2), look: DEFAULT_LOOK } });

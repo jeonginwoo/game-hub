@@ -212,6 +212,54 @@ export interface Room {
 // 게임 id 형식 — docs/game-entry-contract.md 「게임 등록」
 const GAME_ID_RE = /^[a-z0-9-]+$/;
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function isInt(v: unknown): v is number {
+  return typeof v === 'number' && Number.isInteger(v);
+}
+
+function isObjectKind(v: unknown): v is ObjectKind {
+  return typeof v === 'string' && Object.hasOwn(OBJECT_SHAPES, v);
+}
+
+function parseRoomObject(v: unknown): RoomObject | null {
+  if (!isRecord(v) || typeof v.id !== 'string' || !isObjectKind(v.kind) || !isInt(v.x) || !isInt(v.y)) return null;
+  return { id: v.id, kind: v.kind, x: v.x, y: v.y };
+}
+
+function parseDoorGame(v: unknown): DoorGame | null {
+  if (!isRecord(v) || !isInt(v.x) || !isInt(v.y) || typeof v.game !== 'string') return null;
+  return { x: v.x, y: v.y, game: v.game };
+}
+
+/**
+ * 받은 JSON 이 방 데이터 모양인지만 본다 — 하나라도 틀리면 null, 모르는 필드는 버린다.
+ * 맵·물체·문 배정이 맞는지(겹침·문 칸 등)는 buildRoom 몫
+ */
+export function parseRoomData(v: unknown): RoomData | null {
+  if (!isRecord(v) || !Array.isArray(v.rows) || !Array.isArray(v.objects) || !Array.isArray(v.doors)) return null;
+  const rows: string[] = [];
+  for (const r of v.rows) {
+    if (typeof r !== 'string') return null;
+    rows.push(r);
+  }
+  const objects: RoomObject[] = [];
+  for (const o of v.objects) {
+    const object = parseRoomObject(o);
+    if (!object) return null;
+    objects.push(object);
+  }
+  const doors: DoorGame[] = [];
+  for (const d of v.doors) {
+    const door = parseDoorGame(d);
+    if (!door) return null;
+    doors.push(door);
+  }
+  return { rows, objects, doors };
+}
+
 /** 방 데이터를 해석하고 검사한다 — 맵·물체·문 배정 중 하나라도 틀리면 throw */
 export function buildRoom(data: RoomData): Room {
   const map = parseMap(data.rows);

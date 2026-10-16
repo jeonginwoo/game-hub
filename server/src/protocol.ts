@@ -1,5 +1,7 @@
 // 로비 ↔ 멀티 서버 메시지 (JSON over WebSocket, 경로 /ws) — 순수 모듈, node·DOM 을 import 하지 않는다 (로비 src/ 도 쓴다).
 // 위치는 클라이언트 권위(결정 2026-10-09): 서버는 형식만 검사하고 명단 관리·중계만 한다. 좌표는 칸 단위(로비 타일의 1/2).
+// 방 데이터(맵·물체·문 배정)는 서버가 들고 welcome 에 실어 보낸다 (결정 2026-10-16: 방이 상태를 갖는다).
+import { parseRoomData, type RoomData } from './room-map.ts';
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
 
@@ -39,7 +41,8 @@ export type ClientMsg =
   | { readonly t: 'look'; readonly look: Look }; // 외형 바꾸기 — rename 처럼 보낸 사람은 돌려받지 않는다
 
 export type ServerMsg =
-  | { readonly t: 'welcome'; readonly id: string; readonly owner: string; readonly players: readonly Player[] } // players 에 본인 포함, owner 는 방장 id
+  // players 에 본인 포함, owner 는 방장 id, room 은 이 방의 데이터 — 로비는 buildRoom 으로 다시 검사한다
+  | { readonly t: 'welcome'; readonly id: string; readonly owner: string; readonly players: readonly Player[]; readonly room: RoomData }
   | { readonly t: 'join'; readonly player: Player }
   | { readonly t: 'move'; readonly id: string; readonly at: Spot }
   | { readonly t: 'leave'; readonly id: string }
@@ -49,7 +52,7 @@ export type ServerMsg =
   | { readonly t: 'owner'; readonly id: string }; // 방장이 바뀜 — 방장이 나가 승계될 때 (결정 2026-10-16: 서버가 정한 방장)
 
 export const NAME_MAX = 16; // 글자
-export const COORD_MAX = 1000; // 칸 — 맵 크기를 서버가 모르므로 넉넉한 상한만 둔다
+export const COORD_MAX = 1000; // 칸 — 서버는 위치를 맵과 대조하지 않으므로 넉넉한 상한만 둔다
 export const DEFAULT_NAME = '손님';
 export const CHAT_MAX = 200; // 글자
 
@@ -176,13 +179,15 @@ export function parseServerMsg(raw: string): ServerMsg | null {
   switch (v.t) {
     case 'welcome': {
       if (typeof v.id !== 'string' || typeof v.owner !== 'string' || !Array.isArray(v.players)) return null;
+      const room = parseRoomData(v.room);
+      if (!room) return null;
       const players: Player[] = [];
       for (const p of v.players) {
         const player = parsePlayer(p);
         if (!player) return null;
         players.push(player);
       }
-      return { t: 'welcome', id: v.id, owner: v.owner, players };
+      return { t: 'welcome', id: v.id, owner: v.owner, players, room };
     }
     case 'join': {
       const player = parsePlayer(v.player);

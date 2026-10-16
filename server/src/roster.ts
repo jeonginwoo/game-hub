@@ -1,7 +1,10 @@
 // 로비 명단 — 방 하나의 접속자 목록과 중계, 그리고 방 코드별 묶음. 전송(ws)과 분리한 순수 모듈이라 소켓 없이 단위 테스트한다.
 // 위치는 클라이언트 권위(결정 2026-10-09): 받은 위치를 그대로 기록하고 다른 사람에게 전한다.
 // 방장은 서버가 정한다(결정 2026-10-16): 처음 들어온 사람, 나가면 남은 사람 중 가장 먼저 들어온 사람.
+// 방 데이터는 메모리에만 — 방이 생길 때 받아 welcome 에 싣고, 마지막 사람이 나가면 방과 함께 사라진다 (결정 2026-10-16: 방이 상태를 갖는다).
 import type { ClientMsg, Look, Player, ServerMsg } from './protocol.ts';
+import type { RoomData } from './room-map.ts';
+import { DEFAULT_ROOM } from './room-templates.ts';
 
 export interface Peer {
   send(msg: ServerMsg): void;
@@ -24,9 +27,12 @@ export class Roster {
   private ownerId: string | null = null;
 
   private readonly now: Clock;
+  /** 이 방의 맵·물체·문 배정 — 서버는 들고 보낼 뿐, 위치를 이것과 대조하지 않는다 */
+  readonly room: RoomData;
 
-  constructor(now: Clock = Date.now) {
+  constructor(now: Clock = Date.now, room: RoomData = DEFAULT_ROOM) {
     this.now = now;
+    this.room = room;
   }
 
   get size(): number {
@@ -40,7 +46,7 @@ export class Roster {
 
   /**
    * hello 를 보낸 접속자를 명단에 넣고 id 를 돌려준다.
-   * 본인에게 welcome(본인 포함 명단), 나머지에게 join.
+   * 본인에게 welcome(본인 포함 명단 + 방 데이터), 나머지에게 join.
    */
   join(peer: Peer, hello: Extract<ClientMsg, { t: 'hello' }>): string {
     const id = `p${this.nextId++}`;
@@ -48,7 +54,7 @@ export class Roster {
     this.broadcast({ t: 'join', player: info });
     this.players.set(id, { info, peer, chats: [] });
     this.ownerId ??= id;
-    peer.send({ t: 'welcome', id, owner: this.ownerId, players: [...this.players.values()].map((p) => p.info) });
+    peer.send({ t: 'welcome', id, owner: this.ownerId, players: [...this.players.values()].map((p) => p.info), room: this.room });
     return id;
   }
 

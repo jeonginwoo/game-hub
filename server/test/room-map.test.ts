@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRoom, checkObjects, objectRect, parseMap, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
+import { buildRoom, checkObjects, objectRect, parseMap, parseRoomData, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
 import { DEFAULT_ROOM } from '../src/room-templates.ts';
 
 const tree: PlacedShape = { id: 'tree', x: 4, y: 5, w: 2, h: 3 };
@@ -146,6 +146,36 @@ describe('buildRoom', () => {
     const twice = [{ x: 3, y: 0, game: 'a' }, { x: 4, y: 0, game: 'b' }];
     expect(() => buildRoom({ ...data, doors: twice })).toThrow(/두 번/);
     expect(() => buildRoom({ ...data, doors: [{ x: 4, y: 0, game: 'https://x' }] })).toThrow(/게임 id/);
+  });
+});
+
+describe('parseRoomData', () => {
+  const data = {
+    rows: ['#S.D#'],
+    objects: [{ id: 't', kind: 'tree', x: 1, y: 0 }],
+    doors: [{ x: 3, y: 0, game: 'g' }],
+  };
+
+  it('모양이 맞으면 알려진 필드만 담아 돌려준다', () => {
+    const extra = { ...data, owner: 'x', objects: [{ ...data.objects[0], w: 99 }], doors: [{ ...data.doors[0], url: 'https://x' }] };
+    expect(parseRoomData(extra)).toEqual(data);
+    expect(parseRoomData(JSON.parse(JSON.stringify(DEFAULT_ROOM)))).toEqual(DEFAULT_ROOM);
+  });
+
+  it('하나라도 모양이 틀리면 null', () => {
+    expect(parseRoomData(null)).toBeNull();
+    expect(parseRoomData([])).toBeNull();
+    expect(parseRoomData({ ...data, rows: 'abc' })).toBeNull();
+    expect(parseRoomData({ ...data, rows: ['#S#', 3] })).toBeNull();
+    expect(parseRoomData({ ...data, objects: undefined })).toBeNull();
+    expect(parseRoomData({ ...data, objects: [{ id: 't', kind: 'castle', x: 1, y: 0 }] })).toBeNull();
+    expect(parseRoomData({ ...data, objects: [{ id: 't', kind: 'toString', x: 1, y: 0 }] })).toBeNull();
+    expect(parseRoomData({ ...data, objects: [{ id: 't', kind: 'tree', x: 1.5, y: 0 }] })).toBeNull();
+    expect(parseRoomData({ ...data, doors: [{ x: 3, y: 0 }] })).toBeNull();
+  });
+
+  it('맵·배치가 맞는지는 보지 않는다 — buildRoom 몫', () => {
+    expect(parseRoomData({ rows: ['#'], objects: [], doors: [{ x: 0, y: 0, game: 'g' }] })).not.toBeNull();
   });
 });
 

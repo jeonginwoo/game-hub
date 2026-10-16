@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LOOK } from '../../../server/src/protocol';
+import { DEFAULT_ROOM } from '../../../server/src/room-templates';
 import { BUBBLE_MS, bubbleText, chatFromInput, chatLine, say } from '../../src/chat/chat';
 import { applyMsg, NO_OTHERS } from '../../src/net/others';
 
@@ -7,6 +8,7 @@ const others = applyMsg(NO_OTHERS, {
   t: 'welcome',
   id: 'a',
   owner: 'a',
+  room: DEFAULT_ROOM,
   players: [
     { id: 'a', name: '나', x: 1, y: 1, dir: 'down', look: DEFAULT_LOOK },
     { id: 'b', name: '영희', x: 2, y: 2, dir: 'down', look: DEFAULT_LOOK },

@@ -28,12 +28,16 @@
 
 - Connect URL is `/ws?room=<code>`. The code format (`isRoomCode`) lives in `protocol.ts`;
   a missing or malformed code is refused at the upgrade with 400. A room exists while
-  someone is in it (`Rooms` in `roster.ts`) — no create call, no persistence.
+  someone is in it (`Rooms` in `roster.ts`) — no create call, no persistence. Each room's
+  `Roster` holds its room data (`RoomData`, from `room-templates.ts`) in memory and sends it in
+  `welcome`; it goes away with the room.
 - JSON over WebSocket, one object per message, discriminated by `t`.
-- Positions are client-authoritative, in **tile units** (`x` right, `y` down — same as
-  `lobby-ts.md` §5). The server checks shape and bounds only; it never knows the map.
+- Positions are client-authoritative, in **cell units** (`x` right, `y` down — same as
+  `lobby-ts.md` §5). The server checks shape and bounds only; it holds the room data but never
+  checks positions against the map.
 - The lobby side mirrors this: every message it receives goes through `parseServerMsg`
-  (names re-cleaned, since they are shown on screen).
+  (names re-cleaned, since they are shown on screen; room data shape-checked by `parseRoomData`,
+  then the lobby runs `buildRoom` on it).
 - Every incoming message goes through `parseClientMsg`; a malformed one is dropped silently
   (no error reply). It returns new objects holding only known fields.
 - The first message must be `hello`; anything before it is dropped. Changing a message is a
@@ -43,7 +47,8 @@
 
 - Node ≥ 22.18 runs `.ts` directly (type stripping) — no build step, no `tsx`.
   So: `erasableSyntaxOnly` (no `enum`, no parameter properties, no `namespace`), and
-  relative imports carry the `.ts` extension (`./roster.ts`).
+  relative imports carry the `.ts` extension (`./roster.ts`) — the lobby's `tsconfig` allows
+  them (`allowImportingTsExtensions`) because it compiles the shared modules too.
 - Mutable state lives inside a class (`Roster`) behind methods; message objects are
   `readonly` and replaced, never mutated (`me.info = { ...me.info, ...at }`).
 
