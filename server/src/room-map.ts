@@ -2,6 +2,7 @@
 // 모두가 같은 맵으로 충돌을 판정해야 하므로 로비·서버가 같은 검사를 쓴다 (결정 2026-10-16: 방이 상태를 갖는다).
 // 그림(시트 칸·층)은 로비 몫 — 방 데이터에는 물체 종류·자리와 게임 id 만 둔다 (결정 2026-10-16: 문 = 붙은 D 묶음 + 배정은 칸).
 // 좌표는 칸 단위(16px), x 는 오른쪽, y 는 아래쪽(줄 번호)으로 증가한다.
+import { OBJECT_SHAPES, type ObjectKind, type ObjectShape } from './object-shapes.ts';
 
 export type Tile = 'wall' | 'floor' | 'door';
 
@@ -98,25 +99,8 @@ export function parseMap(rows: readonly string[]): TileMap {
 
 // --- 물체 -----------------------------------------------------------------------
 
-export type ObjectKind = 'yard' | 'tree' | 'torii';
-
-/** 물체 종류의 모양 — 크기와 막는 칸. 충돌 판정에 쓰이므로 로비·서버가 같은 표를 본다 */
-export interface ObjectShape {
-  /** 칸 단위 크기 */
-  readonly w: number;
-  readonly h: number;
-  /**
-   * 지나갈 수 없는 칸들 — 물체의 왼쪽 아래 칸 기준 (x 는 오른쪽, y 는 위쪽으로 0 부터). 예: 4칸 폭 나무의 밑둥 [{1,0},{2,0}],
-   * 6칸 폭 도리이의 두 기둥 [{1,0},{4,0}]. 그림의 실제 모양에 칸 단위로 맞춘다. 없으면 그림만 있고 지나갈 수 있다
-   */
-  readonly solid?: readonly Pos[];
-}
-
-export const OBJECT_SHAPES: Readonly<Record<ObjectKind, ObjectShape>> = {
-  yard: { w: 6, h: 6 }, // 흙 마당 — 위를 밟고 지나간다
-  tree: { w: 4, h: 4, solid: [{ x: 1, y: 0 }, { x: 2, y: 0 }] }, // 2타일 폭 나무 — 밑둥 두 칸
-  torii: { w: 6, h: 4, solid: [{ x: 1, y: 0 }, { x: 4, y: 0 }] }, // 도리이 — 두 기둥, 기둥 사이로 지나간다
-};
+// 종류별 크기·막는 칸 표는 object-shapes.ts — 종류가 많아 따로 둔다
+export { OBJECT_SHAPES, type ObjectKind, type ObjectShape };
 
 /** 방 데이터 속 물체 하나 — 종류와 왼쪽 아래 칸만 */
 export interface RoomObject {

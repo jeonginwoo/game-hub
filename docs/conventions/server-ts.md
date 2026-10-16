@@ -11,14 +11,16 @@
 
 - **Pure modules** hold the rules: `protocol.ts` (message types + `parseClientMsg`, imports
   neither `node:*` nor the DOM, so the lobby can reuse it), `room-map.ts` (room data: map parsing,
-  object shapes, `buildRoom` checks — same constraint, shared with the lobby), `room-templates.ts`
-  (room data rooms start from — pure data, shared) and `roster.ts` (who is in, relay).
+  object checks, `buildRoom` — same constraint, shared with the lobby), `object-shapes.ts` (size and
+  blocked cells per object kind — pure data, shared, re-exported by `room-map.ts`), `room-templates.ts`
+  (room data rooms start from — pure data, shared; the `gallery` template is generated from the
+  shape table so every kind shows up once) and `roster.ts` (who is in, relay).
   They are tested without sockets.
 - **Wiring** is `ws.ts` (`attachLobby` — upgrades on `WS_PATH` only, heartbeat) and `main.ts`
   (deploy entry: serves `lobby/dist` + `/ws` on one port, `PORT` env).
 - Dev and deploy share `attachLobby`: dev attaches it to the Vite server through
-  `lobby/vite.config.ts`. Besides that, lobby `src/` may import `protocol.ts`, `room-map.ts` and
-  `room-templates.ts` — so they must stay free of `node:*`, `ws` and the DOM.
+  `lobby/vite.config.ts`. Besides that, lobby `src/` may import `protocol.ts`, `room-map.ts`,
+  `object-shapes.ts` and `room-templates.ts` — so they must stay free of `node:*`, `ws` and the DOM.
 - Every socket and stream gets an `'error'` listener (`ws.on('error', …)`, `pipeline(…, cb)`):
   an unhandled `'error'` kills the process — in dev, Vite with it.
 - `attachLobby` leaves other upgrade paths alone (Vite HMR needs them); whoever owns the

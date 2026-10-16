@@ -2,7 +2,8 @@
 // 「로비 만들기」에서 하나를 고르고, 방을 만드는 hello{map} 이 그 id 를 싣는다 (결정 2026-10-16: 맵 템플릿 + 맵 선택).
 // 한 글자 = 칸 하나(16px). 그림(32px)은 2×2 칸에 걸쳐 그려지므로 벽·문은 2칸 단위로 그리면 그림과 맞는다.
 // 물체 자리는 칸 — 타일 (tx, ty) 의 왼쪽 아래 칸은 (2·tx, 2·ty + 1).
-import type { RoomData } from './room-map.ts';
+import { OBJECT_SHAPES, type ObjectKind } from './object-shapes.ts';
+import type { RoomData, RoomObject } from './room-map.ts';
 
 /** 광장 — 처음부터 있던 기본 방 */
 export const DEFAULT_ROOM: RoomData = {
@@ -150,6 +151,43 @@ const COURT_ROOM: RoomData = {
   doors: [{ x: 26, y: 2, game: 'whiteboard-3d' }],
 };
 
+// 물체 전시 — 모든 물체 종류를 표 순서대로 한 번씩 늘어놓은 방. 그림 자르기·막는 칸을 눈으로 확인하는 곳 (결정 2026-10-16: 물체 종류 늘리기).
+// 종류가 늘면 저절로 따라오도록 표에서 만든다 — 선반처럼 왼쪽부터 채우고, 줄이 차면 그 줄의 가장 큰 높이 아래로 내려간다
+const GALLERY_W = 84; // 칸 — 벽 두 칸씩 포함
+const GALLERY_GAP = 2; // 칸 — 물체 사이, 지나다닐 길
+
+function galleryRoom(): RoomData {
+  const objects: RoomObject[] = [];
+  let x = 2 + GALLERY_GAP;
+  let top = 6; // 지금 선반의 윗줄 — 문(2·3줄) 아래에 문 앞 자리를 비운다
+  let shelfH = 0;
+  for (const kind of Object.keys(OBJECT_SHAPES).filter(isObjectKind)) {
+    const { w, h } = OBJECT_SHAPES[kind];
+    if (x + w > GALLERY_W - 2 - GALLERY_GAP) {
+      x = 2 + GALLERY_GAP;
+      top += shelfH + GALLERY_GAP + 1;
+      shelfH = 0;
+    }
+    objects.push({ id: kind, kind, x, y: top + h - 1 });
+    x += w + GALLERY_GAP;
+    shelfH = Math.max(shelfH, h);
+  }
+  const height = top + shelfH + GALLERY_GAP + 5; // 마지막 선반 아래 길 + 시작점 줄 + 아래 벽
+
+  const wall = '#'.repeat(GALLERY_W);
+  const floor = `##${'.'.repeat(GALLERY_W - 4)}##`;
+  const doorRow = `######DD${'#'.repeat(GALLERY_W - 8)}`;
+  const startRow = `##${'.'.repeat(GALLERY_W / 2 - 3)}SS${'.'.repeat(GALLERY_W / 2 - 3)}##`;
+  const rows = [wall, wall, doorRow, doorRow];
+  while (rows.length < height - 4) rows.push(floor);
+  rows.push(startRow, floor, wall, wall);
+  return { rows, objects, doors: [{ x: 6, y: 2, game: 'whiteboard-3d' }] };
+}
+
+function isObjectKind(k: string): k is ObjectKind {
+  return Object.hasOwn(OBJECT_SHAPES, k);
+}
+
 export interface RoomTemplate {
   /** hello{map}·welcome{map} 에 오가는 값 — MAP_ID_RE 형식 */
   readonly id: string;
@@ -165,6 +203,7 @@ export const ROOM_TEMPLATES: readonly RoomTemplate[] = [
   DEFAULT_TEMPLATE,
   { id: 'forest', name: '숲길', room: FOREST_ROOM },
   { id: 'court', name: '작은 마당', room: COURT_ROOM },
+  { id: 'gallery', name: '물체 전시', room: galleryRoom() },
 ];
 
 /** id 의 템플릿 — 없거나 모르는 id 면 기본(광장). 방을 만드는 hello 가 무엇을 실어 와도 방은 생긴다 */

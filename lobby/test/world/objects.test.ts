@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRoom } from '../../../server/src/room-map';
+import { buildRoom, OBJECT_SHAPES, type ObjectKind } from '../../../server/src/room-map';
 import { DEFAULT_ROOM } from '../../../server/src/room-templates';
 import { OBJECT_ART } from '../../src/data/object-art';
 import { drawZ } from '../../src/world/layers';
@@ -50,5 +50,24 @@ describe('실제 로비 물체', () => {
     if (!torii) return;
     const row = [0, 1, 2, 3, 4, 5].map((dx) => walk.tileAt({ x: torii.x + dx, y: torii.y }));
     expect(row).toEqual(['floor', 'wall', 'floor', 'floor', 'wall', 'floor']);
+  });
+});
+
+describe('물체 그림 표', () => {
+  // 시트 크기(시트 칸, 16px) — lobby/public/assets/ninja-adventure/ 의 PNG 크기 / 16
+  const SHEET_CELLS = { floor: { w: 22, h: 26 }, house: { w: 33, h: 23 }, nature: { w: 24, h: 21 } } as const;
+
+  it('모든 종류가 시트 안에서 잘린다 — 크기는 짝수 칸(시트 한 칸 = 2×2 칸)', () => {
+    for (const kind of Object.keys(OBJECT_ART).filter((k): k is ObjectKind => Object.hasOwn(OBJECT_SHAPES, k))) {
+      const { w, h } = OBJECT_SHAPES[kind];
+      const { sheet, col, row } = OBJECT_ART[kind].sprite;
+      expect(w % 2 === 0 && h % 2 === 0, kind).toBe(true);
+      expect(col + w / 2 <= SHEET_CELLS[sheet].w && row + h / 2 <= SHEET_CELLS[sheet].h, kind).toBe(true);
+    }
+  });
+
+  it('같은 시트 칸을 두 종류가 쓰지 않는다', () => {
+    const cells = Object.values(OBJECT_ART).map((a) => `${a.sprite.sheet}:${a.sprite.col},${a.sprite.row}`);
+    expect(new Set(cells).size).toBe(cells.length);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignDoor, buildRoom, checkObjects, objectRect, parseMap, parseRoomData, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
+import { assignDoor, buildRoom, checkObjects, OBJECT_SHAPES, objectRect, parseMap, parseRoomData, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
 import { DEFAULT_ROOM, DEFAULT_TEMPLATE, ROOM_TEMPLATES, templateFor } from '../src/room-templates.ts';
 
 const tree: PlacedShape = { id: 'tree', x: 4, y: 5, w: 2, h: 3 };
@@ -217,6 +217,11 @@ describe('방 템플릿', () => {
       expect(() => buildRoom(t.room), t.id).not.toThrow();
       expect(t.room.doors.length, t.id).toBeGreaterThan(0);
     }
+  });
+
+  it('물체 전시에는 모든 물체 종류가 한 번씩 있다', () => {
+    const kinds = templateFor('gallery').room.objects.map((o) => o.kind);
+    expect(kinds).toEqual(Object.keys(OBJECT_SHAPES));
   });
 
   it('id 가 겹치지 않고 첫 번째가 기본 방', () => {

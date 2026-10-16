@@ -10,7 +10,7 @@
 > The lobby touches `server/` in two places only: `vite.config.ts` (dev `/ws` plugin, types
 > checked through `tsconfig.node.json`) and `src/` importing the shared pure modules of
 > `server/src/` — `protocol.ts` (messages, room code), `room-map.ts` (room data: map parsing,
-> object shapes, `buildRoom` checks) and `room-templates.ts` (room data the lobby starts from) —
+> object checks, `buildRoom`; re-exports the per-kind shape table of `object-shapes.ts`) and `room-templates.ts` (room data the lobby starts from) —
 > shared so both ends parse and check the same way. Nothing else in `server/`.
 
 ## Layout of `src/`
