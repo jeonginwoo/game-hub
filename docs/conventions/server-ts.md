@@ -10,13 +10,15 @@
 ## 1. Shape
 
 - **Pure modules** hold the rules: `protocol.ts` (message types + `parseClientMsg`, imports
-  neither `node:*` nor the DOM, so the lobby can reuse it) and `roster.ts` (who is in, relay).
+  neither `node:*` nor the DOM, so the lobby can reuse it), `room-map.ts` (room data: map parsing,
+  object shapes, `buildRoom` checks — same constraint, shared with the lobby), `room-templates.ts`
+  (room data rooms start from — pure data, shared) and `roster.ts` (who is in, relay).
   They are tested without sockets.
 - **Wiring** is `ws.ts` (`attachLobby` — upgrades on `WS_PATH` only, heartbeat) and `main.ts`
   (deploy entry: serves `lobby/dist` + `/ws` on one port, `PORT` env).
 - Dev and deploy share `attachLobby`: dev attaches it to the Vite server through
-  `lobby/vite.config.ts`. Besides that, lobby `src/` may import `protocol.ts` — so it must
-  stay free of `node:*`, `ws` and the DOM.
+  `lobby/vite.config.ts`. Besides that, lobby `src/` may import `protocol.ts`, `room-map.ts` and
+  `room-templates.ts` — so they must stay free of `node:*`, `ws` and the DOM.
 - Every socket and stream gets an `'error'` listener (`ws.on('error', …)`, `pipeline(…, cb)`):
   an unhandled `'error'` kills the process — in dev, Vite with it.
 - `attachLobby` leaves other upgrade paths alone (Vite HMR needs them); whoever owns the

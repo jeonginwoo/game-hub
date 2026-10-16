@@ -3,22 +3,23 @@
 // 칸은 타일(그림 32px)의 1/2 — 걷기·충돌만 잘게, 그림 크기는 그대로 (결정 2026-10-16: 칸 2배 밀도).
 import * as THREE from 'three';
 import type { Look, Spot } from '../../server/src/protocol';
+import { buildRoom } from '../../server/src/room-map';
+import { DEFAULT_ROOM } from '../../server/src/room-templates';
 import { avatarCanvas } from './avatar/avatar-art';
 import { bubbleText, chatLine, say, type Bubble } from './chat/chat';
 import { showChatBox, type ChatBox } from './chat/chat-box';
 import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './launch/entry';
 import { loadName, showEntryScreen, type Entered } from './room/entry-screen';
-import { DOOR_GAMES, GAMES } from './data/games';
+import { GAMES } from './data/games';
 import { noticeText, peopleCount, rosterRows } from './hud/hud';
 import { loadLook, showHud, type Hud } from './hud/hud-bar';
 import { AVATAR_PX, CELL_PX, drawZ } from './world/layers';
-import { LOBBY_OBJECTS } from './data/lobby-objects';
-import { LOBBY_ROWS } from './data/lobby-map';
+import { OBJECT_ART } from './data/object-art';
 import { lookKey } from './avatar/look';
-import { parseMap, TILE_CELLS, type Pos } from './world/map';
+import { TILE_CELLS, type Pos } from './world/map';
 import { facingOf, reversesWalk, stepHeld, type Dir } from './world/movement';
 import { connect, type Connection, type NetStatus } from './net/net';
-import { checkObjects, objectRect, objectZ, withSolidObjects, type MapObject } from './world/objects';
+import { objectRect, objectZ, withSolidObjects, type MapObject } from './world/objects';
 import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from './net/others';
 import { homeUrl, roomFromSearch, screenFor, withRoom } from './room/room';
 import { SHEET_PX, tileLook, type Cell, type Sheet } from './world/tiles';
@@ -32,7 +33,10 @@ const STEP_MS = 80; // 한 칸 걷는 시간 (대각선은 거리만큼 √2 배
 const canvas = document.querySelector<HTMLCanvasElement>('#app');
 if (!canvas) throw new Error('#app 캔버스가 없다');
 
-const map = parseMap(LOBBY_ROWS);
+// 방 데이터 — 맵·물체 검사(buildRoom)는 서버와 같은 공용 모듈. 지금은 모두 기본 방 (결정 2026-10-16: 방이 상태를 갖는다)
+const room = buildRoom(DEFAULT_ROOM);
+const map = room.map;
+const objects: readonly MapObject[] = room.objects.map((o) => ({ ...o, ...OBJECT_ART[o.kind] }));
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -72,7 +76,7 @@ const TILE_SHEET_FILE: Readonly<Record<Sheet, string>> = {
 
 /** 그 번호의 문에 게임이 배정돼 있는지 — 열린 문과 닫힌 문을 다르게 그린다 */
 function isOpenDoor(door: number): boolean {
-  return gameAtDoor(door, GAMES, DOOR_GAMES) !== undefined;
+  return gameAtDoor(door, GAMES, room.doorGames) !== undefined;
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -121,7 +125,7 @@ function blankTexture(wCells: number, hCells: number): { readonly canvas: HTMLCa
 }
 
 const backgroundArt = blankTexture(map.width, map.height);
-const objectArt = LOBBY_OBJECTS.map((o) => ({ o, ...blankTexture(o.w, o.h) }));
+const objectArt = objects.map((o) => ({ o, ...blankTexture(o.w, o.h) }));
 
 const SHEET_NAMES = Object.keys(TILE_SHEET_FILE) as Sheet[];
 Promise.all(SHEET_NAMES.map((k) => loadImage(TILE_SHEET_DIR + TILE_SHEET_FILE[k])))
@@ -144,8 +148,7 @@ placeRect(background, -0.5, map.height - 0.5, map.width, map.height, drawZ('back
 scene.add(background);
 
 // 물체 — 바닥·정렬·상단 층. 앞화면 층은 그릴 그림이 생기면 배경처럼 맵 크기 한 장으로 얹는다
-checkObjects(map, LOBBY_OBJECTS);
-const walkMap = withSolidObjects(map, LOBBY_OBJECTS); // 걷기 판정 — 맵의 벽 + 물체의 solid 칸
+const walkMap = withSolidObjects(map, objects); // 걷기 판정 — 맵의 벽 + 물체의 solid 칸
 for (const { o, tex } of objectArt) {
   const r = objectRect(o);
   // alphaTest: 투명 픽셀은 버린다 — 물체 그림의 빈 곳이 뒤를 가리지 않게 (정렬 없이)
@@ -263,7 +266,7 @@ let leaving = false; // 게임으로 이동 중 — 페이지가 바뀔 때까�
 function enterIfDoor(p: Pos): void {
   const door = doorIndexAt(map, p);
   if (door === undefined) return;
-  const game = gameAtDoor(door, GAMES, DOOR_GAMES);
+  const game = gameAtDoor(door, GAMES, room.doorGames);
   if (!game) return;
   const back = returnUrl(location.href, door); // URL 을 다 만든 뒤에 leaving — 여기서 던지면 입력이 굳지 않게
   const target = entryUrl(game.url, back, location.href, entered ?? undefined);

@@ -8,8 +8,10 @@
 > **Not for games.** A game under `games/<name>/` or in its own repo follows its own
 > conventions (CLAUDE.md invariant 2). The server has its own file, `server-ts.md`.
 > The lobby touches `server/` in two places only: `vite.config.ts` (dev `/ws` plugin, types
-> checked through `tsconfig.node.json`) and `src/` importing `server/src/protocol.ts` — the
-> pure message/room-code module, shared so both ends parse the same way. Nothing else in `server/`.
+> checked through `tsconfig.node.json`) and `src/` importing the shared pure modules of
+> `server/src/` — `protocol.ts` (messages, room code), `room-map.ts` (room data: map parsing,
+> object shapes, `buildRoom` checks) and `room-templates.ts` (room data the lobby starts from) —
+> shared so both ends parse and check the same way. Nothing else in `server/`.
 
 ## Layout of `src/`
 
@@ -20,7 +22,7 @@ Files are grouped by feature, not by layer: a feature's pure module and its wiri
 |--------|-------|------|
 | (root) | `main.ts` | wiring: scene, input, loop |
 | `world/` | `map.ts` `tiles.ts` `layers.ts` `objects.ts` `movement.ts` `view.ts` | map, draw order, movement, camera — all pure |
-| `data/` | `lobby-map.ts` `lobby-objects.ts` `games.ts` | what the lobby is configured with |
+| `data/` | `object-art.ts` `games.ts` | what the lobby is configured with (art per object kind, game table) |
 | `launch/` | `entry.ts` | game entry contract (`docs/game-entry-contract.md`) |
 | `avatar/` | `look.ts` · `avatar-art.ts` | character look → drawing |
 | `net/` | `net.ts` · `others.ts` | transport → what it means for the scene |
@@ -54,14 +56,16 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
 - Keyboard handlers skip events whose target is a text field (`isTyping` in `main.ts`), and an
   Enter handler on a text field ignores `isComposing` and `keyCode === 229` (Korean IME confirms
   a syllable with Enter; Safari reports only the keyCode).
-- Data the lobby is configured with (map rows, game table) is its own module
-  (`lobby-map.ts`, `games.ts`) — one place per kind of data.
+- Data the lobby is configured with (object art, game table) is its own module
+  (`object-art.ts`, `games.ts`) — one place per kind of data. Room data (map rows, object
+  placement, door → game id) is not lobby data: it lives in `server/src/room-templates.ts` and
+  is checked by `buildRoom`; the lobby adds only art (`OBJECT_ART` by kind) and game URLs (`GAMES`).
 
 ## 2. Tests
 
 - Vitest, one file per pure module, in the same folder as the source:
-  `lobby/test/<folder>/<module>.test.ts` (`src/world/map.ts` → `test/world/map.test.ts`). Data modules
-  (`games.ts`, `lobby-map.ts`) are checked in the test of the logic that consumes them.
+  `lobby/test/<folder>/<module>.test.ts` (`src/world/movement.ts` → `test/world/movement.test.ts`). Data modules
+  (`games.ts`, `object-art.ts`) are checked in the test of the logic that consumes them.
 - `describe` takes the function name, or a short topic when a group covers several
   functions or real data (`'실제 등록 표'`); `it` states the behaviour in Korean
   (`'맵 가장자리에서 멈춘다'`). A comment above a case explains a non-obvious expected value.
@@ -80,8 +84,8 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
 
 ## 4. Naming & constants
 
-- Files: lowercase kebab-case (`lobby-map.ts`). Functions/variables camelCase,
-  types/interfaces PascalCase, module constants `UPPER_SNAKE` (`STEP_MS`, `DOOR_GAMES`).
+- Files: lowercase kebab-case (`object-art.ts`). Functions/variables camelCase,
+  types/interfaces PascalCase, module constants `UPPER_SNAKE` (`STEP_MS`, `OBJECT_ART`).
 - Numeric constants carry their unit in the name or a trailing comment
   (`STEP_MS = 160; // 한 칸 걷는 시간`).
 - Lobby-reserved URL parameters start with `hub_` (game entry contract).
