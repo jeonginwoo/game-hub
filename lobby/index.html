@@ -40,7 +40,11 @@
         padding: 6px 8px 6px 12px; border-radius: 10px; background: rgb(46 52 64 / 0.85); font-size: 14px;
       }
       .hub-badge-room { font-weight: 600; letter-spacing: 0.05em; }
-      .hub-badge-name { color: #a3adc2; }
+      .hub-badge-name {
+        padding: 2px 6px; border: 0; border-radius: 6px; background: none; color: #a3adc2; font: inherit; cursor: text;
+      }
+      .hub-badge-name:hover { background: rgb(76 86 106 / 0.6); color: inherit; }
+      .hub-badge-input { width: 10em; flex: none; padding: 2px 6px; border-radius: 6px; }
       .hub-badge-status { color: #a3be8c; font-size: 13px; }
       /* 캐릭터 머리 위 — 말풍선(있을 때만) + 이름표. main.ts 가 매 프레임 자리를 옮긴다 */
       .hub-head {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isRoomCode } from '../../server/src/protocol';
-import { inviteUrl, nameFromInput, newRoomCode, roomFromInput, roomFromSearch, screenFor, withRoom } from '../src/room';
+import { inviteUrl, nameFromInput, newRoomCode, renameFromInput, roomFromInput, roomFromSearch, screenFor, withRoom } from '../src/room';
 
 describe('screenFor', () => {
   it('방 코드가 없으면 시작 화면', () => {
@@ -86,5 +86,16 @@ describe('nameFromInput', () => {
 
   it('비면 null', () => {
     expect(nameFromInput('   ')).toBeNull();
+  });
+});
+
+describe('renameFromInput', () => {
+  it('서버 규칙대로 다듬은 새 이름', () => {
+    expect(renameFromInput(' 영희 ', '철수')).toBe('영희');
+  });
+
+  it('비었거나 지금 이름과 같으면 null — 바꿀 것이 없다', () => {
+    expect(renameFromInput('  ', '철수')).toBeNull();
+    expect(renameFromInput(' 철수 ', '철수')).toBeNull();
   });
 });

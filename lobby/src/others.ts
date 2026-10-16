@@ -64,6 +64,13 @@ export function applyMsg(state: Others, msg: ServerMsg): Others {
       players.delete(msg.id);
       return { ...state, players };
     }
+    case 'rename': {
+      const r = state.players.get(msg.id);
+      if (!r) return state;
+      const players = new Map(state.players);
+      players.set(msg.id, { ...r, name: msg.name });
+      return { ...state, players };
+    }
     case 'chat':
       return state; // 채팅은 chat.ts
   }

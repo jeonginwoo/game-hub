@@ -17,14 +17,16 @@ export interface Player extends Spot {
 export type ClientMsg =
   | { readonly t: 'hello'; readonly name: string; readonly at: Spot } // 접속 후 첫 메시지 — 그 전에는 명단에 없다
   | { readonly t: 'move'; readonly at: Spot }
-  | { readonly t: 'chat'; readonly text: string }; // 같은 방 모두에게 — 보낸 사람에게도 돌아온다
+  | { readonly t: 'chat'; readonly text: string } // 같은 방 모두에게 — 보낸 사람에게도 돌아온다
+  | { readonly t: 'rename'; readonly name: string }; // 로비 안 닉네임 변경 — 보낸 사람은 이미 바꿨으므로 돌려받지 않는다
 
 export type ServerMsg =
   | { readonly t: 'welcome'; readonly id: string; readonly players: readonly Player[] } // players 에 본인 포함
   | { readonly t: 'join'; readonly player: Player }
   | { readonly t: 'move'; readonly id: string; readonly at: Spot }
   | { readonly t: 'leave'; readonly id: string }
-  | { readonly t: 'chat'; readonly id: string; readonly text: string };
+  | { readonly t: 'chat'; readonly id: string; readonly text: string }
+  | { readonly t: 'rename'; readonly id: string; readonly name: string };
 
 export const NAME_MAX = 16; // 글자
 export const COORD_MAX = 1000; // 타일 — 맵 크기를 서버가 모르므로 넉넉한 상한만 둔다
@@ -106,6 +108,11 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       const text = typeof v.text === 'string' ? cleanChat(v.text) : '';
       return text ? { t: 'chat', text } : null;
     }
+    case 'rename': {
+      // hello 와 달리 빈 이름을 DEFAULT_NAME 으로 바꾸지 않는다 — 지우려다 「손님」이 되는 것은 바꾸기가 아니다
+      const name = typeof v.name === 'string' ? normalizeName(v.name) : '';
+      return name ? { t: 'rename', name } : null;
+    }
     default:
       return null;
   }
@@ -152,6 +159,8 @@ export function parseServerMsg(raw: string): ServerMsg | null {
       const text = typeof v.text === 'string' ? cleanChat(v.text) : '';
       return typeof v.id === 'string' && text ? { t: 'chat', id: v.id, text } : null;
     }
+    case 'rename':
+      return typeof v.id === 'string' && typeof v.name === 'string' ? { t: 'rename', id: v.id, name: cleanName(v.name) } : null;
     default:
       return null;
   }

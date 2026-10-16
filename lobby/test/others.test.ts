@@ -56,8 +56,16 @@ describe('applyMsg', () => {
     expect(b.at.x).toBe(7);
   });
 
-  it('모르는 id 의 move·leave, 나 자신의 join 은 무시', () => {
+  it('rename 은 이름만 바꾸고 자리·걷기는 그대로', () => {
+    let s = applyMsg(withB(), { t: 'move', id: 'b', at: spot(6, 5, 'right') });
+    const walking = s.players.get('b') ?? fail();
+    s = applyMsg(s, { t: 'rename', id: 'b', name: '비' });
+    expect(s.players.get('b')).toEqual({ ...walking, name: '비' });
+  });
+
+  it('모르는 id 의 move·leave·rename, 나 자신의 join 은 무시', () => {
     const s = withB();
+    expect(applyMsg(s, { t: 'rename', id: 'zz', name: 'Z' })).toBe(s);
     expect(applyMsg(s, { t: 'move', id: 'zz', at: spot(1, 1) })).toBe(s);
     expect(applyMsg(s, { t: 'leave', id: 'zz' })).toBe(s);
     expect(applyMsg(s, { t: 'join', player: player('a', 1, 1) })).toBe(s);

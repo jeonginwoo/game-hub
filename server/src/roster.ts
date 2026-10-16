@@ -46,7 +46,7 @@ export class Roster {
     this.broadcast({ t: 'leave', id });
   }
 
-  /** 명단에 든 뒤의 메시지. hello 를 또 보내면 무시한다(이름 바꾸기는 v0 에 없음) */
+  /** 명단에 든 뒤의 메시지. hello 를 또 보내면 무시한다 — 이름 바꾸기는 rename */
   handle(id: string, msg: ClientMsg): void {
     const me = this.players.get(id);
     if (!me) return;
@@ -64,6 +64,11 @@ export class Roster {
         this.broadcast({ t: 'chat', id, text: msg.text });
         return;
       }
+      case 'rename':
+        if (msg.name === me.info.name) return;
+        me.info = { ...me.info, name: msg.name };
+        this.broadcast({ t: 'rename', id, name: msg.name }, id);
+        return;
       case 'hello':
         return;
     }

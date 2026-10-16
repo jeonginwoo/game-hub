@@ -219,6 +219,7 @@ const tagPoint = new THREE.Vector3();
 interface Head {
   readonly root: HTMLDivElement;
   readonly bubble: HTMLDivElement;
+  readonly tag: HTMLDivElement;
 }
 
 function makeHead(name: string): Head {
@@ -233,7 +234,12 @@ function makeHead(name: string): Head {
   tag.textContent = name;
   root.append(bubble, tag);
   document.body.append(root);
-  return { root, bubble };
+  return { root, bubble, tag };
+}
+
+/** 이름표 글을 바꾼다 — 같은 글이면 DOM 을 건드리지 않는다 (syncViews 가 메시지마다 부른다) */
+function setTag(head: Head, name: string): void {
+  if (head.tag.textContent !== name) head.tag.textContent = name;
 }
 
 /** 말풍선 글을 바꾼다 — null 이면 내린다. 같은 글이면 DOM 을 건드리지 않는다 */
@@ -346,7 +352,7 @@ function refreshStatus(): void {
   setStatus(statusText(netStatus, others.players.size + 1));
 }
 
-/** others 명단에 맞춰 메시·이름표를 만들고 지운다 */
+/** others 명단에 맞춰 메시·이름표를 만들고 지우고, 바뀐 이름을 이름표에 옮긴다 */
 function syncViews(): void {
   for (const [id, v] of views) {
     if (others.players.has(id)) continue;
@@ -356,7 +362,11 @@ function syncViews(): void {
     views.delete(id);
   }
   for (const [id, r] of others.players) {
-    if (views.has(id)) continue;
+    const view = views.get(id);
+    if (view) {
+      setTag(view.head, r.name);
+      continue;
+    }
     const tex = avatarTextures(colorFor(id));
     const mat = new THREE.MeshBasicMaterial({ map: tex[r.at.dir], alphaTest: 0.5 });
     const mesh = new THREE.Mesh(avatarGeo, mat);
@@ -375,12 +385,13 @@ function startNet(e: Entered): void {
     () => {
       const at = here();
       lastSent = spotKey(at);
-      return { t: 'hello', name: e.name, at };
+      // 이름은 지금 것 — 끊긴 사이 바꾼 이름도 다시 붙을 때 실린다
+      return { t: 'hello', name: entered?.name ?? e.name, at };
     },
     (msg) => {
       if (msg.t === 'chat') {
         // 채팅은 명단을 바꾸지 않는다 — 채팅창 한 줄과 말풍선만
-        const line = chatLine(msg, others, e.name);
+        const line = chatLine(msg, others, entered?.name ?? e.name);
         if (line) {
           chatBox?.add(line);
           bubbles = say(bubbles, msg.id, msg.text, performance.now());
@@ -423,10 +434,18 @@ function enterLobby(e: Entered): void {
   entered = e;
   // 주소창에 방 코드를 남겨 둔다 — 새로고침·게임 복귀 URL(returnUrl 이 location.href 를 쓴다)이 같은 방으로 오게
   history.replaceState(history.state, '', withRoom(location.href, e.room));
-  setStatus = showRoomBadge(e, location.href);
+  setStatus = showRoomBadge(e, location.href, rename);
   myHead = makeHead(e.name);
   chatBox = showChatBox((text) => conn?.send({ t: 'chat', text }));
   startNet(e);
+}
+
+/** 배지에서 이름을 바꿨다 — 이 뒤의 채팅 줄·게임 입장(hub_name)·다시 붙을 때의 hello 가 새 이름을 쓴다 */
+function rename(name: string): void {
+  if (!entered) return;
+  entered = { ...entered, name };
+  if (myHead) setTag(myHead, name);
+  conn?.send({ t: 'rename', name }); // 끊겨 있으면 보내지 않는다 — 다시 붙을 때 hello 가 싣는다
 }
 
 const urlRoom = roomFromSearch(location.search);

@@ -62,3 +62,9 @@ export function inviteUrl(lobbyHref: string, code: string): string {
 export function nameFromInput(raw: string): string | null {
   return normalizeName(raw) || null;
 }
+
+/** 로비 안 이름 바꾸기 칸의 입력 — 비었거나 지금 이름과 같으면 null (바꿀 것이 없다) */
+export function renameFromInput(raw: string, current: string): string | null {
+  const name = nameFromInput(raw);
+  return name === current ? null : name;
+}

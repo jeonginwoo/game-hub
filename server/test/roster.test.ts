@@ -84,6 +84,33 @@ describe('Roster', () => {
     expect(chats()).toBe(CHAT_BURST + 1);
   });
 
+  it('이름 바꾸기는 보낸 사람을 뺀 모두에게 중계되고 명단에도 남는다', () => {
+    const roster = new Roster();
+    const a = peer();
+    const b = peer();
+    const ida = roster.join(a, { t: 'hello', name: 'A', at: spot(1, 1) });
+    roster.join(b, { t: 'hello', name: 'B', at: spot(2, 2) });
+    const before = a.got.length;
+    roster.handle(ida, { t: 'rename', name: '에이' });
+    expect(a.got.length).toBe(before);
+    expect(b.got.at(-1)).toEqual({ t: 'rename', id: ida, name: '에이' });
+    // 나중에 들어온 사람은 바뀐 이름을 본다
+    const c = peer();
+    roster.join(c, { t: 'hello', name: 'C', at: spot(0, 0) });
+    expect(c.got[0]).toMatchObject({ players: [{ id: ida, name: '에이' }, {}, {}] });
+  });
+
+  it('지금 이름과 같은 이름으로는 아무것도 보내지 않는다', () => {
+    const roster = new Roster();
+    const a = peer();
+    const b = peer();
+    const ida = roster.join(a, { t: 'hello', name: 'A', at: spot(1, 1) });
+    roster.join(b, { t: 'hello', name: 'B', at: spot(2, 2) });
+    const count = b.got.length;
+    roster.handle(ida, { t: 'rename', name: 'A' });
+    expect(b.got.length).toBe(count);
+  });
+
   it('명단에 든 뒤의 hello 는 무시한다', () => {
     const roster = new Roster();
     const a = peer();
