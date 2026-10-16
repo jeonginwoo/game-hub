@@ -25,7 +25,7 @@ function standing(p: Player): Remote {
   return { id: p.id, name: p.name, look: p.look, at: { x: p.x, y: p.y, dir: p.dir }, fromX: p.x, fromY: p.y, t: 1, len: 1 };
 }
 
-/** 지금 그릴 자리(타일 단위, 걷는 중이면 칸 사이) */
+/** 지금 그릴 자리(칸 단위, 걷는 중이면 칸 사이) */
 export function remotePos(r: Remote): { readonly x: number; readonly y: number } {
   return { x: r.fromX + (r.at.x - r.fromX) * r.t, y: r.fromY + (r.at.y - r.fromY) * r.t };
 }

@@ -1,5 +1,6 @@
 // 로비 진입점 — 직교 카메라 위에 ZEP 식 층(배경 한 장·물체·캐릭터)을 그린다 (결정 2026-10-13: 직교 + 2D 스프라이트,
-// 2026-10-14: ZEP 식 층). 배경·물체는 Ninja Adventure 타일(docs/assets.md), 캐릭터는 아직 임시 그림. 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
+// 2026-10-14: ZEP 식 층). 배경·물체는 Ninja Adventure 타일(docs/assets.md), 캐릭터는 아직 임시 그림. 월드 좌표: x = 칸 x, y = -칸 y (화면 위쪽이 맵 윗줄).
+// 칸은 타일(그림 32px)의 1/2 — 걷기·충돌만 잘게, 그림 크기는 그대로 (결정 2026-10-16: 칸 2배 밀도).
 import * as THREE from 'three';
 import type { Look, Spot } from '../../server/src/protocol';
 import { avatarCanvas } from './avatar/avatar-art';
@@ -10,7 +11,7 @@ import { loadName, showEntryScreen, type Entered } from './room/entry-screen';
 import { DOOR_GAMES, GAMES } from './data/games';
 import { noticeText, peopleCount, rosterRows } from './hud/hud';
 import { loadLook, showHud, type Hud } from './hud/hud-bar';
-import { AVATAR_PX, drawZ, TILE_PX } from './world/layers';
+import { AVATAR_PX, CELL_PX, drawZ, TILE_PX } from './world/layers';
 import { LOBBY_OBJECTS } from './data/lobby-objects';
 import { LOBBY_ROWS } from './data/lobby-map';
 import { lookKey } from './avatar/look';
@@ -20,13 +21,13 @@ import { connect, type Connection, type NetStatus } from './net/net';
 import { checkObjects, objectRect, objectZ, withSolidObjects, type MapObject } from './world/objects';
 import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from './net/others';
 import { homeUrl, roomFromSearch, screenFor, withRoom } from './room/room';
-import { CELL_PX, tileLook, type Cell, type Sheet } from './world/tiles';
+import { SHEET_PX, tileLook, type Cell, type Sheet } from './world/tiles';
 import { clampAxis } from './world/view';
 
-// 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 칸 = TILE_PX × VIEW_ZOOM). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
-// 1.5 면 한 칸 48px — 16px 타일(Ninja Adventure)은 원본 1px 이 화면 3px 로 고르다. 32px 기준 그림(임시 캐릭터)은 1.5배라 고르지 않다
+// 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 타일 = TILE_PX × VIEW_ZOOM). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
+// 1.5 면 한 타일 48px — 16px 타일(Ninja Adventure)은 원본 1px 이 화면 3px 로 고르다. 32px 기준 그림(임시 캐릭터)은 1.5배라 고르지 않다
 const VIEW_ZOOM = 1.5;
-const STEP_MS = 160; // 한 칸 걷는 시간 (대각선은 거리만큼 √2 배)
+const STEP_MS = 80; // 한 칸 걷는 시간 (대각선은 거리만큼 √2 배) — 칸이 타일의 1/2 라 걷는 속도는 타일 하나에 160ms 그대로
 
 const canvas = document.querySelector<HTMLCanvasElement>('#app');
 if (!canvas) throw new Error('#app 캔버스가 없다');
@@ -55,12 +56,12 @@ function pixelTexture(c: HTMLCanvasElement): THREE.CanvasTexture {
   return tex;
 }
 
-/** 크기 w×h(칸)인 사각형을 타일 좌표 가장자리(left, bottom)에 맞춰 놓는다 */
+/** 크기 w×h(칸)인 사각형을 칸 좌표 가장자리(left, bottom)에 맞춰 놓는다 */
 function placeRect(mesh: THREE.Mesh, left: number, bottom: number, w: number, h: number, z: number): void {
   mesh.position.set(left + w / 2, -(bottom - h / 2), z);
 }
 
-// 배경 한 장 — 문자 맵의 칸마다 Ninja Adventure 시트(tiles.ts 가 고른 16px 칸)를 32px 로 키워 찍은 맵 크기 캔버스.
+// 배경 한 장 — 문자 맵의 타일마다 Ninja Adventure 시트(tiles.ts 가 고른 16px 칸)를 32px 로 키워 찍은 맵 크기 캔버스.
 // 물체도 같은 시트에서 잘라 쓴다. 캐릭터와 픽셀 밀도는 맞추지 않는다. 시트 세 장이 다 오기 전에는 비어 있다
 const TILE_SHEET_DIR = `${import.meta.env.BASE_URL}assets/ninja-adventure/`;
 const TILE_SHEET_FILE: Readonly<Record<Sheet, string>> = {
@@ -69,7 +70,7 @@ const TILE_SHEET_FILE: Readonly<Record<Sheet, string>> = {
   nature: 'TilesetNature.png',
 };
 
-/** 게임이 배정된 문인지 — 열린 문과 닫힌 문을 다르게 그린다 */
+/** 게임이 배정된 문인지(문의 왼쪽 위 칸) — 열린 문과 닫힌 문을 다르게 그린다 */
 function isOpenDoor(p: Pos): boolean {
   const door = doorIndexAt(map, p);
   return door !== undefined && gameAtDoor(door, GAMES, DOOR_GAMES) !== undefined;
@@ -89,10 +90,10 @@ function paintBackground(c: HTMLCanvasElement, sheets: Readonly<Record<Sheet, HT
   if (!g) throw new Error('2d 캔버스를 만들 수 없다');
   g.imageSmoothingEnabled = false;
   const draw = (cell: Cell, x: number, y: number): void => {
-    g.drawImage(sheets[cell.sheet], cell.col * CELL_PX, cell.row * CELL_PX, CELL_PX, CELL_PX, x * TILE_PX, y * TILE_PX, TILE_PX, TILE_PX);
+    g.drawImage(sheets[cell.sheet], cell.col * SHEET_PX, cell.row * SHEET_PX, SHEET_PX, SHEET_PX, x * TILE_PX, y * TILE_PX, TILE_PX, TILE_PX);
   };
-  for (let y = 0; y < map.height; y++) {
-    for (let x = 0; x < map.width; x++) {
+  for (let y = 0; y < map.height / map.tileCells; y++) {
+    for (let x = 0; x < map.width / map.tileCells; x++) {
       const look = tileLook(map, { x, y }, isOpenDoor);
       draw(look.base, x, y);
       if (look.over) draw(look.over, x, y);
@@ -100,20 +101,21 @@ function paintBackground(c: HTMLCanvasElement, sheets: Readonly<Record<Sheet, HT
   }
 }
 
-/** 물체 그림 — 시트에서 sprite 칸부터 w×h 칸을 잘라 32px 칸으로 키워 찍는다 */
+/** 물체 그림 — 시트에서 sprite 칸부터 w×h 칸 넓이(시트 한 칸 = 타일 하나)를 잘라 타일 32px 로 키워 찍는다 */
 function paintObject(c: HTMLCanvasElement, o: MapObject, sheets: Readonly<Record<Sheet, HTMLImageElement>>): void {
   const g = c.getContext('2d');
   if (!g) throw new Error('2d 캔버스를 만들 수 없다');
   g.imageSmoothingEnabled = false;
   const s = o.sprite;
-  g.drawImage(sheets[s.sheet], s.col * CELL_PX, s.row * CELL_PX, o.w * CELL_PX, o.h * CELL_PX, 0, 0, c.width, c.height);
+  const cellSrc = SHEET_PX / map.tileCells; // 칸 하나가 시트에서 차지하는 px
+  g.drawImage(sheets[s.sheet], s.col * SHEET_PX, s.row * SHEET_PX, o.w * cellSrc, o.h * cellSrc, 0, 0, c.width, c.height);
 }
 
 /** 맵 크기·물체 크기의 빈 캔버스 텍스처 — 시트가 오면 칠하고 needsUpdate */
-function blankTexture(wTiles: number, hTiles: number): { readonly canvas: HTMLCanvasElement; readonly tex: THREE.CanvasTexture } {
+function blankTexture(wCells: number, hCells: number): { readonly canvas: HTMLCanvasElement; readonly tex: THREE.CanvasTexture } {
   const canvas = document.createElement('canvas');
-  canvas.width = wTiles * TILE_PX;
-  canvas.height = hTiles * TILE_PX;
+  canvas.width = wCells * CELL_PX;
+  canvas.height = hCells * CELL_PX;
   return { canvas, tex: pixelTexture(canvas) };
 }
 
@@ -152,10 +154,10 @@ for (const { o, tex } of objectArt) {
 }
 
 // --- 캐릭터 -------------------------------------------------------------------
-// 48×64 프레임(1.5×2칸), 발이 칸 아래 가운데. 그림은 avatar-art.ts 의 임시 코드 그림 — 외형마다 방향 4장
+// 48×64 프레임(3×4칸), 발이 칸 아래 가운데. 그림은 avatar-art.ts 의 임시 코드 그림 — 외형마다 방향 4장
 
-const AVATAR_W = AVATAR_PX.w / TILE_PX; // 칸
-const AVATAR_H = AVATAR_PX.h / TILE_PX; // 칸
+const AVATAR_W = AVATAR_PX.w / CELL_PX; // 칸
+const AVATAR_H = AVATAR_PX.h / CELL_PX; // 칸
 
 // 내 외형 — 저장값, 처음이면 무작위 (결정 2026-10-16: 캐릭터 꾸미기). 꾸미기 창에서 바뀐다
 let myLook: Look = loadLook();
@@ -183,7 +185,7 @@ const playerMat = new THREE.MeshBasicMaterial({ map: avatarTextures(myLook).down
 const player = new THREE.Mesh(avatarGeo, playerMat);
 scene.add(player);
 
-/** 타일 좌표 (x, y) 에 선 캐릭터를 놓는다 — 발 선으로 정렬 층 깊이를 정한다 */
+/** 칸 좌표 (x, y) 에 선 캐릭터를 놓는다 — 발 선으로 정렬 층 깊이를 정한다 */
 function placeAvatar(mesh: THREE.Mesh, x: number, y: number): void {
   const foot = y + 0.5; // 칸 y 에 선 캐릭터의 발 선
   placeRect(mesh, x - AVATAR_W / 2, foot, AVATAR_W, AVATAR_H, drawZ('sorted', foot));
@@ -256,7 +258,7 @@ let leaving = false; // 게임으로 이동 중 — 페이지가 바뀔 때까�
 
 // --- 게임 입장 (docs/game-entry-contract.md) ----------------------------------
 
-/** 도착한 칸이 게임이 배정된 문이면 그 게임으로 페이지를 옮긴다 */
+/** 도착한 칸이 게임이 배정된 문 타일 안이면 그 게임으로 페이지를 옮긴다 */
 function enterIfDoor(p: Pos): void {
   const door = doorIndexAt(map, p);
   if (door === undefined) return;
@@ -523,9 +525,9 @@ function resize(): void {
   const w = window.innerWidth;
   const h = window.innerHeight;
   renderer.setSize(w, h, false);
-  const tileScreenPx = TILE_PX * VIEW_ZOOM;
-  const halfY = h / tileScreenPx / 2;
-  const halfX = w / tileScreenPx / 2;
+  const cellScreenPx = CELL_PX * VIEW_ZOOM; // 월드 1 = 한 칸
+  const halfY = h / cellScreenPx / 2;
+  const halfX = w / cellScreenPx / 2;
   camera.left = -halfX;
   camera.right = halfX;
   camera.top = halfY;

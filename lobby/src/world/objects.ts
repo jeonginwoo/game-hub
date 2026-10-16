@@ -15,16 +15,16 @@ export interface MapObject {
   /** 칸 단위 크기 */
   readonly w: number;
   readonly h: number;
-  /** 그림 — 타일 시트에서 이 칸을 왼쪽 위로 w×h 칸을 잘라 쓴다 */
+  /** 그림 — 타일 시트에서 이 칸을 왼쪽 위로 w×h 칸 넓이를 잘라 쓴다 (시트 한 칸 = 타일 하나 = TILE_CELLS × TILE_CELLS 칸) */
   readonly sprite: Cell;
   /**
-   * 지나갈 수 없는 칸들 — 물체의 왼쪽 아래 칸 기준 (x 는 오른쪽, y 는 위쪽으로 0 부터). 예: 나무 밑둥 줄 [{0,0},{1,0}],
-   * 도리이 두 기둥 [{0,0},{2,0}]. 없으면 그림만 있고 지나갈 수 있다
+   * 지나갈 수 없는 칸들 — 물체의 왼쪽 아래 칸 기준 (x 는 오른쪽, y 는 위쪽으로 0 부터). 예: 4칸 폭 나무의 밑둥 [{1,0},{2,0}],
+   * 6칸 폭 도리이의 두 기둥 [{1,0},{4,0}]. 그림의 실제 모양에 칸 단위로 맞춘다. 없으면 그림만 있고 지나갈 수 있다
    */
   readonly solid?: readonly Pos[];
 }
 
-/** 타일 좌표의 가장자리 — 칸 중심이 정수라 칸 x 의 왼쪽 선은 x - 0.5 */
+/** 칸 좌표의 가장자리 — 칸 중심이 정수라 칸 x 의 왼쪽 선은 x - 0.5 */
 export interface Rect {
   readonly left: number;
   readonly top: number;

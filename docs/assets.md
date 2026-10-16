@@ -16,5 +16,5 @@
 | `TilesetHouse.png` | `Backgrounds/Tilesets/TilesetHouse.png` | 건물 정면·지붕·문 · 도리이 물체 |
 | `TilesetNature.png` | `Backgrounds/Tilesets/TilesetNature.png` | 벽 덤불 · 나무 물체 |
 
-시트 규격: 16×16 칸 — 로비 배경 캔버스에 32px 칸으로 2배 키워 찍는다(캐릭터와 픽셀 밀도는 맞추지 않음, PROGRESS 결정 기록 2026-10-15). 캐릭터는 이 팩을 쓰지 않는다.
+시트 규격: 16×16 칸 — 로비 배경 캔버스에 32px 타일(2×2 칸)로 2배 키워 찍는다(캐릭터와 픽셀 밀도는 맞추지 않음, PROGRESS 결정 기록 2026-10-15). 캐릭터는 이 팩을 쓰지 않는다.
 팩에는 캐릭터 90여 종·타일셋·UI·효과음이 더 있다 — 필요해지면 받은 원본에서 골라 이 표에 추가한다.

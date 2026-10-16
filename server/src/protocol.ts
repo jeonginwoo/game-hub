@@ -1,5 +1,5 @@
 // 로비 ↔ 멀티 서버 메시지 (JSON over WebSocket, 경로 /ws) — 순수 모듈, node·DOM 을 import 하지 않는다 (로비 src/ 도 쓴다).
-// 위치는 클라이언트 권위(결정 2026-10-09): 서버는 형식만 검사하고 명단 관리·중계만 한다. 좌표는 타일 단위.
+// 위치는 클라이언트 권위(결정 2026-10-09): 서버는 형식만 검사하고 명단 관리·중계만 한다. 좌표는 칸 단위(로비 타일의 1/2).
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
 
@@ -49,7 +49,7 @@ export type ServerMsg =
   | { readonly t: 'owner'; readonly id: string }; // 방장이 바뀜 — 방장이 나가 승계될 때 (결정 2026-10-16: 서버가 정한 방장)
 
 export const NAME_MAX = 16; // 글자
-export const COORD_MAX = 1000; // 타일 — 맵 크기를 서버가 모르므로 넉넉한 상한만 둔다
+export const COORD_MAX = 1000; // 칸 — 맵 크기를 서버가 모르므로 넉넉한 상한만 둔다
 export const DEFAULT_NAME = '손님';
 export const CHAT_MAX = 200; // 글자
 

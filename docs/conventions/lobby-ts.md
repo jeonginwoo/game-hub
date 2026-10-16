@@ -97,10 +97,13 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
 - Draw order is ZEP-style and decided only by `layers.ts`: background (one map-sized
   image) → floor objects → sorted (objects and characters by foot y) → top objects →
   foreground. Every mesh gets its z from `drawZ` / `objectZ` — no hand-picked z values.
-- Pixel sizes are `TILE_PX` (32) and `AVATAR_PX` (48×64, feet at the cell's bottom centre).
+- Two grids: a **tile** (`TILE_PX` 32 — one map character, one background art cell) is
+  `TILE_CELLS` (2) × 2 **cells** (`CELL_PX` 16). Positions, walking, collision, objects, the
+  network and world units are in cells; only background art (`tileLook`) works in tiles.
+  `AVATAR_PX` is 48×64 (3×4 cells, feet at the cell's bottom centre).
   Pixel textures use nearest filtering, no mipmaps, sRGB (`pixelTexture` in `main.ts`).
-- Drawing never blocks movement: what is passable is the character map (`#`) alone.
-  An object that should block stands on `#` cells.
+- Drawing never blocks movement by itself: what is impassable is the character map's `#`
+  plus each object's `solid` cells (`withSolidObjects`), fitted to the art cell by cell.
 
 ## 7. Comments & errors
 

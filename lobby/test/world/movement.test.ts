@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { parseMap } from '../../src/world/map';
 import { facingOf, reversesWalk, step, stepHeld } from '../../src/world/movement';
 
+// 이동 판정은 칸 단위라 타일 = 1칸 맵으로 본다
 const map = parseMap([
   '#####',
   '#S.D#',
   '#..##',
   '#####',
-]);
+], 1);
 
 describe('step', () => {
   it('바닥으로는 한 칸 이동하고 그 방향을 본다', () => {
@@ -37,7 +38,7 @@ const open = parseMap([
   '#...#',
   '#.#.#',
   '#####',
-]);
+], 1);
 
 describe('stepHeld', () => {
   it('아무 키도 없으면 null', () => {

@@ -1,10 +1,11 @@
 // 타일 외형 — 맵의 칸마다 스프라이트 시트의 어느 칸을 그릴지 고른다. Three.js·DOM 과 무관한 순수 함수.
 // 에셋: Ninja Adventure (CC0, docs/assets.md). 시트는 16×16 칸, (col, row) 는 왼쪽 위가 (0, 0).
-// 맵 문자열(#·.·D·S)은 그대로 두고 주변 칸을 보고 외형을 정한다:
+// 맵 문자열(#·.·D·S)은 그대로 두고 주변 타일을 보고 외형을 정한다:
 //   문이 있는 줄의 벽 = 건물 정면, 그 위의 벽 = 지붕, 나머지 벽 = 풀밭 위 덤불.
-import type { Pos, TileMap } from './map';
+// 외형은 타일(문자 한 글자) 단위 — 좌표도 타일 좌표다. 맵은 칸 단위라 타일의 왼쪽 위 칸으로 읽는다.
+import type { Pos, Tile, TileMap } from './map';
 
-export const CELL_PX = 16; // 시트 한 칸의 픽셀 크기 — 배경 캔버스에는 TILE_PX 로 키워 찍는다
+export const SHEET_PX = 16; // 시트 한 칸의 픽셀 크기 — 배경 캔버스에는 TILE_PX 로 키워 찍는다
 
 export type Sheet = 'floor' | 'house' | 'nature';
 
@@ -35,24 +36,36 @@ function hash(x: number, y: number): number {
   return (Math.imul(x, 73856093) ^ Math.imul(y, 19349663)) >>> 0;
 }
 
-function hasDoorInRow(map: TileMap, y: number): boolean {
-  return map.doors.some((d) => d.y === y);
+/** 타일 좌표 → 그 타일의 왼쪽 위 칸 */
+function corner(map: TileMap, t: Pos): Pos {
+  return { x: t.x * map.tileCells, y: t.y * map.tileCells };
 }
 
-function isFacade(map: TileMap, p: Pos): boolean {
-  return map.tileAt(p) === 'wall' && hasDoorInRow(map, p.y);
+function tileAt(map: TileMap, t: Pos): Tile {
+  return map.tileAt(corner(map, t));
 }
 
-/** isOpenDoor: 그 문에 게임이 배정돼 있는지 — 열린 문과 닫힌 문을 겉모습으로 구분한다 */
-export function tileLook(map: TileMap, p: Pos, isOpenDoor: (p: Pos) => boolean): TileLook {
-  const tile = map.tileAt(p);
-  if (tile === 'door') return { base: isOpenDoor(p) ? DOOR_OPEN : DOOR_SHUT };
+function hasDoorInRow(map: TileMap, ty: number): boolean {
+  return map.doors.some((d) => d.y === ty * map.tileCells);
+}
+
+function isFacade(map: TileMap, t: Pos): boolean {
+  return tileAt(map, t) === 'wall' && hasDoorInRow(map, t.y);
+}
+
+/**
+ * 타일 t(타일 좌표)의 외형. isOpenDoor: 문의 왼쪽 위 칸을 받아 그 문에 게임이 배정돼 있는지 —
+ * 열린 문과 닫힌 문을 겉모습으로 구분한다
+ */
+export function tileLook(map: TileMap, t: Pos, isOpenDoor: (door: Pos) => boolean): TileLook {
+  const tile = tileAt(map, t);
+  if (tile === 'door') return { base: isOpenDoor(corner(map, t)) ? DOOR_OPEN : DOOR_SHUT };
   if (tile === 'floor') {
-    const h = hash(p.x, p.y) % 16; // 무늬 칸은 4/16 — 더 많으면 지저분하다
+    const h = hash(t.x, t.y) % 16; // 무늬 타일은 4/16 — 더 많으면 지저분하다
     return { base: GRASS_VARIANTS[h] ?? GRASS };
   }
-  if (isFacade(map, p)) return { base: FACADE };
-  const below = { x: p.x, y: p.y + 1 };
-  if (isFacade(map, below) || map.tileAt(below) === 'door') return { base: p.x % 2 === 0 ? ROOF_A : ROOF_B };
+  if (isFacade(map, t)) return { base: FACADE };
+  const below = { x: t.x, y: t.y + 1 };
+  if (isFacade(map, below) || tileAt(map, below) === 'door') return { base: t.x % 2 === 0 ? ROOF_A : ROOF_B };
   return { base: GRASS, over: BUSH };
 }

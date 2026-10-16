@@ -24,7 +24,7 @@ describe('objectZ', () => {
 });
 
 describe('checkObjects', () => {
-  const map = parseMap(['#####', '#S..#', '#####']);
+  const map = parseMap(['#####', '#S..#', '#####'], 1);
 
   it('맵 안의 물체는 통과한다', () => {
     expect(() => checkObjects(map, [{ ...tree, x: 0, y: 2, w: 5, h: 3 }])).not.toThrow();
@@ -54,7 +54,7 @@ describe('checkObjects', () => {
 });
 
 describe('solidCells · withSolidObjects', () => {
-  const map = parseMap(['#####', '#S..#', '#...#', '#####']);
+  const map = parseMap(['#####', '#S..#', '#...#', '#####'], 1);
   const post: MapObject = { ...tree, x: 2, y: 2, w: 2, h: 2, solid: [{ x: 0, y: 0 }, { x: 1, y: 0 }] };
 
   it('solid 는 왼쪽 아래 칸 기준 — x 는 오른쪽, y 는 위쪽', () => {
@@ -78,21 +78,20 @@ describe('실제 로비 물체', () => {
     expect(() => checkObjects(parseMap(LOBBY_ROWS), LOBBY_OBJECTS)).not.toThrow();
   });
 
-  it('나무는 밑둥 줄이 막히고, 도리이는 두 기둥만 막혀 가운데로 지나간다', () => {
+  it('나무는 밑둥 두 칸만 막히고, 도리이는 두 기둥 칸만 막혀 기둥 사이로 지나간다', () => {
     const walk = withSolidObjects(parseMap(LOBBY_ROWS), LOBBY_OBJECTS);
     for (const id of ['tree-left', 'tree-right']) {
       const o = LOBBY_OBJECTS.find((x) => x.id === id);
       expect(o).toBeDefined();
       if (!o) continue;
-      expect(walk.tileAt({ x: o.x, y: o.y })).toBe('wall');
-      expect(walk.tileAt({ x: o.x + 1, y: o.y })).toBe('wall');
-      expect(walk.tileAt({ x: o.x, y: o.y - 1 })).toBe('floor'); // 잎 뒤로 지나간다
+      const row = [0, 1, 2, 3].map((dx) => walk.tileAt({ x: o.x + dx, y: o.y }));
+      expect(row).toEqual(['floor', 'wall', 'wall', 'floor']); // 잎 끝 아래는 지나간다
+      expect(walk.tileAt({ x: o.x + 1, y: o.y - 1 })).toBe('floor'); // 잎 뒤로 지나간다
     }
     const torii = LOBBY_OBJECTS.find((x) => x.id === 'torii');
     expect(torii?.layer).toBe('sorted');
     if (!torii) return;
-    expect(walk.tileAt({ x: torii.x, y: torii.y })).toBe('wall');
-    expect(walk.tileAt({ x: torii.x + 1, y: torii.y })).toBe('floor');
-    expect(walk.tileAt({ x: torii.x + 2, y: torii.y })).toBe('wall');
+    const row = [0, 1, 2, 3, 4, 5].map((dx) => walk.tileAt({ x: torii.x + dx, y: torii.y }));
+    expect(row).toEqual(['floor', 'wall', 'floor', 'floor', 'wall', 'floor']);
   });
 });

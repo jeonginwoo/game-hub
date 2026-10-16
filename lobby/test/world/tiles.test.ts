@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseMap } from '../../src/world/map';
 import { tileLook } from '../../src/world/tiles';
 
+// 타일 좌표로 묻는다 — 맵은 타일 하나가 2×2 칸 (TILE_CELLS)
 const map = parseMap([
   '######',
   '#D##D#',
@@ -14,7 +15,7 @@ const noneOpen = () => false;
 
 describe('tileLook', () => {
   it('게임이 배정된 문은 열린 입구, 아닌 문은 닫힌 문', () => {
-    const look = (x: number) => tileLook(map, { x, y: 1 }, openAt(1, 1)).base;
+    const look = (x: number) => tileLook(map, { x, y: 1 }, openAt(2, 2)).base; // 타일 (1, 1) 문의 왼쪽 위 칸
     expect(look(1)).not.toEqual(look(4));
     expect(look(1).sheet).toBe('house');
     expect(look(4).sheet).toBe('house');

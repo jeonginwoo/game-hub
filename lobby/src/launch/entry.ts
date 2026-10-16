@@ -27,9 +27,10 @@ export function gameAtDoor(
   return id === undefined ? undefined : games.find((g) => g.id === id);
 }
 
-/** 위치가 문 타일이면 그 문 번호, 아니면 undefined */
+/** 칸 p 가 문 타일(왼쪽 위 칸부터 tileCells × tileCells 칸) 안이면 그 문 번호, 아니면 undefined */
 export function doorIndexAt(map: TileMap, p: Pos): number | undefined {
-  const i = map.doors.findIndex((d) => d.x === p.x && d.y === p.y);
+  const n = map.tileCells;
+  const i = map.doors.findIndex((d) => p.x >= d.x && p.x < d.x + n && p.y >= d.y && p.y < d.y + n);
   return i < 0 ? undefined : i;
 }
 
@@ -77,11 +78,18 @@ export interface Spawn {
   readonly facing: Dir;
 }
 
-/** 문에서 바로 걸어 나온 자리와 그때 보는 방향(문 반대쪽). 사방이 막혔으면 undefined */
+/**
+ * 문(왼쪽 위 칸)에서 바로 걸어 나온 자리와 그때 보는 방향(문 반대쪽). 사방이 막혔으면 undefined.
+ * 문 타일 바깥에 맞닿은 칸 — 위·아래로 나오면 문의 왼쪽 열, 좌우로 나오면 문의 아랫줄
+ */
 export function doorFront(map: TileMap, door: Pos): Spawn | undefined {
+  const n = map.tileCells;
   for (const dir of FRONT_ORDER) {
     const d = DIR_DELTA[dir];
-    const pos = { x: door.x + d.x, y: door.y + d.y };
+    const pos = {
+      x: d.x < 0 ? door.x - 1 : d.x > 0 ? door.x + n : door.x,
+      y: d.y < 0 ? door.y - 1 : d.y > 0 ? door.y + n : door.y + n - 1,
+    };
     if (map.tileAt(pos) === 'floor') return { pos, facing: dir };
   }
   return undefined;
