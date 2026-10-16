@@ -58,6 +58,14 @@ export function inviteUrl(lobbyHref: string, code: string): string {
   return url.href;
 }
 
+/** 「로비 나가기」로 갈 첫 화면 — 로비 주소에서 방 코드·복귀 정보·해시를 모두 뺀 것 */
+export function homeUrl(lobbyHref: string): string {
+  const url = new URL(lobbyHref);
+  url.search = '';
+  url.hash = '';
+  return url.href;
+}
+
 /** 이름 칸의 입력 — 서버와 같은 규칙으로 다듬고, 비면 null (이름 없이는 들어가지 않는다) */
 export function nameFromInput(raw: string): string | null {
   return normalizeName(raw) || null;

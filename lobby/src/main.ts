@@ -5,17 +5,19 @@ import type { Spot } from '../../server/src/protocol';
 import { bubbleText, chatLine, say, type Bubble } from './chat';
 import { showChatBox, type ChatBox } from './chat-box';
 import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './entry';
-import { loadName, showEntryScreen, showRoomBadge, type Entered } from './entry-screen';
+import { loadName, showEntryScreen, type Entered } from './entry-screen';
 import { DOOR_GAMES, GAMES } from './games';
+import { noticeText, peopleCount, rosterRows } from './hud';
+import { showHud, type Hud } from './hud-bar';
 import { AVATAR_PX, drawZ, TILE_PX } from './layers';
 import { LOBBY_OBJECTS } from './lobby-objects';
 import { LOBBY_ROWS } from './lobby-map';
 import { parseMap, type Pos } from './map';
 import { facingOf, reversesWalk, stepHeld, type Dir } from './movement';
-import { connect, statusText, type Connection, type NetStatus } from './net';
+import { connect, type Connection, type NetStatus } from './net';
 import { checkObjects, objectRect, objectZ, withSolidObjects, type MapObject } from './objects';
 import { advance, applyMsg, colorFor, NO_OTHERS, remotePos, type Others } from './others';
-import { roomFromSearch, screenFor, withRoom } from './room';
+import { homeUrl, roomFromSearch, screenFor, withRoom } from './room';
 import { CELL_PX, tileLook, type Cell, type Sheet } from './tiles';
 import { clampAxis } from './view';
 
@@ -326,7 +328,7 @@ let others: Others = NO_OTHERS;
 let netStatus: NetStatus = 'connecting';
 let conn: Connection | null = null;
 let lastSent = ''; // 마지막으로 보낸 자리 — 같은 자리를 또 보내지 않게
-let setStatus: (text: string) => void = () => {};
+let hud: Hud | null = null;
 let chatBox: ChatBox | null = null;
 let bubbles: ReadonlyMap<string, Bubble> = new Map();
 const views = new Map<string, RemoteView>();
@@ -348,8 +350,15 @@ function sendIfMoved(): void {
   conn?.send({ t: 'move', at });
 }
 
+/** 버튼 줄(인원·접속자 목록·연결 알림)을 지금 상태로 */
 function refreshStatus(): void {
-  setStatus(statusText(netStatus, others.players.size + 1));
+  if (!hud || !entered) return;
+  const myColor = others.me === null ? MY_BODY : colorFor(others.me); // 화면 속 내 몸 색과 같게 (루프의 playerMat)
+  hud.update({
+    count: peopleCount(netStatus, others),
+    rows: rosterRows(others, entered.name, myColor),
+    notice: noticeText(netStatus),
+  });
 }
 
 /** others 명단에 맞춰 메시·이름표를 만들고 지우고, 바뀐 이름을 이름표에 옮긴다 */
@@ -434,18 +443,31 @@ function enterLobby(e: Entered): void {
   entered = e;
   // 주소창에 방 코드를 남겨 둔다 — 새로고침·게임 복귀 URL(returnUrl 이 location.href 를 쓴다)이 같은 방으로 오게
   history.replaceState(history.state, '', withRoom(location.href, e.room));
-  setStatus = showRoomBadge(e, location.href, rename);
+  hud = showHud({ room: e.room, name: e.name, lobbyHref: location.href, onRename: rename, onLeave: leaveLobby,
+    onOpen: () => {
+      held.length = 0;
+      tapped = null;
+    },
+  });
+  refreshStatus();
   myHead = makeHead(e.name);
   chatBox = showChatBox((text) => conn?.send({ t: 'chat', text }));
   startNet(e);
 }
 
-/** 배지에서 이름을 바꿨다 — 이 뒤의 채팅 줄·게임 입장(hub_name)·다시 붙을 때의 hello 가 새 이름을 쓴다 */
+/** 설정 창에서 이름을 바꿨다 — 이 뒤의 채팅 줄·게임 입장(hub_name)·다시 붙을 때의 hello 가 새 이름을 쓴다 */
 function rename(name: string): void {
   if (!entered) return;
   entered = { ...entered, name };
   if (myHead) setTag(myHead, name);
   conn?.send({ t: 'rename', name }); // 끊겨 있으면 보내지 않는다 — 다시 붙을 때 hello 가 싣는다
+  refreshStatus();
+}
+
+/** 설정 창 「로비 나가기」 — 첫 화면으로. 연결은 pagehide 가 끊는다. 저장된 이름은 남겨 다음 첫 화면에 채운다 */
+function leaveLobby(): void {
+  leaving = true;
+  location.assign(homeUrl(location.href));
 }
 
 const urlRoom = roomFromSearch(location.search);
@@ -476,7 +498,8 @@ const held: Dir[] = [];
 
 window.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return; // Ctrl+S·Ctrl+D 같은 브라우저 단축키는 건드리지 않는다
-  if (entered === null || isTyping(e.target)) return;
+  // 접속자·설정 창이 열려 있으면 그 창이 키를 받는다(Esc 로 닫기) — 걷기·채팅으로 새지 않게
+  if (entered === null || isTyping(e.target) || hud?.isOpen()) return;
   if (e.key === 'Enter' && !leaving) {
     e.preventDefault();
     chatBox?.focus();

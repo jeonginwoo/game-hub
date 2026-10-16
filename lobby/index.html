@@ -8,7 +8,7 @@
       html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1f2a; }
       #app { display: block; width: 100vw; height: 100vh; }
 
-      /* 첫 화면·방 표시 (src/entry-screen.ts) — 그림이 들어오기 전 임시 모양 */
+      /* 첫 화면 (src/entry-screen.ts) — 그림이 들어오기 전 임시 모양 */
       body { font-family: system-ui, sans-serif; color: #eceff4; }
       .hub-overlay {
         position: fixed; inset: 0; display: grid; place-items: center; padding: 16px;
@@ -35,17 +35,45 @@
       .hub-primary:hover { background: #6d90bb; }
       .hub-or { text-align: center; color: #a3adc2; font-size: 13px; }
       .hub-error { margin: 0; min-height: 1.2em; color: #e5a0a0; font-size: 13px; }
-      .hub-badge {
-        position: fixed; top: 12px; left: 12px; display: flex; align-items: center; gap: 10px;
-        padding: 6px 8px 6px 12px; border-radius: 10px; background: rgb(46 52 64 / 0.85); font-size: 14px;
+      /* 오른쪽 위 버튼 줄 (src/hud-bar.ts) — 사람(인원·접속자 목록)·설정 */
+      .hub-hud {
+        position: fixed; top: 12px; right: 12px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
       }
-      .hub-badge-room { font-weight: 600; letter-spacing: 0.05em; }
-      .hub-badge-name {
-        padding: 2px 6px; border: 0; border-radius: 6px; background: none; color: #a3adc2; font: inherit; cursor: text;
+      .hub-hud-bar { display: flex; gap: 6px; }
+      .hub-icon-btn {
+        display: flex; align-items: center; gap: 6px; height: 36px; min-width: 36px; padding: 0 8px; border: 0;
+        border-radius: 10px; background: rgb(46 52 64 / 0.85); color: #d8dee9; font: inherit; font-size: 14px;
+        cursor: pointer; justify-content: center;
       }
-      .hub-badge-name:hover { background: rgb(76 86 106 / 0.6); color: inherit; }
-      .hub-badge-input { width: 10em; flex: none; padding: 2px 6px; border-radius: 6px; }
-      .hub-badge-status { color: #a3be8c; font-size: 13px; }
+      .hub-icon-btn:hover, .hub-icon-btn.hub-on { background: #4c566a; color: #eceff4; }
+      .hub-people-count { min-width: 1ch; font-weight: 600; }
+      .hub-panel {
+        display: flex; flex-direction: column; gap: 8px; width: min(260px, calc(100vw - 24px)); padding: 12px 14px;
+        border-radius: 12px; background: rgb(46 52 64 / 0.95); box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+      }
+      .hub-panel[hidden] { display: none; }
+      .hub-panel-title { margin: 4px 0 0; color: #a3adc2; font-size: 12px; font-weight: 600; }
+      .hub-panel-title:first-child { margin-top: 0; }
+      .hub-panel .hub-input { padding: 6px 10px; }
+      .hub-center { align-items: center; }
+      .hub-code { flex: 1; font-size: 20px; font-weight: 700; letter-spacing: 0.12em; }
+      .hub-hint { margin: 0; min-height: 1.2em; color: #a3be8c; font-size: 12px; }
+      .hub-danger { margin-top: 4px; background: #8c4a52; }
+      .hub-danger:hover { background: #a3545e; }
+      .hub-people {
+        display: flex; flex-direction: column; gap: 6px; max-height: 50vh; margin: 0; padding: 0; overflow-y: auto;
+        list-style: none; font-size: 14px;
+      }
+      .hub-person { display: flex; align-items: center; gap: 8px; }
+      .hub-person-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+      .hub-person-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .hub-person-me { color: #a3adc2; font-size: 12px; }
+      /* 위쪽 가운데 연결 알림 — 열려 있으면 숨김 */
+      .hub-notice {
+        position: fixed; top: 12px; left: 50%; transform: translateX(-50%); padding: 6px 12px; border-radius: 10px;
+        background: rgb(46 52 64 / 0.9); color: #ebcb8b; font-size: 13px;
+      }
+      .hub-notice[hidden] { display: none; }
       /* 캐릭터 머리 위 — 말풍선(있을 때만) + 이름표. main.ts 가 매 프레임 자리를 옮긴다 */
       .hub-head {
         position: fixed; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;

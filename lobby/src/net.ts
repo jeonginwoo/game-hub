@@ -9,13 +9,6 @@ export interface Connection {
   close(): void;
 }
 
-/** 방 표시에 쓸 접속 상태 글자 — people 은 나를 포함한 인원 */
-export function statusText(status: NetStatus, people: number): string {
-  if (status === 'connecting') return '연결 중…';
-  if (status === 'closed') return '연결 끊김 — 새로고침';
-  return `${people}명`;
-}
-
 /** 로비 페이지 주소에서 멀티 서버 주소 — https 면 wss */
 export function socketUrl(lobbyHref: string, room: string): string {
   const url = new URL('/ws', lobbyHref);

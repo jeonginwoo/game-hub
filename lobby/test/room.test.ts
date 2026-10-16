@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isRoomCode } from '../../server/src/protocol';
-import { inviteUrl, nameFromInput, newRoomCode, renameFromInput, roomFromInput, roomFromSearch, screenFor, withRoom } from '../src/room';
+import { homeUrl, inviteUrl, nameFromInput, newRoomCode, renameFromInput, roomFromInput, roomFromSearch, screenFor, withRoom } from '../src/room';
 
 describe('screenFor', () => {
   it('방 코드가 없으면 시작 화면', () => {
@@ -75,6 +75,13 @@ describe('withRoom', () => {
 describe('inviteUrl', () => {
   it('내 복귀 정보·해시는 빼고 방 코드만', () => {
     expect(inviteUrl('http://h/lobby/?hub_door=1&room=old#x', 'abc234')).toBe('http://h/lobby/?room=abc234');
+  });
+});
+
+describe('homeUrl', () => {
+  it('로비 주소에서 쿼리·해시를 뺀 첫 화면', () => {
+    expect(homeUrl('http://localhost:5173/?room=abc234&hub_door=1#x')).toBe('http://localhost:5173/');
+    expect(homeUrl('https://hub.example.com/lobby/?room=abc234')).toBe('https://hub.example.com/lobby/');
   });
 });
 

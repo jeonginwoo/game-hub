@@ -1,6 +1,6 @@
-// 첫 화면(이름·로비 만들기·코드로 참여)과 로비 구석의 방 표시 — DOM 연결만. 무엇을 보일지·코드 판정은 room.ts.
+// 첫 화면(이름·로비 만들기·코드로 참여) — DOM 연결만. 무엇을 보일지·코드 판정은 room.ts.
 // (결정 2026-10-14: 로그인 없이 방 + 닉네임 + 초대 링크). 화면 글자는 모두 textContent 로 넣는다.
-import { inviteUrl, nameFromInput, newRoomCode, renameFromInput, roomFromInput, type Screen } from './room';
+import { nameFromInput, newRoomCode, roomFromInput, type Screen } from './room';
 
 const NAME_KEY = 'game-hub:name';
 
@@ -14,7 +14,8 @@ export function loadName(): string | null {
   }
 }
 
-function saveName(name: string): void {
+/** 이름 저장 — 첫 화면과 설정 창의 이름 변경이 쓴다. 저장 못 해도 던지지 않는다 */
+export function saveName(name: string): void {
   try {
     localStorage.setItem(NAME_KEY, name);
   } catch {
@@ -27,7 +28,7 @@ export interface Entered {
   readonly name: string;
 }
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text = ''): HTMLElementTagNameMap[K] {
+export function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
   e.className = className;
   e.textContent = text;
@@ -110,82 +111,4 @@ export function showEntryScreen(screen: Exclude<Screen, 'lobby'>, room: string |
     document.body.append(overlay);
     nameInput.focus();
   });
-}
-
-/**
- * 배지의 내 이름 — 누르면 그 자리에서 고치는 칸이 된다. Enter·칸 밖 클릭이면 확정, Esc 면 취소.
- * 바뀌었으면(renameFromInput) 저장하고 onRename 을 부른다
- */
-function nameEditor(initial: string, onRename: (name: string) => void): HTMLElement {
-  let current = initial;
-  const wrap = el('span', 'hub-badge-name-wrap');
-  const show = el('button', 'hub-badge-name', current);
-  show.type = 'button';
-  show.title = '눌러서 이름 바꾸기';
-  wrap.append(show);
-
-  show.addEventListener('click', () => {
-    const input = el('input', 'hub-input hub-badge-input');
-    input.value = current;
-    input.maxLength = 32; // 첫 화면 이름 칸과 같은 입력 상한
-    input.setAttribute('autocomplete', 'nickname');
-    let open = true;
-    const close = (commit: boolean): void => {
-      if (!open) return; // Enter 로 닫으며 칸을 떼어 낼 때 따라오는 blur 를 한 번 더 받지 않게
-      open = false;
-      const name = commit ? renameFromInput(input.value, current) : null;
-      if (name !== null) {
-        current = name;
-        saveName(name);
-        show.textContent = name;
-        onRename(name);
-      }
-      input.replaceWith(show);
-    };
-    input.addEventListener('keydown', (e) => {
-      // 한글 조합을 확정하는 Enter 는 넘긴다 (첫 화면과 같은 이유 — Safari 는 keyCode 229 만)
-      if (e.isComposing || e.keyCode === 229) return;
-      if (e.key === 'Enter') close(true);
-      else if (e.key === 'Escape') close(false);
-    });
-    input.addEventListener('blur', () => close(true));
-    show.replaceWith(input);
-    input.focus();
-    input.select();
-  });
-  return wrap;
-}
-
-/**
- * 로비 왼쪽 위 — 방 코드·내 이름(눌러서 바꾸기)·접속 상태·「초대 링크 복사」.
- * 접속 상태 글자를 바꾸는 함수를 돌려준다
- */
-export function showRoomBadge(entered: Entered, lobbyHref: string, onRename: (name: string) => void): (status: string) => void {
-  const badge = el('div', 'hub-badge');
-  const status = el('span', 'hub-badge-status');
-  badge.append(el('span', 'hub-badge-room', `로비 ${entered.room}`), nameEditor(entered.name, onRename), status);
-  const copy = el('button', 'hub-btn hub-small', '초대 링크 복사');
-  copy.type = 'button';
-  const link = inviteUrl(lobbyHref, entered.room);
-  copy.addEventListener('click', () => {
-    copy.blur(); // 포커스가 남으면 스페이스·엔터가 버튼을 다시 누른다
-    const done = (text: string): void => {
-      copy.textContent = text;
-      setTimeout(() => (copy.textContent = '초대 링크 복사'), 1500);
-    };
-    // http 로 연 사설 IP 등 보안 문맥이 아니면 clipboard 가 없다 — 그때는 직접 복사하게 보여 준다
-    if (!navigator.clipboard) {
-      window.prompt('이 링크를 복사해 보내세요', link);
-      return;
-    }
-    navigator.clipboard.writeText(link).then(
-      () => done('복사됨'),
-      () => window.prompt('이 링크를 복사해 보내세요', link),
-    );
-  });
-  badge.append(copy);
-  document.body.append(badge);
-  return (text) => {
-    status.textContent = text;
-  };
 }
