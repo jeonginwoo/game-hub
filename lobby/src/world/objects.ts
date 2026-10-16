@@ -56,9 +56,13 @@ export function withSolidObjects(map: TileMap, objects: readonly MapObject[]): T
   };
 }
 
-/** 물체 목록 검사 — id 중복, 크기 0 이하, 맵 밖으로 나간 물체, 물체를 벗어나거나 문·시작점을 막는 solid 를 거부한다 */
+/**
+ * 물체 목록 검사 — id 중복, 크기 0 이하, 맵 밖으로 나간 물체, 물체를 벗어나거나 문·시작점을 막는 solid,
+ * 다른 물체의 solid 와 겹치는 solid 를 거부한다. 그림끼리 겹치거나 solid 가 맵의 '#' 위에 놓이는 것은 괜찮다
+ */
 export function checkObjects(map: TileMap, objects: readonly MapObject[]): void {
   const seen = new Set<string>();
+  const solidOwner = new Map<string, string>();
   for (const o of objects) {
     if (seen.has(o.id)) throw new Error(`물체 id '${o.id}' 가 겹친다`);
     seen.add(o.id);
@@ -75,6 +79,10 @@ export function checkObjects(map: TileMap, objects: readonly MapObject[]): void 
     for (const p of solidCells(o)) {
       const isStart = map.starts.some((s) => s.x === p.x && s.y === p.y);
       if (map.tileAt(p) === 'door' || isStart) throw new Error(`물체 '${o.id}' 가 (${p.x}, ${p.y}) 의 문·시작점을 막는다`);
+      const key = `${p.x},${p.y}`;
+      const other = solidOwner.get(key);
+      if (other !== undefined) throw new Error(`물체 '${o.id}' 의 solid 가 (${p.x}, ${p.y}) 에서 '${other}' 와 겹친다`);
+      solidOwner.set(key, o.id);
     }
   }
 }

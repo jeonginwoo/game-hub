@@ -51,6 +51,18 @@ describe('checkObjects', () => {
     expect(() => checkObjects(map, [{ ...small, x: 1, solid: [{ x: 0, y: 0 }] }])).toThrow(/시작점/);
     expect(() => checkObjects(map, [{ ...small, solid: [{ x: 0, y: 0 }] }])).not.toThrow();
   });
+
+  it('물체끼리 solid 가 겹치면 거부하고, 그림만 겹치는 것은 통과한다', () => {
+    const a = { ...tree, id: 'a', x: 2, y: 1, w: 2, h: 1, solid: [{ x: 0, y: 0 }] };
+    const b = { ...tree, id: 'b', x: 2, y: 1, w: 2, h: 1, solid: [{ x: 1, y: 0 }] };
+    expect(() => checkObjects(map, [a, b])).not.toThrow(); // 그림은 같은 자리, solid 는 다른 칸
+    expect(() => checkObjects(map, [a, { ...b, x: 1, solid: [{ x: 1, y: 0 }] }])).toThrow(/'a' 와 겹친다/);
+    expect(() => checkObjects(map, [a, { ...b, solid: undefined }])).not.toThrow(); // solid 없는 물체는 어디든
+  });
+
+  it('solid 가 맵의 벽 위에 놓여도 통과한다', () => {
+    expect(() => checkObjects(map, [{ ...tree, x: 0, y: 0, w: 1, h: 1, solid: [{ x: 0, y: 0 }] }])).not.toThrow();
+  });
 });
 
 describe('solidCells · withSolidObjects', () => {

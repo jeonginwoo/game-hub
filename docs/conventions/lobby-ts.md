@@ -105,6 +105,9 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   Pixel textures use nearest filtering, no mipmaps, sRGB (`pixelTexture` in `main.ts`).
 - Drawing never blocks movement by itself: what is impassable is the character map's `#`
   plus each object's `solid` cells (`withSolidObjects`), fitted to the art cell by cell.
+- The map (terrain: `#` `.` `D` `S`) and objects are separate layers. An object may sit on any
+  cell, `#` included; `checkObjects` only rejects `solid` cells that block a door or start, or that
+  overlap another object's `solid` cells. Pictures may overlap freely.
 
 ## 7. Comments & errors
 
