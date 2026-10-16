@@ -74,8 +74,10 @@ describe('noticeText', () => {
 });
 
 describe('noticeText 편집 중', () => {
-  it('편집 중이면 편집 안내, 연결 알림이 있으면 그쪽이 먼저', () => {
-    expect(noticeText('open', true)).toBe('편집 중 — 문을 눌러 게임 고르기 (Esc 끝)');
-    expect(noticeText('closed', true)).toBe('연결 끊김 — 새로고침');
+  it('편집 중이면 도구별 안내, 연결 알림이 있으면 그쪽이 먼저', () => {
+    expect(noticeText('open', 'door')).toBe('편집 중 — 문을 눌러 게임 고르기 (Esc 끝)');
+    expect(noticeText('open', 'place')).toBe('편집 중 — 고른 물체를 맵에 놓기 (Esc 끝)');
+    expect(noticeText('open', 'remove')).toBe('편집 중 — 누른 물체 치우기 (Esc 끝)');
+    expect(noticeText('closed', 'place')).toBe('연결 끊김 — 새로고침');
   });
 });

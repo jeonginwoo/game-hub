@@ -29,7 +29,7 @@ Files are grouped by feature, not by layer: a feature's pure module and its wiri
 | `room/` | `room.ts` · `entry-screen.ts` | room code / name → first screen |
 | `chat/` | `chat.ts` · `chat-box.ts` | chat rules → chat box |
 | `hud/` | `hud.ts` · `hud-bar.ts` | roster / notice text → top-right buttons |
-| `edit/` | `edit.ts` · `door-picker.ts` | owner's edit mode: who may edit, door marks, game choices → door game list |
+| `edit/` | `edit.ts` `place.ts` · `door-picker.ts` `edit-tools.ts` | owner's edit mode: who may edit, door marks, game choices, where an object goes / whether it may / which one is under the pointer → door game list, tool bar and object list |
 
 A new module joins the folder of the feature it serves; a new folder is made when a feature
 has no home yet. `games/` is not used as a folder name (it is the repo-root games folder).
@@ -44,8 +44,8 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   modules and holds the mutable state. When a branch in `main.ts` starts deciding
   something, move the decision into a pure module.
 - **HTML UI over the canvas** (entry screen, top-right button bar with the edit/look/people/settings
-  buttons and panels, chat box, door game list) is wiring too, each in its own module (`entry-screen.ts`, `hud-bar.ts`,
-  `chat-box.ts`, `door-picker.ts`); what to show is decided in a pure module (`room.ts`, `hud.ts`, `chat.ts`, `look.ts`, `edit.ts`). Icons are inline SVG drawn in code, not emoji. Text goes in
+  buttons and panels, chat box, door game list, edit tool bar and object list) is wiring too, each in its own module (`entry-screen.ts`, `hud-bar.ts`,
+  `chat-box.ts`, `door-picker.ts`, `edit-tools.ts`); what to show is decided in a pure module (`room.ts`, `hud.ts`, `chat.ts`, `look.ts`, `edit.ts`, `place.ts`, `object-names.ts`). Icons are inline SVG drawn in code, not emoji. Text goes in
   with `textContent`, never `innerHTML`. Storage (`localStorage`) is read/written inside
   `try/catch` and the lobby works without it. Styles live in `index.html` (`hub-` classes).
 - **Character drawing** is `avatar-art.ts` (2d canvas only, no `three`): a look (`look.ts` — choice
@@ -68,12 +68,18 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   (`buildWorld`) and respawns; a room that fails `buildRoom` is logged and the current one kept.
   A `room` message (the owner changed a door's game) goes through the same `switchRoom` without
   respawning — it does not change the map rows, so the current cell stays valid.
-- **Edit mode** (owner only, `canEdit`) is a state in `main.ts`: while on, the lobby does not walk,
-  the door marks (part of the world, rebuilt with it) are visible, and a click on the map goes
-  screen → cell (`screenToCell` in `view.ts`) → door → `door-picker.ts`. Picking sends `door`; the
-  change shows only when the server's `room` comes back. It turns off when ownership moves or the
-  connection closes. An Esc that closed a button-bar panel is `preventDefault`ed so it does not also
-  end edit mode.
+- **Edit mode** (owner only, `canEdit`) is a state in `main.ts`: while on, the lobby does not walk and
+  the tool bar (`edit-tools.ts`, bottom centre — the top row of the map holds doors) picks one of three
+  tools. A pointer on the map goes screen → cell (`screenToCell` in `view.ts`), then by tool:
+  door — the door marks (part of the world, rebuilt with it) are visible, a door opens `door-picker.ts`,
+  picking sends `door`; place — the chosen kind's preview follows the pointer (`placeAt`: the pointer is the
+  object's bottom centre), a red fill under it when `canPlace` (the server's `placeObject`) says no, a click sends
+  `place`; remove — a red fill on `topObjectAt` (the frontmost picture over the cell), a click sends `remove`.
+  The preview and the red fill are on the edit layer and are re-evaluated only when the pointer enters another
+  cell, the tool changes or the room is rebuilt. Every change shows only when the server's `room` comes back.
+  Edit mode turns off when ownership moves or the connection closes. Esc steps back one level — door game
+  list → door tool → edit mode off; an Esc that closed a button-bar panel is `preventDefault`ed so it does not
+  also step back.
 
 ## 2. Tests
 

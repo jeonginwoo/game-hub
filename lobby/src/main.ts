@@ -3,7 +3,7 @@
 // 칸은 타일(그림 32px)의 1/2 — 걷기·충돌만 잘게, 그림 크기는 그대로 (결정 2026-10-16: 칸 2배 밀도).
 import * as THREE from 'three';
 import type { Look, Spot } from '../../server/src/protocol';
-import { buildRoom, type Room, type RoomData } from '../../server/src/room-map';
+import { buildRoom, OBJECT_SHAPES, type ObjectKind, type Room, type RoomData } from '../../server/src/room-map';
 import { DEFAULT_ROOM, templateFor } from '../../server/src/room-templates';
 import { avatarCanvas } from './avatar/avatar-art';
 import { bubbleText, chatLine, say, type Bubble } from './chat/chat';
@@ -26,6 +26,8 @@ import { SHEET_PX, tileLook, type Cell, type Sheet } from './world/tiles';
 import { clampAxis, screenToCell } from './world/view';
 import { canEdit, doorChoices, doorMarks } from './edit/edit';
 import { createDoorPicker } from './edit/door-picker';
+import { createEditTools } from './edit/edit-tools';
+import { canPlace, placeAt, topObjectAt } from './edit/place';
 
 // 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 칸 = CELL_PX × VIEW_ZOOM). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
 // 1.5 면 한 칸 24px·그림 타일 48px — 16px 타일(Ninja Adventure)은 원본 1px 이 화면 3px 로 고르다. 32px 기준 그림(임시 캐릭터)은 1.5배라 고르지 않다
@@ -128,6 +130,8 @@ interface World {
   readonly room: Room;
   /** 걷기 판정 — 맵의 벽 + 물체의 solid 칸 */
   readonly walkMap: TileMap;
+  /** 그리는 물체 — 치우기가 누른 칸의 맨 앞 물체를 고른다 */
+  readonly objects: readonly MapObject[];
   readonly meshes: readonly THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
   /** 편집 중에만 보이는 문 테두리 — 배정된 문·빈 문 다른 색 */
   readonly marks: THREE.Group;
@@ -160,7 +164,7 @@ function buildWorld(data: RoomData): World {
   const meshes = [background, ...objectArt.map((a) => a.mesh)];
   for (const m of meshes) scene.add(m);
   const marks = buildDoorMarks(room);
-  marks.visible = editing;
+  marks.visible = false; // 보이기는 updateEditView 가 — 편집 중이고 문 도구일 때만
   scene.add(marks);
 
   const paint = (sheets: Sheets): void => {
@@ -172,7 +176,7 @@ function buildWorld(data: RoomData): World {
     }
   };
   if (loadedSheets) paint(loadedSheets);
-  return { data, room, walkMap: withSolidObjects(map, objects), meshes, marks, paint };
+  return { data, room, walkMap: withSolidObjects(map, objects), objects, meshes, marks, paint };
 }
 
 const OPEN_DOOR_COLOR = 0xa3be8c; // 게임이 배정된 문
@@ -420,7 +424,7 @@ function refreshStatus(): void {
   hud.update({
     count: peopleCount(netStatus, others),
     rows: rosterRows(others, entered.name, myLook),
-    notice: noticeText(netStatus, editing),
+    notice: noticeText(netStatus, editing ? editTools.tool() : null),
     owner: canEdit(others),
     editing,
   });
@@ -469,6 +473,7 @@ function switchRoom(data: RoomData, search: string | null): boolean {
   }
   disposeWorld(world);
   world = next;
+  updateEditView(); // 문 테두리 보이기·미리보기의 놓을 수 있는지가 새 방 기준으로
   if (search === null) return true;
   const s = spawnFromSearch(world.room.map, search);
   pos = from = s.pos;
@@ -509,7 +514,7 @@ function startNet(e: Entered): void {
         }
         arrivalSearch = null;
       }
-      // 방장이 문 배정을 바꿈 — 배경(열린 문·닫힌 문)과 문 → 게임을 다시 만든다 (결정 2026-10-16: 방장이 문마다 게임 고르기)
+      // 방장이 문 배정·물체를 바꿈 — 배경(열린 문·닫힌 문)·물체·걷기 판정을 다시 만든다 (결정 2026-10-16: 방장이 문마다 게임 고르기)
       if (msg.t === 'room') {
         void switchRoom(msg.room, null);
         doorPicker.close(); // 열린 목록의 「지금 것」 표시가 옛 배정이다
@@ -542,31 +547,131 @@ window.addEventListener('pagehide', () => {
   syncViews();
 });
 
-// --- 편집 모드 (edit.ts) -------------------------------------------------------
-// 방장만. 켜면 걷기를 멈추고 문 테두리를 보이며, 맵의 문을 누르면 옆에 게임 목록 → 고르면 door.
-// 배정이 바뀌면 서버의 room 이 월드를 다시 만든다 (테두리 색도 그때)
+// --- 편집 모드 (edit.ts · place.ts) ----------------------------------------------
+// 방장만. 켜면 걷기를 멈추고 아래쪽 가운데에 도구 줄(문·놓기·치우기). 문: 맵의 문을 누르면 옆에 게임 목록 → 고르면 door.
+// 놓기: 고른 물체의 반투명 미리보기가 포인터를 따라가고(놓을 수 없으면 밑에 빨간 칠) 누르면 place. 치우기: 포인터 아래 맨 앞 물체에 빨간 칠, 누르면 remove.
+// 무엇이 바뀌든 서버의 room 이 돌아와야 월드가 다시 만들어진다 (결정 2026-10-16: 물체 배치 편집)
 
 const doorPicker = createDoorPicker();
+const editTools = createEditTools(() => {
+  doorPicker.close();
+  updateEditView();
+  refreshStatus();
+});
+
+const RED_MARK_COLOR = 0xbf616a; // 놓을 수 없는 자리 · 치울 물체 — 그림에 색을 곱하면 초록 잎이 어두워지기만 해서 칠을 깐다
+
+// 1×1 판을 물체 크기로 늘려 쓴다 — 미리보기는 고른 종류가 바뀔 때만 그림을 다시 칠한다
+const previewMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.65, alphaTest: 0.1 });
+const preview = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), previewMat);
+const redMark = new THREE.Mesh(
+  new THREE.PlaneGeometry(1, 1),
+  new THREE.MeshBasicMaterial({ color: RED_MARK_COLOR, transparent: true, opacity: 0.45 }),
+);
+preview.renderOrder = 1; // 같은 편집 층 — 빨간 칠 위에 그림
+preview.visible = redMark.visible = false;
+scene.add(preview, redMark);
+let previewKind: ObjectKind | null = null; // 미리보기에 칠해 둔 종류 — 시트가 오기 전이면 null 로 남아 다시 칠한다
+/** 편집 중 포인터가 든 칸 — 맵 밖으로 나가면 null */
+let hoverCell: Pos | null = null;
 
 function setEditing(on: boolean): void {
   const next = on && canEdit(others);
-  if (!next) doorPicker.close();
+  if (!next) {
+    doorPicker.close();
+    hoverCell = null; // 다시 켤 때 옛 칸에 미리보기가 뜨지 않게
+  }
   if (next === editing) return;
   editing = next;
-  world.marks.visible = next;
+  editTools.show(next);
+  updateEditView();
   held.length = 0; // 켜는 순간 누르고 있던 방향키로 계속 걷지 않게
   tapped = null;
   refreshStatus();
 }
 
-/** 편집 중 맵을 눌렀다 — 문이면 그 문 오른쪽 위에 게임 목록, 아니면 목록을 닫는다 */
-function pickDoorAt(sx: number, sy: number): void {
-  const cell = screenToCell(sx, sy, {
+/** 고른 종류의 그림을 미리보기 텍스처에 — 종류가 같고 이미 칠했으면 그대로 */
+function paintPreview(kind: ObjectKind): void {
+  if (kind === previewKind || !loadedSheets) return;
+  const shape = OBJECT_SHAPES[kind];
+  const art = blankTexture(shape.w, shape.h);
+  paintObject(art.canvas, { id: '', x: 0, y: 0, ...shape, ...OBJECT_ART[kind] }, loadedSheets);
+  previewMat.map?.dispose();
+  previewMat.map = art.tex;
+  previewMat.needsUpdate = true;
+  previewKind = kind;
+}
+
+/** 크기 w×h 의 1×1 판을 칸 가장자리(left, bottom)에 */
+function placeScaled(mesh: THREE.Mesh, left: number, bottom: number, w: number, h: number): void {
+  mesh.scale.set(w, h, 1);
+  placeRect(mesh, left, bottom, w, h, drawZ('edit'));
+}
+
+/** 도구·포인터 칸·방이 바뀌면 — 문 테두리(문 도구일 때만), 놓기 미리보기, 치울 물체 표시 */
+function updateEditView(): void {
+  const tool = editTools.tool();
+  world.marks.visible = editing && tool === 'door';
+  preview.visible = redMark.visible = false;
+  if (!editing || !hoverCell) return;
+  const kind = editTools.kind();
+  if (tool === 'place' && kind) {
+    paintPreview(kind);
+    const at = placeAt(kind, hoverCell);
+    const shape = OBJECT_SHAPES[kind];
+    placeScaled(preview, at.x - 0.5, at.y + 0.5, shape.w, shape.h);
+    preview.visible = true;
+    if (!canPlace(world.data, kind, at)) {
+      placeScaled(redMark, at.x - 0.5, at.y + 0.5, shape.w, shape.h);
+      redMark.visible = true;
+    }
+  } else if (tool === 'remove') {
+    const o = topObjectAt(world.objects, hoverCell);
+    if (!o) return;
+    const r = objectRect(o);
+    placeScaled(redMark, r.left, r.bottom, o.w, o.h);
+    redMark.visible = true;
+  }
+}
+
+/** 화면 점(CSS px) → 칸 */
+function cellAt(sx: number, sy: number): Pos {
+  return screenToCell(sx, sy, {
     w: window.innerWidth,
     h: window.innerHeight,
     cellPx: CELL_SCREEN_PX,
     center: { x: camera.position.x, y: -camera.position.y },
   });
+}
+
+/** 편집 중 포인터가 움직였다 — 다른 칸에 들어갔을 때만 다시 (놓을 수 있는지 검사가 방 전체를 본다) */
+function hoverAt(cell: Pos | null): void {
+  if (cell === hoverCell || (cell && hoverCell && cell.x === hoverCell.x && cell.y === hoverCell.y)) return;
+  hoverCell = cell;
+  updateEditView();
+}
+
+/** 편집 중 맵을 눌렀다 — 도구대로 */
+function editAt(cell: Pos): void {
+  const tool = editTools.tool();
+  if (tool === 'door') {
+    pickDoorAt(cell);
+    return;
+  }
+  if (tool === 'place') {
+    const kind = editTools.kind();
+    if (!kind) return;
+    const at = placeAt(kind, cell);
+    // 빨간 자리는 보내지 않는다 — 서버도 같은 검사로 버린다
+    if (canPlace(world.data, kind, at)) conn?.send({ t: 'place', kind, x: at.x, y: at.y });
+    return;
+  }
+  const o = topObjectAt(world.objects, cell);
+  if (o) conn?.send({ t: 'remove', id: o.id });
+}
+
+/** 문 도구로 맵을 눌렀다 — 문이면 그 문 오른쪽 위에 게임 목록, 아니면 목록을 닫는다 */
+function pickDoorAt(cell: Pos): void {
   const map = world.room.map;
   const door = map.doorAt(cell);
   const rect = door === undefined ? undefined : map.doors[door];
@@ -662,8 +767,9 @@ window.addEventListener('keydown', (e) => {
   if (entered === null || isTyping(e.target) || hud?.isOpen()) return;
   // 버튼 줄 창을 닫은 Esc 는 넘긴다(defaultPrevented). 목록이 열려 있으면 목록만, 아니면 편집 모드를 끝낸다
   if (e.key === 'Escape' && editing && !e.defaultPrevented) {
+    // 한 단계씩 — 게임 목록 → 문 도구로 → 편집 끝
     if (doorPicker.isOpen()) doorPicker.close();
-    else setEditing(false);
+    else if (!editTools.back()) setEditing(false);
     return;
   }
   if (e.key === 'Enter' && !leaving) {
@@ -696,8 +802,12 @@ window.addEventListener('blur', () => { held.length = 0; tapped = null; }); // �
 // 맵을 누르면 입력 칸에서 빠져나온다 — 채팅 칸에 포커스가 남아 방향키가 먹지 않는 일이 없게
 canvas.addEventListener('pointerdown', (e) => {
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-  if (editing) pickDoorAt(e.clientX, e.clientY);
+  if (editing) editAt(cellAt(e.clientX, e.clientY));
 });
+canvas.addEventListener('pointermove', (e) => {
+  if (editing) hoverAt(cellAt(e.clientX, e.clientY));
+});
+canvas.addEventListener('pointerleave', () => hoverAt(null));
 
 // --- 카메라 -------------------------------------------------------------------
 

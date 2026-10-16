@@ -94,6 +94,17 @@
       .hub-door-choices .hub-btn { text-align: left; }
       .hub-btn.hub-on { background: #5e81ac; font-weight: 600; }
       .hub-edit-btn[hidden] { display: none; }
+      /* 편집 중 도구 줄(아래쪽 가운데 — 위쪽은 맵 윗줄의 문을 가린다)과 놓기 물체 목록(왼쪽 위) (src/edit/edit-tools.ts) — 채팅창(왼쪽 아래)을 가리지 않게 높이 제한 */
+      .hub-edit-tools {
+        position: fixed; bottom: 12px; left: 50%; z-index: 20; transform: translateX(-50%); display: flex; gap: 4px; padding: 4px;
+        border-radius: 10px; background: rgb(46 52 64 / 0.9);
+      }
+      .hub-edit-tools[hidden] { display: none; }
+      .hub-object-panel { position: fixed; top: 12px; left: 12px; z-index: 20; max-height: 55vh; }
+      .hub-object-groups { display: flex; flex-wrap: wrap; gap: 4px; }
+      .hub-object-groups .hub-btn { padding: 4px 8px; font-size: 12px; }
+      .hub-object-kinds { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-y: auto; }
+      .hub-object-kinds .hub-btn { text-align: left; }
       /* 캐릭터 머리 위 — 말풍선(있을 때만) + 이름표. main.ts 가 매 프레임 자리를 옮긴다.
          z-index 층: 머리 위 10 < 버튼 줄·창·알림·채팅 20 < 첫 화면 30 — 사람이 들어올 때마다 body 끝에 붙어 창을 덮던 것 */
       .hub-head {
