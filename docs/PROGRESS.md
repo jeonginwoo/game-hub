@@ -120,6 +120,11 @@
 - 다음 작업: <구체적으로>
 ```
 
+### 2026-10-16 — 머리 위 이름표가 창을 덮던 것 (`fix/head-under-ui`)
+- 완료: `index.html` 에 z-index 층을 명시 — 머리 위(이름표·말풍선) 10 < 버튼 줄·창·알림·채팅 20 < 첫 화면 30. 원인은 z-index 가 없어 사람이 들어올 때 `body` 끝에 붙는 `hub-head` 가 먼저 붙은 설정 창 위에 그려진 것(사용자 피드백 2026-10-16). verify 6단계 PASS
+- 미해결: 두 창을 띄워 겹치는 모습을 눈으로 확인하지 않음
+- 다음 작업: 작업 큐 6번 — 맵을 데이터로
+
 ### 2026-10-16 — `lobby/src/` 기능별 폴더 정리 (`refactor/lobby-src-folders`)
 - 완료: 20개 모듈을 `world/`·`data/`·`launch/`·`avatar/`·`net/`·`room/`·`chat/`·`hud/` 로 `git mv`, 테스트 13개도 같은 구조로. 바뀐 것은 import 경로뿐(동작 변화 없음). `lobby-ts.md` 에 「Layout of `src/`」 표·테스트 경로 규칙, `index.html` 주석·`assets.md`·`game-entry-contract.md` 의 파일 경로 갱신. verify 6단계 PASS
 - 미해결: 화면은 다시 찍어 보지 않음(import 경로만 바뀌어 빌드 PASS 로 갈음). 지난 세션 로그·결정 기록 속 옛 경로는 기록이라 그대로 둠
