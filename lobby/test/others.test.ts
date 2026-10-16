@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Player, Spot } from '../../server/src/protocol';
-import { advance, applyMsg, colorFor, NO_OTHERS, OTHER_COLORS, remotePos, type Others } from '../src/others';
+import { DEFAULT_LOOK, type Player, type Spot } from '../../server/src/protocol';
+import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from '../src/others';
 
 const spot = (x: number, y: number, dir: Spot['dir'] = 'down'): Spot => ({ x, y, dir });
-const player = (id: string, x: number, y: number): Player => ({ id, name: id.toUpperCase(), ...spot(x, y) });
+const player = (id: string, x: number, y: number): Player => ({ id, name: id.toUpperCase(), ...spot(x, y), look: DEFAULT_LOOK });
 
 function withB(): Others {
   return applyMsg(NO_OTHERS, { t: 'welcome', id: 'a', owner: 'a', players: [player('a', 1, 1), player('b', 5, 5)] });
@@ -64,15 +64,24 @@ describe('applyMsg', () => {
     expect(s.players.get('b')).toEqual({ ...walking, name: '비' });
   });
 
+  it('look 은 외형만 바꾸고 자리·걷기는 그대로', () => {
+    let s = applyMsg(withB(), { t: 'move', id: 'b', at: spot(6, 5, 'right') });
+    const walking = s.players.get('b') ?? fail();
+    const look = { body: 2, hair: 3, hat: 1, beard: 2 };
+    s = applyMsg(s, { t: 'look', id: 'b', look });
+    expect(s.players.get('b')).toEqual({ ...walking, look });
+  });
+
   it('owner 로 방장이 바뀐다', () => {
     const s = applyMsg(withB(), { t: 'owner', id: 'b' });
     expect(s.owner).toBe('b');
     expect([...s.players.keys()]).toEqual(['b']);
   });
 
-  it('모르는 id 의 move·leave·rename, 나 자신의 join 은 무시', () => {
+  it('모르는 id 의 move·leave·rename·look, 나 자신의 join 은 무시', () => {
     const s = withB();
     expect(applyMsg(s, { t: 'rename', id: 'zz', name: 'Z' })).toBe(s);
+    expect(applyMsg(s, { t: 'look', id: 'zz', look: DEFAULT_LOOK })).toBe(s);
     expect(applyMsg(s, { t: 'move', id: 'zz', at: spot(1, 1) })).toBe(s);
     expect(applyMsg(s, { t: 'leave', id: 'zz' })).toBe(s);
     expect(applyMsg(s, { t: 'join', player: player('a', 1, 1) })).toBe(s);
@@ -91,13 +100,6 @@ describe('advance', () => {
   it('아무도 걷지 않으면 같은 상태를 돌려준다', () => {
     const s = withB();
     expect(advance(s, 16, 160)).toBe(s);
-  });
-});
-
-describe('colorFor', () => {
-  it('같은 id 는 같은 색, 표의 색만', () => {
-    expect(colorFor('p7')).toBe(colorFor('p7'));
-    for (const id of ['p1', 'p2', 'p3', 'p42']) expect(OTHER_COLORS).toContain(colorFor(id));
   });
 });
 

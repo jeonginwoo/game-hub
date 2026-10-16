@@ -1,22 +1,24 @@
 // 로비 진입점 — 직교 카메라 위에 ZEP 식 층(배경 한 장·물체·캐릭터)을 그린다 (결정 2026-10-13: 직교 + 2D 스프라이트,
 // 2026-10-14: ZEP 식 층). 배경·물체는 Ninja Adventure 타일(docs/assets.md), 캐릭터는 아직 임시 그림. 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
 import * as THREE from 'three';
-import type { Spot } from '../../server/src/protocol';
+import type { Look, Spot } from '../../server/src/protocol';
+import { avatarCanvas } from './avatar-art';
 import { bubbleText, chatLine, say, type Bubble } from './chat';
 import { showChatBox, type ChatBox } from './chat-box';
 import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './entry';
 import { loadName, showEntryScreen, type Entered } from './entry-screen';
 import { DOOR_GAMES, GAMES } from './games';
 import { noticeText, peopleCount, rosterRows } from './hud';
-import { showHud, type Hud } from './hud-bar';
+import { loadLook, showHud, type Hud } from './hud-bar';
 import { AVATAR_PX, drawZ, TILE_PX } from './layers';
 import { LOBBY_OBJECTS } from './lobby-objects';
 import { LOBBY_ROWS } from './lobby-map';
+import { lookKey } from './look';
 import { parseMap, type Pos } from './map';
 import { facingOf, reversesWalk, stepHeld, type Dir } from './movement';
 import { connect, type Connection, type NetStatus } from './net';
 import { checkObjects, objectRect, objectZ, withSolidObjects, type MapObject } from './objects';
-import { advance, applyMsg, colorFor, NO_OTHERS, remotePos, type Others } from './others';
+import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from './others';
 import { homeUrl, roomFromSearch, screenFor, withRoom } from './room';
 import { CELL_PX, tileLook, type Cell, type Sheet } from './tiles';
 import { clampAxis } from './view';
@@ -150,61 +152,34 @@ for (const { o, tex } of objectArt) {
 }
 
 // --- 캐릭터 -------------------------------------------------------------------
-// 48×64 프레임(1.5×2칸), 발이 칸 아래 가운데. 지금은 방향마다 몸·머리·방향 점을 그린 임시 프레임
+// 48×64 프레임(1.5×2칸), 발이 칸 아래 가운데. 그림은 avatar-art.ts 의 임시 코드 그림 — 외형마다 방향 4장
 
 const AVATAR_W = AVATAR_PX.w / TILE_PX; // 칸
 const AVATAR_H = AVATAR_PX.h / TILE_PX; // 칸
 
-// 방에 들어가기 전(welcome 전) 내 몸 색. 들어간 뒤에는 남들 화면과 같게 colorFor(내 id)
-const MY_BODY = '#5e81ac';
+// 내 외형 — 저장값, 처음이면 무작위 (결정 2026-10-16: 캐릭터 꾸미기). 꾸미기 창에서 바뀐다
+let myLook: Look = loadLook();
 
-const HEAD = [10, 8, 28, 28] as const; // 머리 네모 x, y, w, h (프레임 픽셀)
-
-function placeholderAvatar(facing: Dir, body: string): HTMLCanvasElement {
-  const c = document.createElement('canvas');
-  c.width = AVATAR_PX.w;
-  c.height = AVATAR_PX.h;
-  const g = c.getContext('2d');
-  if (!g) throw new Error('2d 캔버스를 만들 수 없다');
-  g.fillStyle = body; // 몸
-  g.fillRect(12, 34, 24, 26);
-  g.fillStyle = '#e5c3a0'; // 머리 — 28×28 네모
-  g.fillRect(HEAD[0], HEAD[1], HEAD[2], HEAD[3]);
-  // 바라보는 쪽 표시 — 뒷모습(up)은 머리 전체를 머리카락 색으로
-  g.fillStyle = '#3b2a20';
-  // 눈 위치(가운데) — 정면은 두 눈, 옆모습은 보이는 쪽 한 눈
-  const eyes: Readonly<Record<Dir, readonly (readonly [number, number])[] | undefined>> = {
-    down: [[18, 24], [30, 24]], left: [[15, 22]], right: [[33, 22]], up: undefined,
-  };
-  const ps = eyes[facing];
-  if (ps) {
-    for (const p of ps) g.fillRect(p[0] - 2, p[1] - 3, 4, 6);
-  } else {
-    g.fillRect(HEAD[0], HEAD[1], HEAD[2], HEAD[3]);
-  }
-  return c;
-}
-
-// 몸 색마다 방향 4장 — 같은 색끼리 텍스처를 나눠 쓴다
+// 외형마다 방향 4장 — 같은 외형끼리 텍스처를 나눠 쓴다
 const avatarTexCache = new Map<string, Readonly<Record<Dir, THREE.CanvasTexture>>>();
 
-function avatarTextures(body: string): Readonly<Record<Dir, THREE.CanvasTexture>> {
-  let tex = avatarTexCache.get(body);
+function avatarTextures(look: Look): Readonly<Record<Dir, THREE.CanvasTexture>> {
+  const key = lookKey(look);
+  let tex = avatarTexCache.get(key);
   if (!tex) {
     tex = {
-      up: pixelTexture(placeholderAvatar('up', body)),
-      down: pixelTexture(placeholderAvatar('down', body)),
-      left: pixelTexture(placeholderAvatar('left', body)),
-      right: pixelTexture(placeholderAvatar('right', body)),
+      up: pixelTexture(avatarCanvas('up', look)),
+      down: pixelTexture(avatarCanvas('down', look)),
+      left: pixelTexture(avatarCanvas('left', look)),
+      right: pixelTexture(avatarCanvas('right', look)),
     };
-    avatarTexCache.set(body, tex);
+    avatarTexCache.set(key, tex);
   }
   return tex;
 }
 
 const avatarGeo = new THREE.PlaneGeometry(AVATAR_W, AVATAR_H);
-const MY_TEX = avatarTextures(MY_BODY);
-const playerMat = new THREE.MeshBasicMaterial({ map: MY_TEX.down, alphaTest: 0.5 });
+const playerMat = new THREE.MeshBasicMaterial({ map: avatarTextures(myLook).down, alphaTest: 0.5 });
 const player = new THREE.Mesh(avatarGeo, playerMat);
 scene.add(player);
 
@@ -321,6 +296,7 @@ interface RemoteView {
   readonly mesh: THREE.Mesh;
   readonly mat: THREE.MeshBasicMaterial;
   readonly tex: Readonly<Record<Dir, THREE.CanvasTexture>>;
+  readonly lookKey: string; // tex 를 만든 외형 — look 메시지로 바뀌면 tex 를 바꾼다
   readonly head: Head;
 }
 
@@ -353,15 +329,14 @@ function sendIfMoved(): void {
 /** 버튼 줄(인원·접속자 목록·연결 알림)을 지금 상태로 */
 function refreshStatus(): void {
   if (!hud || !entered) return;
-  const myColor = others.me === null ? MY_BODY : colorFor(others.me); // 화면 속 내 몸 색과 같게 (루프의 playerMat)
   hud.update({
     count: peopleCount(netStatus, others),
-    rows: rosterRows(others, entered.name, myColor),
+    rows: rosterRows(others, entered.name, myLook),
     notice: noticeText(netStatus),
   });
 }
 
-/** others 명단에 맞춰 메시·이름표를 만들고 지우고, 바뀐 이름을 이름표에 옮긴다 */
+/** others 명단에 맞춰 메시·이름표를 만들고 지우고, 바뀐 이름·외형을 옮긴다 */
 function syncViews(): void {
   for (const [id, v] of views) {
     if (others.players.has(id)) continue;
@@ -374,13 +349,15 @@ function syncViews(): void {
     const view = views.get(id);
     if (view) {
       setTag(view.head, r.name);
+      const key = lookKey(r.look);
+      if (key !== view.lookKey) views.set(id, { ...view, tex: avatarTextures(r.look), lookKey: key });
       continue;
     }
-    const tex = avatarTextures(colorFor(id));
+    const tex = avatarTextures(r.look);
     const mat = new THREE.MeshBasicMaterial({ map: tex[r.at.dir], alphaTest: 0.5 });
     const mesh = new THREE.Mesh(avatarGeo, mat);
     scene.add(mesh);
-    views.set(id, { mesh, mat, tex, head: makeHead(r.name) });
+    views.set(id, { mesh, mat, tex, lookKey: lookKey(r.look), head: makeHead(r.name) });
   }
 }
 
@@ -395,7 +372,7 @@ function startNet(e: Entered): void {
       const at = here();
       lastSent = spotKey(at);
       // 이름은 지금 것 — 끊긴 사이 바꾼 이름도 다시 붙을 때 실린다
-      return { t: 'hello', name: entered?.name ?? e.name, at };
+      return { t: 'hello', name: entered?.name ?? e.name, at, look: myLook };
     },
     (msg) => {
       if (msg.t === 'chat') {
@@ -443,7 +420,8 @@ function enterLobby(e: Entered): void {
   entered = e;
   // 주소창에 방 코드를 남겨 둔다 — 새로고침·게임 복귀 URL(returnUrl 이 location.href 를 쓴다)이 같은 방으로 오게
   history.replaceState(history.state, '', withRoom(location.href, e.room));
-  hud = showHud({ room: e.room, name: e.name, lobbyHref: location.href, onRename: rename, onLeave: leaveLobby,
+  hud = showHud({ room: e.room, name: e.name, look: myLook, lobbyHref: location.href, onRename: rename, onLook: changeLook,
+    onLeave: leaveLobby,
     onOpen: () => {
       held.length = 0;
       tapped = null;
@@ -461,6 +439,13 @@ function rename(name: string): void {
   entered = { ...entered, name };
   if (myHead) setTag(myHead, name);
   conn?.send({ t: 'rename', name }); // 끊겨 있으면 보내지 않는다 — 다시 붙을 때 hello 가 싣는다
+  refreshStatus();
+}
+
+/** 꾸미기 창에서 외형을 바꿨다 — 내 캐릭터는 다음 프레임부터, 남에게는 look, 다시 붙을 때는 hello 가 싣는다 */
+function changeLook(look: Look): void {
+  myLook = look;
+  conn?.send({ t: 'look', look });
   refreshStatus();
 }
 
@@ -585,7 +570,7 @@ renderer.setAnimationLoop((now) => {
   const x = from.x + (pos.x - from.x) * t;
   const y = from.y + (pos.y - from.y) * t;
   placeAvatar(player, x, y);
-  playerMat.map = (others.me === null ? MY_TEX : avatarTextures(colorFor(others.me)))[facing];
+  playerMat.map = avatarTextures(myLook)[facing];
 
   others = advance(others, dt, STEP_MS);
   for (const [id, r] of others.players) {

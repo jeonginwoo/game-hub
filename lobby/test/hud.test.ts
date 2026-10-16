@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { Spot } from '../../server/src/protocol';
+import { DEFAULT_LOOK, type Look, type Spot } from '../../server/src/protocol';
 import { noticeText, peopleCount, rosterRows } from '../src/hud';
-import { applyMsg, colorFor, NO_OTHERS, type Others } from '../src/others';
+import { bodyColor } from '../src/look';
+import { applyMsg, NO_OTHERS, type Others } from '../src/others';
 
 const at: Spot = { x: 1, y: 1, dir: 'down' };
+const look = (body: number): Look => ({ ...DEFAULT_LOOK, body });
 
 function room(): Others {
   // 서버 명단은 들어온 순서 — 나(b)는 가운데
@@ -12,38 +14,43 @@ function room(): Others {
     id: 'b',
     owner: 'a',
     players: [
-      { id: 'a', name: '영희', ...at },
-      { id: 'b', name: '철수', ...at },
-      { id: 'c', name: '민수', ...at },
+      { id: 'a', name: '영희', ...at, look: look(1) },
+      { id: 'b', name: '철수', ...at, look: look(2) },
+      { id: 'c', name: '민수', ...at, look: look(3) },
     ],
   });
 }
 
 describe('rosterRows', () => {
   it('나를 맨 위에, 나머지는 들어온 순서대로 — 몸 색은 화면 속 캐릭터와 같게', () => {
-    expect(rosterRows(room(), '철수', '#5e81ac')).toEqual([
-      { id: 'b', name: '철수', color: '#5e81ac', mine: true, owner: false },
-      { id: 'a', name: '영희', color: colorFor('a'), mine: false, owner: true },
-      { id: 'c', name: '민수', color: colorFor('c'), mine: false, owner: false },
+    expect(rosterRows(room(), '철수', look(4))).toEqual([
+      { id: 'b', name: '철수', color: bodyColor(look(4)), mine: true, owner: false },
+      { id: 'a', name: '영희', color: bodyColor(look(1)), mine: false, owner: true },
+      { id: 'c', name: '민수', color: bodyColor(look(3)), mine: false, owner: false },
     ]);
+  });
+
+  it('남이 외형을 바꾸면 점 색도 따른다', () => {
+    const s = applyMsg(room(), { t: 'look', id: 'c', look: look(5) });
+    expect(rosterRows(s, '철수', look(4))[2]?.color).toBe(bodyColor(look(5)));
   });
 
   it('바뀐 이름·새로 온 사람을 따른다', () => {
     let s = applyMsg(room(), { t: 'rename', id: 'a', name: '영희2' });
-    s = applyMsg(s, { t: 'join', player: { id: 'd', name: '지수', ...at } });
-    expect(rosterRows(s, '철수', '#000').map((r) => r.name)).toEqual(['철수', '영희2', '민수', '지수']);
+    s = applyMsg(s, { t: 'join', player: { id: 'd', name: '지수', ...at, look: DEFAULT_LOOK } });
+    expect(rosterRows(s, '철수', DEFAULT_LOOK).map((r) => r.name)).toEqual(['철수', '영희2', '민수', '지수']);
   });
 
   it('방장이 바뀌면 왕관도 옮긴다 — 내가 방장이 될 수도 있다', () => {
     const s = applyMsg(applyMsg(room(), { t: 'leave', id: 'a' }), { t: 'owner', id: 'b' });
-    expect(rosterRows(s, '철수', '#000').map((r) => [r.name, r.owner])).toEqual([
+    expect(rosterRows(s, '철수', DEFAULT_LOOK).map((r) => [r.name, r.owner])).toEqual([
       ['철수', true],
       ['민수', false],
     ]);
   });
 
   it('welcome 전에는 나 하나', () => {
-    expect(rosterRows(NO_OTHERS, '철수', '#000')).toEqual([{ id: '', name: '철수', color: '#000', mine: true, owner: false }]);
+    expect(rosterRows(NO_OTHERS, '철수', DEFAULT_LOOK)).toEqual([{ id: '', name: '철수', color: bodyColor(DEFAULT_LOOK), mine: true, owner: false }]);
   });
 });
 

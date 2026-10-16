@@ -1,7 +1,7 @@
 // 로비 명단 — 방 하나의 접속자 목록과 중계, 그리고 방 코드별 묶음. 전송(ws)과 분리한 순수 모듈이라 소켓 없이 단위 테스트한다.
 // 위치는 클라이언트 권위(결정 2026-10-09): 받은 위치를 그대로 기록하고 다른 사람에게 전한다.
 // 방장은 서버가 정한다(결정 2026-10-16): 처음 들어온 사람, 나가면 남은 사람 중 가장 먼저 들어온 사람.
-import type { ClientMsg, Player, ServerMsg } from './protocol.ts';
+import type { ClientMsg, Look, Player, ServerMsg } from './protocol.ts';
 
 export interface Peer {
   send(msg: ServerMsg): void;
@@ -10,6 +10,10 @@ export interface Peer {
 // 채팅 도배 막기 — 한 사람이 CHAT_WINDOW_MS 안에 CHAT_BURST 줄까지. 넘친 줄은 조용히 버린다
 export const CHAT_BURST = 5;
 export const CHAT_WINDOW_MS = 5_000;
+
+function sameLook(a: Look, b: Look): boolean {
+  return a.body === b.body && a.hair === b.hair && a.hat === b.hat && a.beard === b.beard;
+}
 
 /** 지금 시각(ms) — 테스트에서 고정값을 넣는다 */
 export type Clock = () => number;
@@ -40,7 +44,7 @@ export class Roster {
    */
   join(peer: Peer, hello: Extract<ClientMsg, { t: 'hello' }>): string {
     const id = `p${this.nextId++}`;
-    const info: Player = { id, name: hello.name, ...hello.at };
+    const info: Player = { id, name: hello.name, ...hello.at, look: hello.look };
     this.broadcast({ t: 'join', player: info });
     this.players.set(id, { info, peer, chats: [] });
     this.ownerId ??= id;
@@ -84,6 +88,11 @@ export class Roster {
         if (msg.name === me.info.name) return;
         me.info = { ...me.info, name: msg.name };
         this.broadcast({ t: 'rename', id, name: msg.name }, id);
+        return;
+      case 'look':
+        if (sameLook(msg.look, me.info.look)) return;
+        me.info = { ...me.info, look: msg.look };
+        this.broadcast({ t: 'look', id, look: msg.look }, id);
         return;
       case 'hello':
         return;

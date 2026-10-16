@@ -70,6 +70,15 @@
       .hub-person-me { color: #a3adc2; font-size: 12px; }
       .hub-person-crown { display: flex; color: #ebcb8b; }
       .hub-person-crown svg { width: 14px; height: 14px; }
+      /* 꾸미기 창 — 48×64 그림을 2배로, 픽셀 그대로 */
+      .hub-look-preview {
+        align-self: center; width: 96px; height: 128px; image-rendering: pixelated; border-radius: 8px;
+        background: rgb(0 0 0 / 0.2);
+      }
+      .hub-look-row { align-items: center; }
+      .hub-look-part { flex: none; width: 52px; color: #a3adc2; font-size: 12px; }
+      .hub-look-value { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; }
+      .hub-look-step { flex: none; padding: 4px 8px; }
       /* 위쪽 가운데 연결 알림 — 열려 있으면 숨김 */
       .hub-notice {
         position: fixed; top: 12px; left: 50%; transform: translateX(-50%); padding: 6px 12px; border-radius: 10px;

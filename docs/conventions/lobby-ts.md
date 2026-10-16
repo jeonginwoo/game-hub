@@ -20,11 +20,13 @@
 - **`main.ts` is wiring only**: scene setup, input, the animation loop. It calls the pure
   modules and holds the mutable state. When a branch in `main.ts` starts deciding
   something, move the decision into a pure module.
-- **HTML UI over the canvas** (entry screen, top-right button bar, chat box) is wiring too, each in
-  its own module (`entry-screen.ts`, `hud-bar.ts`, `chat-box.ts`); what to show is decided in a pure
-  module (`room.ts`, `hud.ts`, `chat.ts`). Icons are inline SVG drawn in code, not emoji. Text goes in
+- **HTML UI over the canvas** (entry screen, top-right button bar with the look/people/settings
+  panels, chat box) is wiring too, each in its own module (`entry-screen.ts`, `hud-bar.ts`,
+  `chat-box.ts`); what to show is decided in a pure module (`room.ts`, `hud.ts`, `chat.ts`, `look.ts`). Icons are inline SVG drawn in code, not emoji. Text goes in
   with `textContent`, never `innerHTML`. Storage (`localStorage`) is read/written inside
   `try/catch` and the lobby works without it. Styles live in `index.html` (`hub-` classes).
+- **Character drawing** is `avatar-art.ts` (2d canvas only, no `three`): a look (`look.ts` — choice
+  indices, colours and labels) → one 48×64 frame. `main.ts` turns frames into textures, cached per look.
 - **Networking** goes through `net.ts` only (the one file to change if the transport
   changes); every received message passes `parseServerMsg`. What the messages mean for the
   scene is the pure `others.ts`. Name tags and chat bubbles are DOM (`hub-head`, `textContent`) placed

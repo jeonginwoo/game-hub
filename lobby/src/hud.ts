@@ -1,22 +1,24 @@
-// 로비 오른쪽 위 버튼 줄(사람·설정)이 보일 것 — 접속자 목록 순서, 인원, 연결 알림. Three.js·DOM 과 무관한 순수 함수.
+// 로비 오른쪽 위 버튼 줄(꾸미기·사람·설정)이 보일 것 — 접속자 목록 순서, 인원, 연결 알림. Three.js·DOM 과 무관한 순수 함수.
 // (결정 2026-10-16: 로비 정보는 오른쪽 위 버튼 둘로)
+import type { Look } from '../../server/src/protocol';
+import { bodyColor } from './look';
 import type { NetStatus } from './net';
-import { colorFor, type Others } from './others';
+import type { Others } from './others';
 
 export interface RosterRow {
   readonly id: string; // welcome 전의 나는 ''
   readonly name: string;
-  readonly color: string; // 화면 속 몸 색 — 목록과 캐릭터를 맞춰 보게
+  readonly color: string; // 화면 속 몸 색(외형) — 목록과 캐릭터를 맞춰 보게
   readonly mine: boolean;
   readonly owner: boolean; // 방장 — 목록에 왕관
 }
 
 /** 접속자 목록 — 나를 맨 위에, 나머지는 들어온 순서(서버 명단·join 순서)대로 */
-export function rosterRows(others: Others, myName: string, myColor: string): readonly RosterRow[] {
+export function rosterRows(others: Others, myName: string, myLook: Look): readonly RosterRow[] {
   const isOwner = (id: string | null): boolean => id !== null && id === others.owner;
-  const rows: RosterRow[] = [{ id: others.me ?? '', name: myName, color: myColor, mine: true, owner: isOwner(others.me) }];
+  const rows: RosterRow[] = [{ id: others.me ?? '', name: myName, color: bodyColor(myLook), mine: true, owner: isOwner(others.me) }];
   for (const r of others.players.values()) {
-    rows.push({ id: r.id, name: r.name, color: colorFor(r.id), mine: false, owner: isOwner(r.id) });
+    rows.push({ id: r.id, name: r.name, color: bodyColor(r.look), mine: false, owner: isOwner(r.id) });
   }
   return rows;
 }

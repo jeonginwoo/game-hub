@@ -1,9 +1,36 @@
-// 로비 오른쪽 위 버튼 줄 — 사람 버튼(인원 + 접속자 목록)과 설정 버튼(초대 코드·이름 변경·로비 나가기), 위쪽 가운데 연결 알림.
-// DOM 연결만 — 무엇을 보일지는 hud.ts, 이름·주소 판정은 room.ts (결정 2026-10-16: 로비 정보는 오른쪽 위 버튼 둘로).
-// 화면 글자는 모두 textContent 로 넣는다.
+// 로비 오른쪽 위 버튼 줄 — 꾸미기 버튼(캐릭터 외형), 사람 버튼(인원 + 접속자 목록), 설정 버튼(초대 코드·이름 변경·로비 나가기),
+// 위쪽 가운데 연결 알림. DOM 연결만 — 무엇을 보일지는 hud.ts, 이름·주소 판정은 room.ts, 외형 선택지는 look.ts
+// (결정 2026-10-16: 로비 정보는 오른쪽 위 버튼 줄로 · 캐릭터 꾸미기). 화면 글자는 모두 textContent 로 넣는다.
+import type { Look } from '../../server/src/protocol';
+import { drawAvatar } from './avatar-art';
 import { el, saveName } from './entry-screen';
 import type { RosterRow } from './hud';
+import { AVATAR_PX } from './layers';
+import { choiceOf, cycleLook, LOOK_PARTS, lookFromStorage } from './look';
 import { inviteUrl, renameFromInput } from './room';
+
+const LOOK_KEY = 'game-hub:look';
+
+/** 저장된 외형 — 없거나 저장소를 못 쓰면 무작위(처음 온 사람). 그 무작위 외형도 바로 저장해 다음에 같게 */
+export function loadLook(): Look {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(LOOK_KEY);
+  } catch {
+    // 저장소를 못 쓰면 매번 무작위 — 이번 접속 동안은 같다
+  }
+  const look = lookFromStorage(raw, Math.random);
+  saveLook(look);
+  return look;
+}
+
+function saveLook(look: Look): void {
+  try {
+    localStorage.setItem(LOOK_KEY, JSON.stringify(look));
+  } catch {
+    // 저장 못 해도 이번 접속은 그대로
+  }
+}
 
 export interface HudView {
   readonly count: number | null;
@@ -20,14 +47,17 @@ export interface Hud {
 export interface HudOptions {
   readonly room: string;
   readonly name: string;
+  readonly look: Look;
   readonly lobbyHref: string;
   readonly onRename: (name: string) => void;
+  /** 꾸미기 창에서 부위 하나를 바꿀 때마다 — 저장은 이 창이 이미 했다 */
+  readonly onLook: (look: Look) => void;
   readonly onLeave: () => void;
   /** 창이 열릴 때 — 로비가 누르고 있던 방향키를 놓게 (열린 동안 keyup 전까지 계속 걷지 않게) */
   readonly onOpen: () => void;
 }
 
-type Panel = 'people' | 'settings';
+type Panel = 'look' | 'people' | 'settings';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -58,6 +88,11 @@ const PEOPLE_ICON: IconParts = [
 const GEAR_ICON: IconParts = [
   ['circle', { cx: '10', cy: '10', r: '7', fill: 'none', stroke: 'currentColor', 'stroke-width': '3', 'stroke-dasharray': '2.75 2.75' }],
   ['circle', { cx: '10', cy: '10', r: '4.5', fill: 'none', stroke: 'currentColor', 'stroke-width': '2.5' }],
+];
+
+// 셔츠 — 꾸미기 (결정 2026-10-16: 캐릭터 꾸미기)
+const SHIRT_ICON: IconParts = [
+  ['path', { d: 'M7 2.5 2 5l1.5 4.5L6 8.5V18h8V8.5l2.5 1L18 5l-5-2.5c-.4 1.4-1.6 2.3-3 2.3S7.4 3.9 7 2.5z', fill: 'currentColor' }],
 ];
 
 // 왕관 — 접속자 목록의 방장 표시 (결정 2026-10-16: 서버가 정한 방장)
@@ -92,21 +127,66 @@ function copyLink(button: HTMLButtonElement, link: string): void {
 
 export function showHud(opts: HudOptions): Hud {
   let current = opts.name;
+  let look = opts.look;
   let open: Panel | null = null;
 
   const root = el('div', 'hub-hud');
   const bar = el('div', 'hub-hud-bar');
+  const lookBtn = iconButton('hub-look-btn', '꾸미기', icon(SHIRT_ICON));
   const peopleBtn = iconButton('hub-people-btn', '접속자', icon(PEOPLE_ICON));
   const count = el('span', 'hub-people-count', '–');
   peopleBtn.append(count);
   const settingsBtn = iconButton('hub-settings-btn', '설정', icon(GEAR_ICON));
-  bar.append(peopleBtn, settingsBtn);
+  bar.append(lookBtn, peopleBtn, settingsBtn);
 
   // 접속자 목록
   const peoplePanel = el('div', 'hub-panel');
   peoplePanel.hidden = true;
   const list = el('ul', 'hub-people');
   peoplePanel.append(el('h2', 'hub-panel-title', '접속자'), list);
+
+  // 꾸미기 창 — 정면 미리보기 + 부위마다 ◀ 선택지 ▶. 누르는 즉시 바뀌고 저장된다 (저장 버튼 없음)
+  const lookPanel = el('div', 'hub-panel');
+  lookPanel.hidden = true;
+  const preview = el('canvas', 'hub-look-preview');
+  preview.width = AVATAR_PX.w;
+  preview.height = AVATAR_PX.h;
+  const previewCtx = preview.getContext('2d');
+  const choiceRows = LOOK_PARTS.map(([part, title]) => {
+    const prev = el('button', 'hub-btn hub-small hub-look-step', '◀');
+    prev.type = 'button';
+    prev.setAttribute('aria-label', `${title} 이전`);
+    const next = el('button', 'hub-btn hub-small hub-look-step', '▶');
+    next.type = 'button';
+    next.setAttribute('aria-label', `${title} 다음`);
+    const swatch = el('span', 'hub-person-dot');
+    const label = el('span', 'hub-look-label');
+    const value = el('span', 'hub-look-value');
+    value.append(swatch, label);
+    const row = el('div', 'hub-row hub-look-row');
+    row.append(el('span', 'hub-look-part', title), prev, value, next);
+    prev.addEventListener('click', () => setLook(cycleLook(look, part, -1)));
+    next.addEventListener('click', () => setLook(cycleLook(look, part, 1)));
+    return { part, swatch, label, row };
+  });
+  lookPanel.append(el('h2', 'hub-panel-title', '꾸미기'), preview, ...choiceRows.map((r) => r.row));
+
+  const drawLook = (): void => {
+    if (previewCtx) drawAvatar(previewCtx, 'down', look);
+    for (const r of choiceRows) {
+      const c = choiceOf(look, r.part);
+      r.label.textContent = c.label;
+      r.swatch.hidden = c.color === undefined;
+      r.swatch.style.background = c.color ?? ''; // look.ts 의 고정 색 표에서만 온다
+    }
+  };
+  const setLook = (next: Look): void => {
+    look = next;
+    saveLook(next);
+    drawLook();
+    opts.onLook(next);
+  };
+  drawLook();
 
   // 설정 창
   const settingsPanel = el('div', 'hub-panel');
@@ -138,7 +218,7 @@ export function showHud(opts: HudOptions): Hud {
     leaveBtn,
   );
 
-  root.append(bar, peoplePanel, settingsPanel);
+  root.append(bar, lookPanel, peoplePanel, settingsPanel);
   const notice = el('div', 'hub-notice');
   notice.hidden = true;
   document.body.append(root, notice);
@@ -146,8 +226,10 @@ export function showHud(opts: HudOptions): Hud {
   const show = (panel: Panel | null): void => {
     open = panel;
     if (panel !== null) opts.onOpen();
+    lookPanel.hidden = panel !== 'look';
     peoplePanel.hidden = panel !== 'people';
     settingsPanel.hidden = panel !== 'settings';
+    lookBtn.classList.toggle('hub-on', panel === 'look');
     peopleBtn.classList.toggle('hub-on', panel === 'people');
     settingsBtn.classList.toggle('hub-on', panel === 'settings');
     if (panel === 'settings') {
@@ -159,6 +241,7 @@ export function showHud(opts: HudOptions): Hud {
       document.activeElement.blur();
     }
   };
+  lookBtn.addEventListener('click', () => show(open === 'look' ? null : 'look'));
   peopleBtn.addEventListener('click', () => show(open === 'people' ? null : 'people'));
   settingsBtn.addEventListener('click', () => show(open === 'settings' ? null : 'settings'));
   // 창 밖을 누르면 닫는다 (맵·채팅창 포함)
@@ -202,7 +285,7 @@ export function showHud(opts: HudOptions): Hud {
       const items = view.rows.map((r) => {
         const li = el('li', r.mine ? 'hub-person hub-person-mine' : 'hub-person');
         const dot = el('span', 'hub-person-dot');
-        dot.style.background = r.color; // others.ts 의 고정 색 표에서만 온다
+        dot.style.background = r.color; // look.ts 의 고정 색 표에서만 온다
         li.append(dot, el('span', 'hub-person-name', r.name));
         if (r.owner) {
           const crown = el('span', 'hub-person-crown');
