@@ -11,11 +11,11 @@ import { loadName, showEntryScreen, type Entered } from './room/entry-screen';
 import { DOOR_GAMES, GAMES } from './data/games';
 import { noticeText, peopleCount, rosterRows } from './hud/hud';
 import { loadLook, showHud, type Hud } from './hud/hud-bar';
-import { AVATAR_PX, CELL_PX, drawZ, TILE_PX } from './world/layers';
+import { AVATAR_PX, CELL_PX, drawZ } from './world/layers';
 import { LOBBY_OBJECTS } from './data/lobby-objects';
 import { LOBBY_ROWS } from './data/lobby-map';
 import { lookKey } from './avatar/look';
-import { parseMap, type Pos } from './world/map';
+import { parseMap, TILE_CELLS, type Pos } from './world/map';
 import { facingOf, reversesWalk, stepHeld, type Dir } from './world/movement';
 import { connect, type Connection, type NetStatus } from './net/net';
 import { checkObjects, objectRect, objectZ, withSolidObjects, type MapObject } from './world/objects';
@@ -24,8 +24,8 @@ import { homeUrl, roomFromSearch, screenFor, withRoom } from './room/room';
 import { SHEET_PX, tileLook, type Cell, type Sheet } from './world/tiles';
 import { clampAxis } from './world/view';
 
-// 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 타일 = TILE_PX × VIEW_ZOOM). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
-// 1.5 면 한 타일 48px — 16px 타일(Ninja Adventure)은 원본 1px 이 화면 3px 로 고르다. 32px 기준 그림(임시 캐릭터)은 1.5배라 고르지 않다
+// 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 칸 = CELL_PX × VIEW_ZOOM). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
+// 1.5 면 한 칸 24px·그림 타일 48px — 16px 타일(Ninja Adventure)은 원본 1px 이 화면 3px 로 고르다. 32px 기준 그림(임시 캐릭터)은 1.5배라 고르지 않다
 const VIEW_ZOOM = 1.5;
 const STEP_MS = 80; // 한 칸 걷는 시간 (대각선은 거리만큼 √2 배) — 칸이 타일의 1/2 라 걷는 속도는 타일 하나에 160ms 그대로
 
@@ -61,7 +61,7 @@ function placeRect(mesh: THREE.Mesh, left: number, bottom: number, w: number, h:
   mesh.position.set(left + w / 2, -(bottom - h / 2), z);
 }
 
-// 배경 한 장 — 문자 맵의 타일마다 Ninja Adventure 시트(tiles.ts 가 고른 16px 칸)를 32px 로 키워 찍은 맵 크기 캔버스.
+// 배경 한 장 — 문자 맵의 칸마다 Ninja Adventure 시트(tiles.ts 가 고른 16px 칸)의 한 조각을 찍은 맵 크기 캔버스. 그림은 32px 로 키운 크기 그대로.
 // 물체도 같은 시트에서 잘라 쓴다. 캐릭터와 픽셀 밀도는 맞추지 않는다. 시트 세 장이 다 오기 전에는 비어 있다
 const TILE_SHEET_DIR = `${import.meta.env.BASE_URL}assets/ninja-adventure/`;
 const TILE_SHEET_FILE: Readonly<Record<Sheet, string>> = {
@@ -70,10 +70,9 @@ const TILE_SHEET_FILE: Readonly<Record<Sheet, string>> = {
   nature: 'TilesetNature.png',
 };
 
-/** 게임이 배정된 문인지(문의 왼쪽 위 칸) — 열린 문과 닫힌 문을 다르게 그린다 */
-function isOpenDoor(p: Pos): boolean {
-  const door = doorIndexAt(map, p);
-  return door !== undefined && gameAtDoor(door, GAMES, DOOR_GAMES) !== undefined;
+/** 그 번호의 문에 게임이 배정돼 있는지 — 열린 문과 닫힌 문을 다르게 그린다 */
+function isOpenDoor(door: number): boolean {
+  return gameAtDoor(door, GAMES, DOOR_GAMES) !== undefined;
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -89,14 +88,16 @@ function paintBackground(c: HTMLCanvasElement, sheets: Readonly<Record<Sheet, HT
   const g = c.getContext('2d');
   if (!g) throw new Error('2d 캔버스를 만들 수 없다');
   g.imageSmoothingEnabled = false;
-  const draw = (cell: Cell, x: number, y: number): void => {
-    g.drawImage(sheets[cell.sheet], cell.col * SHEET_PX, cell.row * SHEET_PX, SHEET_PX, SHEET_PX, x * TILE_PX, y * TILE_PX, TILE_PX, TILE_PX);
+  const src = SHEET_PX / TILE_CELLS; // 칸 하나가 시트에서 차지하는 px — 그림 크기는 그대로, 칸마다 한 조각
+  const draw = (cell: Cell, part: Pos, x: number, y: number): void => {
+    g.drawImage(sheets[cell.sheet], cell.col * SHEET_PX + part.x * src, cell.row * SHEET_PX + part.y * src, src, src,
+      x * CELL_PX, y * CELL_PX, CELL_PX, CELL_PX);
   };
-  for (let y = 0; y < map.height / map.tileCells; y++) {
-    for (let x = 0; x < map.width / map.tileCells; x++) {
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
       const look = tileLook(map, { x, y }, isOpenDoor);
-      draw(look.base, x, y);
-      if (look.over) draw(look.over, x, y);
+      draw(look.base, look.part, x, y);
+      if (look.over) draw(look.over, look.part, x, y);
     }
   }
 }
@@ -107,7 +108,7 @@ function paintObject(c: HTMLCanvasElement, o: MapObject, sheets: Readonly<Record
   if (!g) throw new Error('2d 캔버스를 만들 수 없다');
   g.imageSmoothingEnabled = false;
   const s = o.sprite;
-  const cellSrc = SHEET_PX / map.tileCells; // 칸 하나가 시트에서 차지하는 px
+  const cellSrc = SHEET_PX / TILE_CELLS; // 칸 하나가 시트에서 차지하는 px
   g.drawImage(sheets[s.sheet], s.col * SHEET_PX, s.row * SHEET_PX, o.w * cellSrc, o.h * cellSrc, 0, 0, c.width, c.height);
 }
 

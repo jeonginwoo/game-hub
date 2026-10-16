@@ -3,7 +3,7 @@
 // 게임 URL 에는 `hub_return`·`hub_name`·`hub_room` 을 붙인다 (계약 v3).
 import { isRoomCode, normalizeName } from '../../../server/src/protocol';
 import type { GameEntry } from '../data/games';
-import type { Pos, TileMap } from '../world/map';
+import type { Door, Pos, TileMap } from '../world/map';
 import { DIR_DELTA, type Dir } from '../world/movement';
 
 const RETURN_PARAM = 'hub_return';
@@ -27,11 +27,9 @@ export function gameAtDoor(
   return id === undefined ? undefined : games.find((g) => g.id === id);
 }
 
-/** 칸 p 가 문 타일(왼쪽 위 칸부터 tileCells × tileCells 칸) 안이면 그 문 번호, 아니면 undefined */
+/** 칸 p 가 문(붙은 'D' 칸 묶음)이면 그 문 번호, 아니면 undefined */
 export function doorIndexAt(map: TileMap, p: Pos): number | undefined {
-  const n = map.tileCells;
-  const i = map.doors.findIndex((d) => p.x >= d.x && p.x < d.x + n && p.y >= d.y && p.y < d.y + n);
-  return i < 0 ? undefined : i;
+  return map.doorAt(p);
 }
 
 /**
@@ -79,28 +77,33 @@ export interface Spawn {
 }
 
 /**
- * 문(왼쪽 위 칸)에서 바로 걸어 나온 자리와 그때 보는 방향(문 반대쪽). 사방이 막혔으면 undefined.
- * 문 타일 바깥에 맞닿은 칸 — 위·아래로 나오면 문의 왼쪽 열, 좌우로 나오면 문의 아랫줄
+ * 문에서 바로 걸어 나온 자리와 그때 보는 방향(문 반대쪽). 사방이 막혔으면 undefined.
+ * 문을 감싼 사각형 바깥에 맞닿은 칸 — 위·아래로 나오면 문의 왼쪽 열, 좌우로 나오면 문의 아랫줄
  */
-export function doorFront(map: TileMap, door: Pos): Spawn | undefined {
-  const n = map.tileCells;
+export function doorFront(map: TileMap, door: Door): Spawn | undefined {
   for (const dir of FRONT_ORDER) {
     const d = DIR_DELTA[dir];
     const pos = {
-      x: d.x < 0 ? door.x - 1 : d.x > 0 ? door.x + n : door.x,
-      y: d.y < 0 ? door.y - 1 : d.y > 0 ? door.y + n : door.y + n - 1,
+      x: d.x < 0 ? door.x - 1 : d.x > 0 ? door.x + door.w : door.x,
+      y: d.y < 0 ? door.y - 1 : d.y > 0 ? door.y + door.h : door.y + door.h - 1,
     };
     if (map.tileAt(pos) === 'floor') return { pos, facing: dir };
   }
   return undefined;
 }
 
-/** 로드 시 등장 위치 — 유효한 `hub_door` 가 있으면 그 문 앞, 아니면 맵 시작점 */
-export function spawnFromSearch(map: TileMap, search: string): Spawn {
-  const fallback: Spawn = { pos: map.start, facing: 'down' };
+/** 시작점 중 하나 — rand 는 [0, 1) (기본 Math.random) */
+export function pickStart(map: TileMap, rand: () => number = Math.random): Pos {
+  const i = Math.min(Math.floor(rand() * map.starts.length), map.starts.length - 1);
+  const start = map.starts[i] ?? map.starts[0];
+  if (!start) throw new Error('시작점이 없다');
+  return start;
+}
+
+/** 로드 시 등장 위치 — 유효한 `hub_door` 가 있으면 그 문 앞, 아니면 시작점 중 무작위 하나 */
+export function spawnFromSearch(map: TileMap, search: string, rand: () => number = Math.random): Spawn {
   const raw = new URLSearchParams(search).get(DOOR_PARAM);
-  if (raw === null || !/^\d+$/.test(raw)) return fallback;
-  const door = map.doors[Number(raw)];
-  if (!door) return fallback;
-  return doorFront(map, door) ?? fallback;
+  const door = raw !== null && /^\d+$/.test(raw) ? map.doors[Number(raw)] : undefined;
+  const front = door && doorFront(map, door);
+  return front ?? { pos: pickStart(map, rand), facing: 'down' };
 }

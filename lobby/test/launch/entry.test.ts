@@ -4,6 +4,7 @@ import {
   doorIndexAt,
   entryUrl,
   gameAtDoor,
+  pickStart,
   returnUrl,
   spawnFromSearch,
   withoutDoorParam,
@@ -14,12 +15,13 @@ import { parseMap } from '../../src/world/map';
 
 const LOBBY = 'http://localhost:5173/';
 
-// 타일 하나 = 2×2 칸 — 문 (1, 0)·(5, 0)·(6, 2) 타일의 왼쪽 위 칸은 (2, 0)·(10, 0)·(12, 4)
+// 한 글자 = 한 칸. 문 0 = 붙은 D 네 칸 (1~2, 0~1) · 문 1 = (6, 0) · 문 2 = (7, 1) — 대각선은 붙은 것이 아니다. 시작점 둘
 const map = parseMap([
-  '#D###D#',
-  '#.....#',
-  '#..S..D',
-  '#######',
+  '#DD###D#',
+  '#DD###.D',
+  '#....S.#',
+  '#S.....#',
+  '########',
 ]);
 
 const games: GameEntry[] = [{ id: 'snake-race', title: '스네이크 레이스', url: '/games/snake-race/' }];
@@ -100,15 +102,11 @@ describe('withoutDoorParam', () => {
 });
 
 describe('문 위치·배정', () => {
-  it('문 번호는 맵에서 위→아래, 왼→오른 순', () => {
-    expect(doorIndexAt(map, { x: 2, y: 0 })).toBe(0);
-    expect(doorIndexAt(map, { x: 10, y: 0 })).toBe(1);
-    expect(doorIndexAt(map, { x: 12, y: 4 })).toBe(2);
-  });
-
-  it('문 타일의 네 칸 어디를 밟아도 그 문, 바로 바깥 칸은 아니다', () => {
-    for (const p of [{ x: 2, y: 0 }, { x: 3, y: 0 }, { x: 2, y: 1 }, { x: 3, y: 1 }]) expect(doorIndexAt(map, p)).toBe(0);
-    for (const p of [{ x: 1, y: 1 }, { x: 4, y: 1 }, { x: 2, y: 2 }]) expect(doorIndexAt(map, p)).toBeUndefined();
+  it('문 번호는 맵에서 위→아래, 왼→오른 순 — 붙은 D 칸은 한 문', () => {
+    for (const p of [{ x: 1, y: 0 }, { x: 2, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 1 }]) expect(doorIndexAt(map, p)).toBe(0);
+    expect(doorIndexAt(map, { x: 6, y: 0 })).toBe(1);
+    expect(doorIndexAt(map, { x: 7, y: 1 })).toBe(2);
+    for (const p of [{ x: 3, y: 0 }, { x: 1, y: 2 }, { x: 6, y: 1 }]) expect(doorIndexAt(map, p)).toBeUndefined();
   });
 
   it('배정된 게임만 찾고, 배정이 없거나 등록 표에 없는 id 면 undefined', () => {
@@ -121,19 +119,25 @@ describe('문 위치·배정', () => {
 describe('doorFront / spawnFromSearch', () => {
   it('문 앞 바닥 칸에서 문 반대쪽을 보고 선다', () => {
     // 아래로 나오면 문의 왼쪽 열 바로 밑, 왼쪽으로 나오면 문의 아랫줄 바로 왼쪽
-    expect(doorFront(map, { x: 2, y: 0 })).toEqual({ pos: { x: 2, y: 2 }, facing: 'down' });
-    expect(doorFront(map, { x: 12, y: 4 })).toEqual({ pos: { x: 11, y: 5 }, facing: 'left' });
+    expect(doorFront(map, { x: 1, y: 0, w: 2, h: 2 })).toEqual({ pos: { x: 1, y: 2 }, facing: 'down' });
+    expect(doorFront(map, { x: 7, y: 1, w: 1, h: 1 })).toEqual({ pos: { x: 6, y: 1 }, facing: 'left' });
   });
 
   it('hub_door 가 유효하면 그 문 앞', () => {
-    expect(spawnFromSearch(map, '?hub_door=1')).toEqual({ pos: { x: 10, y: 2 }, facing: 'down' });
+    expect(spawnFromSearch(map, '?hub_door=1')).toEqual({ pos: { x: 6, y: 1 }, facing: 'down' });
   });
 
-  it('없거나 잘못된 hub_door 는 시작점', () => {
-    const start = { pos: map.start, facing: 'down' };
+  it('없거나 잘못된 hub_door 는 시작점 중 하나', () => {
     for (const s of ['', '?room=1', '?hub_door=9', '?hub_door=-1', '?hub_door=1.5', '?hub_door=abc', '?hub_door=']) {
-      expect(spawnFromSearch(map, s)).toEqual(start);
+      expect(spawnFromSearch(map, s, () => 0)).toEqual({ pos: { x: 5, y: 2 }, facing: 'down' });
+      expect(spawnFromSearch(map, s, () => 0.99)).toEqual({ pos: { x: 1, y: 3 }, facing: 'down' });
     }
+  });
+
+  it('시작점은 rand 로 고르고, 맵의 시작점 밖으로 나가지 않는다', () => {
+    expect(pickStart(map, () => 0)).toEqual({ x: 5, y: 2 });
+    expect(pickStart(map, () => 0.5)).toEqual({ x: 1, y: 3 });
+    expect(pickStart(map, () => 1)).toEqual({ x: 1, y: 3 }); // [0, 1) 를 벗어난 값도 마지막 것으로
   });
 });
 

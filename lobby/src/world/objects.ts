@@ -73,7 +73,7 @@ export function checkObjects(map: TileMap, objects: readonly MapObject[]): void 
       }
     }
     for (const p of solidCells(o)) {
-      const isStart = p.x === map.start.x && p.y === map.start.y;
+      const isStart = map.starts.some((s) => s.x === p.x && s.y === p.y);
       if (map.tileAt(p) === 'door' || isStart) throw new Error(`물체 '${o.id}' 가 (${p.x}, ${p.y}) 의 문·시작점을 막는다`);
     }
   }

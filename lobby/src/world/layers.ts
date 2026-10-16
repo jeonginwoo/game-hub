@@ -6,7 +6,7 @@ import { TILE_CELLS } from './map';
 export type Layer = 'background' | 'floor' | 'sorted' | 'top' | 'foreground';
 
 export const CELL_PX = 16; // 한 칸(걷기·충돌·월드 좌표 1)의 픽셀 크기
-export const TILE_PX = CELL_PX * TILE_CELLS; // 타일(문자 맵 한 글자·배경 그림 한 장)의 픽셀 크기 — 32 (ZEP 타일)
+export const TILE_PX = CELL_PX * TILE_CELLS; // 그림 타일(시트 한 칸을 키운 크기)의 픽셀 크기 — 32 (ZEP 타일), 칸 2×2 에 걸친다
 export const AVATAR_PX: { readonly w: number; readonly h: number } = { w: 48, h: 64 }; // 캐릭터 한 프레임 — 가로 3칸·세로 4칸, 발이 칸 아래 가운데
 
 const LAYER_BASE: Readonly<Record<Layer, number>> = {

@@ -24,7 +24,7 @@ describe('objectZ', () => {
 });
 
 describe('checkObjects', () => {
-  const map = parseMap(['#####', '#S..#', '#####'], 1);
+  const map = parseMap(['#####', '#S..#', '#####']);
 
   it('맵 안의 물체는 통과한다', () => {
     expect(() => checkObjects(map, [{ ...tree, x: 0, y: 2, w: 5, h: 3 }])).not.toThrow();
@@ -54,7 +54,7 @@ describe('checkObjects', () => {
 });
 
 describe('solidCells · withSolidObjects', () => {
-  const map = parseMap(['#####', '#S..#', '#...#', '#####'], 1);
+  const map = parseMap(['#####', '#S..#', '#...#', '#####']);
   const post: MapObject = { ...tree, x: 2, y: 2, w: 2, h: 2, solid: [{ x: 0, y: 0 }, { x: 1, y: 0 }] };
 
   it('solid 는 왼쪽 아래 칸 기준 — x 는 오른쪽, y 는 위쪽', () => {
