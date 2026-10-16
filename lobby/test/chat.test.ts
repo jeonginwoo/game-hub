@@ -5,6 +5,7 @@ import { applyMsg, NO_OTHERS } from '../src/others';
 const others = applyMsg(NO_OTHERS, {
   t: 'welcome',
   id: 'a',
+  owner: 'a',
   players: [
     { id: 'a', name: '나', x: 1, y: 1, dir: 'down' },
     { id: 'b', name: '영희', x: 2, y: 2, dir: 'down' },

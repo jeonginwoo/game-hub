@@ -10,6 +10,7 @@ function room(): Others {
   return applyMsg(NO_OTHERS, {
     t: 'welcome',
     id: 'b',
+    owner: 'a',
     players: [
       { id: 'a', name: '영희', ...at },
       { id: 'b', name: '철수', ...at },
@@ -21,9 +22,9 @@ function room(): Others {
 describe('rosterRows', () => {
   it('나를 맨 위에, 나머지는 들어온 순서대로 — 몸 색은 화면 속 캐릭터와 같게', () => {
     expect(rosterRows(room(), '철수', '#5e81ac')).toEqual([
-      { id: 'b', name: '철수', color: '#5e81ac', mine: true },
-      { id: 'a', name: '영희', color: colorFor('a'), mine: false },
-      { id: 'c', name: '민수', color: colorFor('c'), mine: false },
+      { id: 'b', name: '철수', color: '#5e81ac', mine: true, owner: false },
+      { id: 'a', name: '영희', color: colorFor('a'), mine: false, owner: true },
+      { id: 'c', name: '민수', color: colorFor('c'), mine: false, owner: false },
     ]);
   });
 
@@ -33,8 +34,16 @@ describe('rosterRows', () => {
     expect(rosterRows(s, '철수', '#000').map((r) => r.name)).toEqual(['철수', '영희2', '민수', '지수']);
   });
 
+  it('방장이 바뀌면 왕관도 옮긴다 — 내가 방장이 될 수도 있다', () => {
+    const s = applyMsg(applyMsg(room(), { t: 'leave', id: 'a' }), { t: 'owner', id: 'b' });
+    expect(rosterRows(s, '철수', '#000').map((r) => [r.name, r.owner])).toEqual([
+      ['철수', true],
+      ['민수', false],
+    ]);
+  });
+
   it('welcome 전에는 나 하나', () => {
-    expect(rosterRows(NO_OTHERS, '철수', '#000')).toEqual([{ id: '', name: '철수', color: '#000', mine: true }]);
+    expect(rosterRows(NO_OTHERS, '철수', '#000')).toEqual([{ id: '', name: '철수', color: '#000', mine: true, owner: false }]);
   });
 });
 

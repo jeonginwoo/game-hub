@@ -6,13 +6,14 @@ const spot = (x: number, y: number, dir: Spot['dir'] = 'down'): Spot => ({ x, y,
 const player = (id: string, x: number, y: number): Player => ({ id, name: id.toUpperCase(), ...spot(x, y) });
 
 function withB(): Others {
-  return applyMsg(NO_OTHERS, { t: 'welcome', id: 'a', players: [player('a', 1, 1), player('b', 5, 5)] });
+  return applyMsg(NO_OTHERS, { t: 'welcome', id: 'a', owner: 'a', players: [player('a', 1, 1), player('b', 5, 5)] });
 }
 
 describe('applyMsg', () => {
   it('welcome — 나를 뺀 명단', () => {
     const s = withB();
     expect(s.me).toBe('a');
+    expect(s.owner).toBe('a');
     expect([...s.players.keys()]).toEqual(['b']);
     expect(remotePos(s.players.get('b') ?? fail())).toEqual({ x: 5, y: 5 });
   });
@@ -61,6 +62,12 @@ describe('applyMsg', () => {
     const walking = s.players.get('b') ?? fail();
     s = applyMsg(s, { t: 'rename', id: 'b', name: '비' });
     expect(s.players.get('b')).toEqual({ ...walking, name: '비' });
+  });
+
+  it('owner 로 방장이 바뀐다', () => {
+    const s = applyMsg(withB(), { t: 'owner', id: 'b' });
+    expect(s.owner).toBe('b');
+    expect([...s.players.keys()]).toEqual(['b']);
   });
 
   it('모르는 id 의 move·leave·rename, 나 자신의 join 은 무시', () => {

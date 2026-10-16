@@ -8,12 +8,16 @@ export interface RosterRow {
   readonly name: string;
   readonly color: string; // 화면 속 몸 색 — 목록과 캐릭터를 맞춰 보게
   readonly mine: boolean;
+  readonly owner: boolean; // 방장 — 목록에 왕관
 }
 
 /** 접속자 목록 — 나를 맨 위에, 나머지는 들어온 순서(서버 명단·join 순서)대로 */
 export function rosterRows(others: Others, myName: string, myColor: string): readonly RosterRow[] {
-  const rows: RosterRow[] = [{ id: others.me ?? '', name: myName, color: myColor, mine: true }];
-  for (const r of others.players.values()) rows.push({ id: r.id, name: r.name, color: colorFor(r.id), mine: false });
+  const isOwner = (id: string | null): boolean => id !== null && id === others.owner;
+  const rows: RosterRow[] = [{ id: others.me ?? '', name: myName, color: myColor, mine: true, owner: isOwner(others.me) }];
+  for (const r of others.players.values()) {
+    rows.push({ id: r.id, name: r.name, color: colorFor(r.id), mine: false, owner: isOwner(r.id) });
+  }
   return rows;
 }
 

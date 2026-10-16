@@ -60,6 +60,11 @@ const GEAR_ICON: IconParts = [
   ['circle', { cx: '10', cy: '10', r: '4.5', fill: 'none', stroke: 'currentColor', 'stroke-width': '2.5' }],
 ];
 
+// 왕관 — 접속자 목록의 방장 표시 (결정 2026-10-16: 서버가 정한 방장)
+const CROWN_ICON: IconParts = [
+  ['path', { d: 'M2.5 15.5 1.5 6l5 3.5L10 3l3.5 6.5 5-3.5-1 9.5z', fill: 'currentColor' }],
+];
+
 function iconButton(className: string, label: string, svg: SVGSVGElement): HTMLButtonElement {
   const b = el('button', `hub-icon-btn ${className}`);
   b.type = 'button';
@@ -199,6 +204,12 @@ export function showHud(opts: HudOptions): Hud {
         const dot = el('span', 'hub-person-dot');
         dot.style.background = r.color; // others.ts 의 고정 색 표에서만 온다
         li.append(dot, el('span', 'hub-person-name', r.name));
+        if (r.owner) {
+          const crown = el('span', 'hub-person-crown');
+          crown.title = '방장';
+          crown.append(icon(CROWN_ICON));
+          li.append(crown);
+        }
         if (r.mine) li.append(el('span', 'hub-person-me', '(나)'));
         return li;
       });

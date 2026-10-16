@@ -21,12 +21,13 @@ export type ClientMsg =
   | { readonly t: 'rename'; readonly name: string }; // 로비 안 닉네임 변경 — 보낸 사람은 이미 바꿨으므로 돌려받지 않는다
 
 export type ServerMsg =
-  | { readonly t: 'welcome'; readonly id: string; readonly players: readonly Player[] } // players 에 본인 포함
+  | { readonly t: 'welcome'; readonly id: string; readonly owner: string; readonly players: readonly Player[] } // players 에 본인 포함, owner 는 방장 id
   | { readonly t: 'join'; readonly player: Player }
   | { readonly t: 'move'; readonly id: string; readonly at: Spot }
   | { readonly t: 'leave'; readonly id: string }
   | { readonly t: 'chat'; readonly id: string; readonly text: string }
-  | { readonly t: 'rename'; readonly id: string; readonly name: string };
+  | { readonly t: 'rename'; readonly id: string; readonly name: string }
+  | { readonly t: 'owner'; readonly id: string }; // 방장이 바뀜 — 방장이 나가 승계될 때 (결정 2026-10-16: 서버가 정한 방장)
 
 export const NAME_MAX = 16; // 글자
 export const COORD_MAX = 1000; // 타일 — 맵 크기를 서버가 모르므로 넉넉한 상한만 둔다
@@ -135,14 +136,14 @@ export function parseServerMsg(raw: string): ServerMsg | null {
   if (!isRecord(v)) return null;
   switch (v.t) {
     case 'welcome': {
-      if (typeof v.id !== 'string' || !Array.isArray(v.players)) return null;
+      if (typeof v.id !== 'string' || typeof v.owner !== 'string' || !Array.isArray(v.players)) return null;
       const players: Player[] = [];
       for (const p of v.players) {
         const player = parsePlayer(p);
         if (!player) return null;
         players.push(player);
       }
-      return { t: 'welcome', id: v.id, players };
+      return { t: 'welcome', id: v.id, owner: v.owner, players };
     }
     case 'join': {
       const player = parsePlayer(v.player);
@@ -159,6 +160,8 @@ export function parseServerMsg(raw: string): ServerMsg | null {
       const text = typeof v.text === 'string' ? cleanChat(v.text) : '';
       return typeof v.id === 'string' && text ? { t: 'chat', id: v.id, text } : null;
     }
+    case 'owner':
+      return typeof v.id === 'string' ? { t: 'owner', id: v.id } : null;
     case 'rename':
       return typeof v.id === 'string' && typeof v.name === 'string' ? { t: 'rename', id: v.id, name: cleanName(v.name) } : null;
     default:

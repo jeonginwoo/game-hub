@@ -1,5 +1,6 @@
 // 로비 명단 — 방 하나의 접속자 목록과 중계, 그리고 방 코드별 묶음. 전송(ws)과 분리한 순수 모듈이라 소켓 없이 단위 테스트한다.
 // 위치는 클라이언트 권위(결정 2026-10-09): 받은 위치를 그대로 기록하고 다른 사람에게 전한다.
+// 방장은 서버가 정한다(결정 2026-10-16): 처음 들어온 사람, 나가면 남은 사람 중 가장 먼저 들어온 사람.
 import type { ClientMsg, Player, ServerMsg } from './protocol.ts';
 
 export interface Peer {
@@ -16,6 +17,7 @@ export type Clock = () => number;
 export class Roster {
   private readonly players = new Map<string, { info: Player; peer: Peer; chats: readonly number[] }>();
   private nextId = 1;
+  private ownerId: string | null = null;
 
   private readonly now: Clock;
 
@@ -27,6 +29,11 @@ export class Roster {
     return this.players.size;
   }
 
+  /** 지금 방장 id — 아무도 없으면 null */
+  get owner(): string | null {
+    return this.ownerId;
+  }
+
   /**
    * hello 를 보낸 접속자를 명단에 넣고 id 를 돌려준다.
    * 본인에게 welcome(본인 포함 명단), 나머지에게 join.
@@ -36,14 +43,23 @@ export class Roster {
     const info: Player = { id, name: hello.name, ...hello.at };
     this.broadcast({ t: 'join', player: info });
     this.players.set(id, { info, peer, chats: [] });
-    peer.send({ t: 'welcome', id, players: [...this.players.values()].map((p) => p.info) });
+    this.ownerId ??= id;
+    peer.send({ t: 'welcome', id, owner: this.ownerId, players: [...this.players.values()].map((p) => p.info) });
     return id;
   }
 
-  /** 모르는 id 는 무시 — 이미 나간 접속자의 늦은 메시지 */
+  /**
+   * 모르는 id 는 무시 — 이미 나간 접속자의 늦은 메시지.
+   * 방장이 나가면 leave 다음에 owner — 게임에 들어간 것(연결 끊김)도 나간 것이고, 돌아와도 새 접속이라 되찾지 않는다
+   */
   leave(id: string): void {
     if (!this.players.delete(id)) return;
     this.broadcast({ t: 'leave', id });
+    if (id !== this.ownerId) return;
+    // Map 은 넣은 순서를 지킨다 — 첫 번째가 가장 먼저 들어온 사람
+    const next = this.players.keys().next();
+    this.ownerId = next.done ? null : next.value;
+    if (this.ownerId !== null) this.broadcast({ t: 'owner', id: this.ownerId });
   }
 
   /** 명단에 든 뒤의 메시지. hello 를 또 보내면 무시한다 — 이름 바꾸기는 rename */

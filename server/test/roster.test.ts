@@ -20,6 +20,7 @@ describe('Roster', () => {
       {
         t: 'welcome',
         id: idb,
+        owner: ida,
         players: [
           { id: ida, name: 'A', ...spot(1, 1) },
           { id: idb, name: 'B', ...spot(2, 2) },
@@ -109,6 +110,59 @@ describe('Roster', () => {
     const count = b.got.length;
     roster.handle(ida, { t: 'rename', name: 'A' });
     expect(b.got.length).toBe(count);
+  });
+
+  it('처음 들어온 사람이 방장', () => {
+    const roster = new Roster();
+    const a = peer();
+    const ida = roster.join(a, { t: 'hello', name: 'A', at: spot(1, 1) });
+    expect(roster.owner).toBe(ida);
+    expect(a.got[0]).toMatchObject({ t: 'welcome', id: ida, owner: ida });
+  });
+
+  it('방장이 나가면 남은 사람 중 가장 먼저 들어온 사람에게 — leave 다음에 owner', () => {
+    const roster = new Roster();
+    const [a, b, c] = [peer(), peer(), peer()];
+    const ida = roster.join(a, { t: 'hello', name: 'A', at: spot(1, 1) });
+    const idb = roster.join(b, { t: 'hello', name: 'B', at: spot(2, 2) });
+    roster.join(c, { t: 'hello', name: 'C', at: spot(3, 3) });
+    roster.leave(ida);
+    expect(roster.owner).toBe(idb);
+    expect(c.got.slice(-2)).toEqual([
+      { t: 'leave', id: ida },
+      { t: 'owner', id: idb },
+    ]);
+    expect(b.got.at(-1)).toEqual({ t: 'owner', id: idb });
+  });
+
+  it('방장이 아닌 사람이 나가면 방장은 그대로, owner 를 보내지 않는다', () => {
+    const roster = new Roster();
+    const [a, b] = [peer(), peer()];
+    const ida = roster.join(a, { t: 'hello', name: 'A', at: spot(1, 1) });
+    const idb = roster.join(b, { t: 'hello', name: 'B', at: spot(2, 2) });
+    roster.leave(idb);
+    expect(roster.owner).toBe(ida);
+    expect(a.got.at(-1)).toEqual({ t: 'leave', id: idb });
+  });
+
+  it('옛 방장이 다시 들어와도 되찾지 않는다 — 새 접속은 새 사람', () => {
+    const roster = new Roster();
+    const [a, b, a2] = [peer(), peer(), peer()];
+    const ida = roster.join(a, { t: 'hello', name: 'A', at: spot(1, 1) });
+    const idb = roster.join(b, { t: 'hello', name: 'B', at: spot(2, 2) });
+    roster.leave(ida);
+    roster.join(a2, { t: 'hello', name: 'A', at: spot(1, 1) });
+    expect(roster.owner).toBe(idb);
+    expect(a2.got[0]).toMatchObject({ owner: idb });
+  });
+
+  it('모두 나가면 방장이 비고, 다음에 들어온 사람이 방장', () => {
+    const roster = new Roster();
+    const ida = roster.join(peer(), { t: 'hello', name: 'A', at: spot(1, 1) });
+    roster.leave(ida);
+    expect(roster.owner).toBeNull();
+    const idb = roster.join(peer(), { t: 'hello', name: 'B', at: spot(2, 2) });
+    expect(roster.owner).toBe(idb);
   });
 
   it('명단에 든 뒤의 hello 는 무시한다', () => {

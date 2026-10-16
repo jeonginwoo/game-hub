@@ -14,10 +14,11 @@ export interface Remote {
 
 export interface Others {
   readonly me: string | null; // welcome 전에는 null
+  readonly owner: string | null; // 방장 id — 나일 수도 있다. welcome 전에는 null
   readonly players: ReadonlyMap<string, Remote>;
 }
 
-export const NO_OTHERS: Others = { me: null, players: new Map() };
+export const NO_OTHERS: Others = { me: null, owner: null, players: new Map() };
 
 function standing(p: Player): Remote {
   return { id: p.id, name: p.name, at: { x: p.x, y: p.y, dir: p.dir }, fromX: p.x, fromY: p.y, t: 1, len: 1 };
@@ -43,7 +44,7 @@ export function applyMsg(state: Others, msg: ServerMsg): Others {
     case 'welcome': {
       const players = new Map<string, Remote>();
       for (const p of msg.players) if (p.id !== msg.id) players.set(p.id, standing(p));
-      return { me: msg.id, players };
+      return { me: msg.id, owner: msg.owner, players };
     }
     case 'join': {
       if (msg.player.id === state.me) return state;
@@ -71,6 +72,8 @@ export function applyMsg(state: Others, msg: ServerMsg): Others {
       players.set(msg.id, { ...r, name: msg.name });
       return { ...state, players };
     }
+    case 'owner':
+      return { ...state, owner: msg.id };
     case 'chat':
       return state; // 채팅은 chat.ts
   }
