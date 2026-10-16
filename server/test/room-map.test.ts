@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignDoor, buildRoom, checkObjects, OBJECT_SHAPES, objectRect, parseMap, parseRoomData, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
+import { assignDoor, buildRoom, checkObjects, MAX_OBJECTS, OBJECT_SHAPES, objectRect, parseMap, parseRoomData, placeObject, removeObject, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
 import { DEFAULT_ROOM, DEFAULT_TEMPLATE, ROOM_TEMPLATES, templateFor } from '../src/room-templates.ts';
 
 const tree: PlacedShape = { id: 'tree', x: 4, y: 5, w: 2, h: 3 };
@@ -178,6 +178,63 @@ describe('assignDoor', () => {
   it('문 칸이 아니거나 게임 id 형식이 틀리면 거부한다', () => {
     expect(() => assignDoor(data, { x: 2, y: 1 }, 'a')).toThrow(/문 칸이 아니다/);
     expect(() => assignDoor(data, { x: 6, y: 3 }, 'https://x')).toThrow(/게임 id/);
+  });
+});
+
+describe('placeObject', () => {
+  // 시작점 (1, 4). 나무 4×4 는 맨 아랫줄 가운데 두 칸(x+1, x+2)을 막는다
+  const data: RoomData = {
+    rows: ['###DD###', '#......#', '#......#', '#......#', '#S.....#', '########'],
+    objects: [{ id: 'p1', kind: 'yard', x: 1, y: 5 }],
+    doors: [],
+  };
+
+  it('물체를 끝에 더하고 안 쓰인 가장 작은 p 번호를 붙인다', () => {
+    const next = placeObject(data, 'tree', { x: 2, y: 3 });
+    expect(next.objects).toEqual([...data.objects, { id: 'p2', kind: 'tree', x: 2, y: 3 }]);
+    // p2 를 치우면 그 번호를 다시 쓴다
+    const again = placeObject(removeObject(next, 'p2'), 'tree', { x: 1, y: 3 });
+    expect(again.objects.at(-1)?.id).toBe('p2');
+  });
+
+  it('받은 방 데이터는 바꾸지 않는다', () => {
+    placeObject(data, 'tree', { x: 2, y: 3 });
+    expect(data.objects).toHaveLength(1);
+  });
+
+  it('solid 가 다른 물체의 solid 와 겹치거나 시작점을 막거나 맵 밖이면 거부한다', () => {
+    const one = placeObject(data, 'tree', { x: 2, y: 3 });
+    // 밑둥 (3, 3)·(4, 3) 에 (4, 3) 이 겹친다
+    expect(() => placeObject(one, 'tree', { x: 3, y: 3 })).toThrow(/겹친다/);
+    // 밑둥 (1, 4) 가 시작점
+    expect(() => placeObject(data, 'tree', { x: 0, y: 4 })).toThrow(/시작점을 막는다/);
+    expect(() => placeObject(data, 'tree', { x: 5, y: 3 })).toThrow(/맵 밖/);
+  });
+
+  it('solid 없는 물체는 무엇과도 겹쳐 놓인다', () => {
+    expect(placeObject(data, 'yard', { x: 1, y: 5 }).objects).toHaveLength(2);
+  });
+
+  it(`물체가 MAX_OBJECTS 개면 더 놓지 않는다`, () => {
+    const full: RoomData = { ...data, objects: Array.from({ length: MAX_OBJECTS }, (_, i) => ({ id: `y${i}`, kind: 'yard', x: 1, y: 5 })) };
+    expect(() => placeObject(full, 'yard', { x: 1, y: 5 })).toThrow(/더 놓을 수 없다/);
+  });
+});
+
+describe('removeObject', () => {
+  const data: RoomData = {
+    rows: ['#S.D#'],
+    objects: [{ id: 'a', kind: 'yard', x: 0, y: 0 }, { id: 'b', kind: 'yard', x: 0, y: 0 }],
+    doors: [],
+  };
+
+  it('그 id 물체만 치운다 — 받은 방 데이터는 그대로', () => {
+    expect(removeObject(data, 'a').objects).toEqual([{ id: 'b', kind: 'yard', x: 0, y: 0 }]);
+    expect(data.objects).toHaveLength(2);
+  });
+
+  it('없는 id 면 거부한다', () => {
+    expect(() => removeObject(data, 'zzz')).toThrow(/없다/);
   });
 });
 

@@ -208,7 +208,7 @@ function isInt(v: unknown): v is number {
   return typeof v === 'number' && Number.isInteger(v);
 }
 
-function isObjectKind(v: unknown): v is ObjectKind {
+export function isObjectKind(v: unknown): v is ObjectKind {
   return typeof v === 'string' && Object.hasOwn(OBJECT_SHAPES, v);
 }
 
@@ -277,4 +277,32 @@ export function assignDoor(data: RoomData, at: Pos, game: string | null): RoomDa
   const next: RoomData = { ...data, doors: game === null ? doors : [...doors, { x: at.x, y: at.y, game }] };
   buildRoom(next);
   return next;
+}
+
+/** 방 하나의 물체 수 상한 — 「물체 전시」 템플릿(종류마다 하나)이 들어가고도 넉넉하게. 방 데이터가 끝없이 커지지 않게 */
+export const MAX_OBJECTS = 1000;
+
+/** 놓은 물체의 id — p1, p2 … 중 아직 안 쓰인 가장 작은 번호. 템플릿의 id(종류 이름·tree-1 등)와 겹치지 않는다 */
+function freeObjectId(objects: readonly RoomObject[]): string {
+  const used = new Set(objects.map((o) => o.id));
+  let n = 1;
+  while (used.has(`p${n}`)) n++;
+  return `p${n}`;
+}
+
+/**
+ * 물체 하나를 놓은 새 방 데이터 — at 은 왼쪽 아래 칸, id 는 새로 붙인다. 결과는 buildRoom 으로 검사한다 —
+ * 맵 밖·문/시작점을 막는 solid·다른 물체의 solid 와 겹치는 solid 이거나 MAX_OBJECTS 개가 이미 있으면 throw (결정 2026-10-16: 물체 배치 편집)
+ */
+export function placeObject(data: RoomData, kind: ObjectKind, at: Pos): RoomData {
+  if (data.objects.length >= MAX_OBJECTS) throw new Error(`물체가 이미 ${MAX_OBJECTS} 개 — 더 놓을 수 없다`);
+  const next: RoomData = { ...data, objects: [...data.objects, { id: freeObjectId(data.objects), kind, x: at.x, y: at.y }] };
+  buildRoom(next);
+  return next;
+}
+
+/** id 물체를 치운 새 방 데이터 — 없는 id 면 throw. 치워서 검사에 걸리는 방은 없으므로 buildRoom 은 다시 돌리지 않는다 */
+export function removeObject(data: RoomData, id: string): RoomData {
+  if (!data.objects.some((o) => o.id === id)) throw new Error(`물체 '${id}' 가 없다`);
+  return { ...data, objects: data.objects.filter((o) => o.id !== id) };
 }
