@@ -2,7 +2,7 @@
 // 위치는 클라이언트 권위(결정 2026-10-09): 서버는 형식만 검사하고 명단 관리·중계만 한다. 좌표는 칸 단위(로비 타일의 1/2).
 // 방 데이터(맵·물체·문 배정)는 서버가 들고 welcome 에 실어 보낸다 (결정 2026-10-16: 방이 상태를 갖는다).
 // 방은 그 방을 만드는 hello 의 map(템플릿 id)으로 생긴다 — 이미 있는 방에 들어오는 hello 의 map 은 무시 (결정 2026-10-16: 맵 템플릿 + 맵 선택).
-import { parseRoomData, type RoomData } from './room-map.ts';
+import { isGameId, parseRoomData, type RoomData } from './room-map.ts';
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
 
@@ -40,7 +40,9 @@ export type ClientMsg =
   | { readonly t: 'move'; readonly at: Spot }
   | { readonly t: 'chat'; readonly text: string } // 같은 방 모두에게 — 보낸 사람에게도 돌아온다
   | { readonly t: 'rename'; readonly name: string } // 로비 안 닉네임 변경 — 보낸 사람은 이미 바꿨으므로 돌려받지 않는다
-  | { readonly t: 'look'; readonly look: Look }; // 외형 바꾸기 — rename 처럼 보낸 사람은 돌려받지 않는다
+  | { readonly t: 'look'; readonly look: Look } // 외형 바꾸기 — rename 처럼 보낸 사람은 돌려받지 않는다
+  // 문에 게임 배정 — (x, y) 는 그 문의 아무 칸, game null 은 배정 해제. 방장만 (결정 2026-10-16: 방장이 문마다 게임 고르기)
+  | { readonly t: 'door'; readonly x: number; readonly y: number; readonly game: string | null };
 
 export type ServerMsg =
   // players 에 본인 포함, owner 는 방장 id, room 은 이 방의 데이터 — 로비는 buildRoom 으로 다시 검사한다.
@@ -55,7 +57,9 @@ export type ServerMsg =
   | { readonly t: 'chat'; readonly id: string; readonly text: string }
   | { readonly t: 'rename'; readonly id: string; readonly name: string }
   | { readonly t: 'look'; readonly id: string; readonly look: Look }
-  | { readonly t: 'owner'; readonly id: string }; // 방장이 바뀜 — 방장이 나가 승계될 때 (결정 2026-10-16: 서버가 정한 방장)
+  | { readonly t: 'owner'; readonly id: string } // 방장이 바뀜 — 방장이 나가 승계될 때 (결정 2026-10-16: 서버가 정한 방장)
+  // 방 데이터가 바뀜(지금은 문 배정) — 보낸 방장에게도 간다. 로비는 welcome 처럼 buildRoom 으로 다시 검사한다
+  | { readonly t: 'room'; readonly room: RoomData };
 
 export const NAME_MAX = 16; // 글자
 export const COORD_MAX = 1000; // 칸 — 서버는 위치를 맵과 대조하지 않으므로 넉넉한 상한만 둔다
@@ -172,6 +176,12 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       const look = parseLook(v.look);
       return look ? { t: 'look', look } : null;
     }
+    case 'door': {
+      // 문 칸인지는 방 데이터를 아는 명단 몫(assignDoor) — 여기서는 모양만
+      const { x, y, game } = v;
+      if (!isCoord(x) || !isCoord(y) || (game !== null && !isGameId(game))) return null;
+      return { t: 'door', x, y, game };
+    }
     default:
       return null;
   }
@@ -227,6 +237,10 @@ export function parseServerMsg(raw: string): ServerMsg | null {
     case 'look': {
       const look = parseLook(v.look);
       return typeof v.id === 'string' && look ? { t: 'look', id: v.id, look } : null;
+    }
+    case 'room': {
+      const room = parseRoomData(v.room);
+      return room ? { t: 'room', room } : null;
     }
     default:
       return null;

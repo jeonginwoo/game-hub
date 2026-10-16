@@ -65,6 +65,8 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   remembered per room in `sessionStorage`, `mapKey`). When the room in `welcome` differs from what
   is drawn, `switchRoom` in `main.ts` throws the world away (`disposeWorld`), builds it again
   (`buildWorld`) and respawns; a room that fails `buildRoom` is logged and the current one kept.
+  A `room` message (the owner changed a door's game) goes through the same `switchRoom` without
+  respawning — it does not change the map rows, so the current cell stays valid.
 
 ## 2. Tests
 

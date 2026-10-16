@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LOOK, type ServerMsg, type Spot } from '../src/protocol.ts';
+import { DEFAULT_LOOK, type ClientMsg, type ServerMsg, type Spot } from '../src/protocol.ts';
 import { DEFAULT_ROOM, ROOM_TEMPLATES, type RoomTemplate } from '../src/room-templates.ts';
 import { CHAT_BURST, CHAT_WINDOW_MS, Rooms, Roster } from '../src/roster.ts';
 
@@ -207,6 +207,63 @@ describe('Roster', () => {
     const count = a.got.length;
     roster.handle(idb, { t: 'hello', name: 'C', at: spot(3, 3), look: DEFAULT_LOOK });
     expect(a.got.length).toBe(count);
+  });
+});
+
+describe('Roster — 문 배정', () => {
+  // 문 0 = 윗줄 (1~2, 0) 붙은 두 칸, 처음엔 배정 없음
+  const small: RoomTemplate = { id: 'small', name: '작은 방', room: { rows: ['#DD#', '#S.#', '####'], objects: [], doors: [] } };
+  const hello = (name: string): Extract<ClientMsg, { t: 'hello' }> => ({ t: 'hello', name, at: spot(1, 1), look: DEFAULT_LOOK });
+
+  function twoPeople(): { roster: Roster; a: ReturnType<typeof peer>; b: ReturnType<typeof peer>; ida: string; idb: string } {
+    const roster = new Roster(Date.now, small);
+    const [a, b] = [peer(), peer()];
+    const ida = roster.join(a, hello('A'));
+    const idb = roster.join(b, hello('B'));
+    return { roster, a, b, ida, idb };
+  }
+
+  it('방장이 문에 게임을 배정하면 보낸 방장 포함 모두에게 room', () => {
+    const { roster, a, b, ida } = twoPeople();
+    roster.handle(ida, { t: 'door', x: 2, y: 0, game: 'a-1' });
+    const room = { ...small.room, doors: [{ x: 2, y: 0, game: 'a-1' }] };
+    expect(a.got.at(-1)).toEqual({ t: 'room', room });
+    expect(b.got.at(-1)).toEqual({ t: 'room', room });
+  });
+
+  it('바뀐 방은 나중에 들어온 사람의 welcome 에 실린다 — map 은 템플릿 id 그대로', () => {
+    const { roster, ida } = twoPeople();
+    roster.handle(ida, { t: 'door', x: 1, y: 0, game: 'a-1' });
+    const c = peer();
+    roster.join(c, hello('C'));
+    expect(c.got[0]).toMatchObject({ t: 'welcome', map: 'small', room: { doors: [{ x: 1, y: 0, game: 'a-1' }] } });
+  });
+
+  it('null 이면 배정을 지운다', () => {
+    const { roster, a, ida } = twoPeople();
+    roster.handle(ida, { t: 'door', x: 1, y: 0, game: 'a-1' });
+    roster.handle(ida, { t: 'door', x: 2, y: 0, game: null });
+    expect(a.got.at(-1)).toEqual({ t: 'room', room: small.room });
+  });
+
+  it('방장이 아니면 버린다 — 승계 뒤에는 새 방장만', () => {
+    const { roster, a, b, ida, idb } = twoPeople();
+    roster.handle(idb, { t: 'door', x: 1, y: 0, game: 'a-1' });
+    expect(a.got.at(-1)?.t).not.toBe('room');
+    roster.leave(ida);
+    roster.handle(idb, { t: 'door', x: 1, y: 0, game: 'a-1' });
+    expect(b.got.at(-1)).toMatchObject({ t: 'room' });
+  });
+
+  it('문 칸이 아니거나 이미 그 게임이면 아무것도 보내지 않는다', () => {
+    const { roster, a, ida } = twoPeople();
+    const count = a.got.length;
+    roster.handle(ida, { t: 'door', x: 1, y: 1, game: 'a-1' });
+    roster.handle(ida, { t: 'door', x: 1, y: 0, game: null });
+    expect(a.got.length).toBe(count);
+    roster.handle(ida, { t: 'door', x: 1, y: 0, game: 'a-1' });
+    roster.handle(ida, { t: 'door', x: 2, y: 0, game: 'a-1' });
+    expect(a.got.length).toBe(count + 1);
   });
 });
 

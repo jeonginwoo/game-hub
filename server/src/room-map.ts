@@ -212,6 +212,10 @@ export interface Room {
 // 게임 id 형식 — docs/game-entry-contract.md 「게임 등록」
 const GAME_ID_RE = /^[a-z0-9-]+$/;
 
+export function isGameId(v: unknown): v is string {
+  return typeof v === 'string' && GAME_ID_RE.test(v);
+}
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
@@ -271,8 +275,22 @@ export function buildRoom(data: RoomData): Room {
     const door = map.doorAt(d);
     if (door === undefined) throw new Error(`문 배정 (${d.x}, ${d.y}) 이 문 칸이 아니다`);
     if (doorGames[door] !== undefined) throw new Error(`문 ${door} 에 게임이 두 번 배정됐다 — (${d.x}, ${d.y})`);
-    if (!GAME_ID_RE.test(d.game)) throw new Error(`게임 id '${d.game}' — 영문 소문자·숫자·- 만`);
+    if (!isGameId(d.game)) throw new Error(`게임 id '${d.game}' — 영문 소문자·숫자·- 만`);
     doorGames[door] = d.game;
   }
   return { map, objects, doorGames };
+}
+
+/**
+ * 칸 at 이 속한 문의 게임을 game 으로 바꾼 새 방 데이터 — null 이면 배정을 지운다. 그 문의 옛 배정은 어느 칸으로 적혔든 지운다.
+ * 결과는 buildRoom 으로 검사한다 — at 이 문 칸이 아니거나 게임 id 형식이 틀리면 throw (결정 2026-10-16: 방장이 문마다 게임 고르기)
+ */
+export function assignDoor(data: RoomData, at: Pos, game: string | null): RoomData {
+  const map = parseMap(data.rows);
+  const door = map.doorAt(at);
+  if (door === undefined) throw new Error(`(${at.x}, ${at.y}) 은 문 칸이 아니다`);
+  const doors = data.doors.filter((d) => map.doorAt(d) !== door);
+  const next: RoomData = { ...data, doors: game === null ? doors : [...doors, { x: at.x, y: at.y, game }] };
+  buildRoom(next);
+  return next;
 }

@@ -405,11 +405,12 @@ function syncViews(): void {
 
 /**
  * 월드를 이 방으로 바꾸고 그 맵에서 다시 등장한다 — search 에 hub_door 가 있으면 그 문 앞, 아니면 시작점.
+ * search 가 null 이면 자리 그대로 — room 메시지는 문 배정만 바꿔 지금 칸이 그대로 유효하다.
  * 바뀐 자리는 루프의 sendIfMoved 가 move 로 보낸다. 지금 그린 방과 같으면 아무것도 하지 않는다.
  * 검사를 통과하지 못한 방은 콘솔에 남기고 지금 방 그대로 — 모두가 같은 맵이어야 하지만, 깨진 방으로는 걸을 수도 없다.
  * 지금 그려진 것이 이 방이면 true
  */
-function switchRoom(data: RoomData, search: string): boolean {
+function switchRoom(data: RoomData, search: string | null): boolean {
   if (sameRoomData(data, world.data)) return true;
   let next: World;
   try {
@@ -420,6 +421,7 @@ function switchRoom(data: RoomData, search: string): boolean {
   }
   disposeWorld(world);
   world = next;
+  if (search === null) return true;
   const s = spawnFromSearch(world.room.map, search);
   pos = from = s.pos;
   facing = s.facing;
@@ -459,6 +461,8 @@ function startNet(e: Entered): void {
         }
         arrivalSearch = null;
       }
+      // 방장이 문 배정을 바꿈 — 배경(열린 문·닫힌 문)과 문 → 게임을 다시 만든다 (결정 2026-10-16: 방장이 문마다 게임 고르기)
+      if (msg.t === 'room') void switchRoom(msg.room, null);
       others = applyMsg(others, msg);
       syncViews();
       refreshStatus();

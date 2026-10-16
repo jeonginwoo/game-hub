@@ -84,6 +84,8 @@ export function applyMsg(state: Others, msg: ServerMsg): Others {
       return { ...state, owner: msg.id };
     case 'chat':
       return state; // 채팅은 chat.ts
+    case 'room':
+      return state; // 방 데이터는 월드 몫(main.ts) — 명단은 그대로
   }
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRoom, checkObjects, objectRect, parseMap, parseRoomData, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
+import { assignDoor, buildRoom, checkObjects, objectRect, parseMap, parseRoomData, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
 import { DEFAULT_ROOM, DEFAULT_TEMPLATE, ROOM_TEMPLATES, templateFor } from '../src/room-templates.ts';
 
 const tree: PlacedShape = { id: 'tree', x: 4, y: 5, w: 2, h: 3 };
@@ -146,6 +146,38 @@ describe('buildRoom', () => {
     const twice = [{ x: 3, y: 0, game: 'a' }, { x: 4, y: 0, game: 'b' }];
     expect(() => buildRoom({ ...data, doors: twice })).toThrow(/두 번/);
     expect(() => buildRoom({ ...data, doors: [{ x: 4, y: 0, game: 'https://x' }] })).toThrow(/게임 id/);
+  });
+});
+
+describe('assignDoor', () => {
+  // buildRoom 과 같은 맵 — 문 0 = (3~4, 0), 문 1 = (6, 3), 문 0 에 snake-race
+  const data: RoomData = {
+    rows: ['###DD##', '#.....#', '#.....#', '#S....D', '#.....#', '#######'],
+    objects: [],
+    doors: [{ x: 4, y: 0, game: 'snake-race' }],
+  };
+
+  it('빈 문에 게임을 배정한다 — 다른 문의 배정은 그대로', () => {
+    expect(buildRoom(assignDoor(data, { x: 6, y: 3 }, 'a-1')).doorGames).toEqual({ 0: 'snake-race', 1: 'a-1' });
+  });
+
+  it('같은 문의 옛 배정은 다른 칸으로 적혔어도 바꾼다', () => {
+    const next = assignDoor(data, { x: 3, y: 0 }, 'b');
+    expect(next.doors).toEqual([{ x: 3, y: 0, game: 'b' }]);
+  });
+
+  it('null 이면 그 문의 배정을 지운다', () => {
+    expect(assignDoor(data, { x: 3, y: 0 }, null).doors).toEqual([]);
+  });
+
+  it('받은 방 데이터는 바꾸지 않는다', () => {
+    assignDoor(data, { x: 6, y: 3 }, 'a-1');
+    expect(data.doors).toEqual([{ x: 4, y: 0, game: 'snake-race' }]);
+  });
+
+  it('문 칸이 아니거나 게임 id 형식이 틀리면 거부한다', () => {
+    expect(() => assignDoor(data, { x: 2, y: 1 }, 'a')).toThrow(/문 칸이 아니다/);
+    expect(() => assignDoor(data, { x: 6, y: 3 }, 'https://x')).toThrow(/게임 id/);
   });
 });
 

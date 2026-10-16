@@ -19,6 +19,11 @@ describe('applyMsg', () => {
     expect(remotePos(s.players.get('b') ?? fail())).toEqual({ x: 5, y: 5 });
   });
 
+  it('room 은 명단을 바꾸지 않는다', () => {
+    const s = withB();
+    expect(applyMsg(s, { t: 'room', room: DEFAULT_ROOM })).toBe(s);
+  });
+
   it('join·leave 로 명단이 바뀐다', () => {
     let s = applyMsg(withB(), { t: 'join', player: player('c', 2, 2) });
     expect([...s.players.keys()]).toEqual(['b', 'c']);
