@@ -61,7 +61,10 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   placement, door → game id) is not lobby data: it lives in `server/src/room-templates.ts` and
   is checked by `buildRoom`; the lobby adds only art (`OBJECT_ART` by kind) and game URLs (`GAMES`).
   The lobby draws `DEFAULT_ROOM` from the start (behind the first screen, and alone when the
-  server is unreachable); the room in `welcome` is checked against it (`checkRoom` in `main.ts`).
+  server is unreachable), then the room's template once it enters (picked on 「로비 만들기」 or
+  remembered per room in `sessionStorage`, `mapKey`). When the room in `welcome` differs from what
+  is drawn, `switchRoom` in `main.ts` throws the world away (`disposeWorld`), builds it again
+  (`buildWorld`) and respawns; a room that fails `buildRoom` is logged and the current one kept.
 
 ## 2. Tests
 

@@ -1,6 +1,7 @@
 // 첫 화면(이름·로비 만들기·코드로 참여) — DOM 연결만. 무엇을 보일지·코드 판정은 room.ts.
 // (결정 2026-10-14: 로그인 없이 방 + 닉네임 + 초대 링크). 화면 글자는 모두 textContent 로 넣는다.
-import { nameFromInput, newRoomCode, roomFromInput, type Screen } from './room';
+import { ROOM_TEMPLATES } from '../../../server/src/room-templates';
+import { cycleIndex, mapKey, nameFromInput, newRoomCode, roomFromInput, type Screen } from './room';
 
 const NAME_KEY = 'game-hub:name';
 
@@ -23,9 +24,29 @@ export function saveName(name: string): void {
   }
 }
 
+/** 이 방에서 기억해 둔 맵 템플릿 id — 없거나 저장소를 못 쓰면 null */
+export function loadRoomMap(room: string): string | null {
+  try {
+    return sessionStorage.getItem(mapKey(room));
+  } catch {
+    return null;
+  }
+}
+
+/** 방을 만들 때 고른 맵·welcome 으로 받은 맵을 기억한다. 저장 못 해도 던지지 않는다 */
+export function saveRoomMap(room: string, map: string): void {
+  try {
+    sessionStorage.setItem(mapKey(room), map);
+  } catch {
+    // 저장 못 하면 방이 비어 다시 생길 때 기본 맵 — 이번 접속은 그대로
+  }
+}
+
 export interface Entered {
   readonly room: string;
   readonly name: string;
+  /** 「로비 만들기」에서 고른 맵 템플릿 id — 참여·초대 링크로 오면 없다 */
+  readonly map?: string;
 }
 
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text = ''): HTMLElementTagNameMap[K] {
@@ -66,8 +87,28 @@ export function showEntryScreen(screen: Exclude<Screen, 'lobby'>, room: string |
     joinBtn.type = 'button';
     const error = el('p', 'hub-error');
 
+    // 맵 고르기 — 「로비 만들기」로 새 방을 열 때만. 참여하는 방의 맵은 서버가 정한다
+    let mapIndex = 0;
+    const mapLabel = el('span', 'hub-map-name');
+    const showMap = (): void => {
+      mapLabel.textContent = ROOM_TEMPLATES[mapIndex]?.name ?? '';
+    };
+    const mapRow = el('div', 'hub-row hub-map-row');
+    const mapStep = (text: string, label: string, delta: number): HTMLButtonElement => {
+      const b = el('button', 'hub-btn hub-small hub-look-step', text);
+      b.type = 'button';
+      b.setAttribute('aria-label', label);
+      b.addEventListener('click', () => {
+        mapIndex = cycleIndex(mapIndex, delta, ROOM_TEMPLATES.length);
+        showMap();
+      });
+      return b;
+    };
+    mapRow.append(el('span', 'hub-look-part', '맵'), mapStep('◀', '이전 맵', -1), mapLabel, mapStep('▶', '다음 맵', 1));
+    showMap();
+
     if (screen === 'start') {
-      card.append(createBtn, el('div', 'hub-or', '또는'));
+      card.append(mapRow, createBtn, el('div', 'hub-or', '또는'));
       const row = el('div', 'hub-row');
       row.append(codeInput, joinBtn);
       card.append(row);
@@ -76,7 +117,7 @@ export function showEntryScreen(screen: Exclude<Screen, 'lobby'>, room: string |
     }
     card.append(error);
 
-    const enter = (code: string | null): void => {
+    const enter = (code: string | null, map?: string): void => {
       const name = nameFromInput(nameInput.value);
       if (name === null) {
         error.textContent = '닉네임을 입력해 주세요';
@@ -89,11 +130,15 @@ export function showEntryScreen(screen: Exclude<Screen, 'lobby'>, room: string |
         return;
       }
       saveName(name);
+      if (map !== undefined) saveRoomMap(code, map);
       overlay.remove();
-      resolve({ room: code, name });
+      resolve(map === undefined ? { room: code, name } : { room: code, name, map });
     };
 
-    createBtn.addEventListener('click', () => enter(room ?? newRoomCode()));
+    createBtn.addEventListener('click', () => {
+      if (room !== null) enter(room); // 초대받은 방 — 맵은 그 방의 것
+      else enter(newRoomCode(), ROOM_TEMPLATES[mapIndex]?.id);
+    });
     joinBtn.addEventListener('click', () => enter(roomFromInput(codeInput.value)));
     // Enter — 코드 칸에 뭔가 있으면 참여, 아니면 만들기(이름 화면이면 입장).
     // 입력 칸이 둘이고 submit 버튼이 없는 폼은 Enter 로 제출되지 않으므로 키를 직접 받는다

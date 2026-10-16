@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { isRoomCode } from '../../../server/src/protocol';
-import { homeUrl, inviteUrl, nameFromInput, newRoomCode, renameFromInput, roomFromInput, roomFromSearch, screenFor, withRoom } from '../../src/room/room';
+import { cycleIndex, homeUrl, inviteUrl, mapKey, nameFromInput, newRoomCode, renameFromInput, roomFromInput, roomFromSearch, screenFor, withRoom } from '../../src/room/room';
+
+describe('cycleIndex', () => {
+  it('앞뒤로 돌고 끝에서 처음으로 넘어간다', () => {
+    expect(cycleIndex(0, 1, 3)).toBe(1);
+    expect(cycleIndex(2, 1, 3)).toBe(0);
+    expect(cycleIndex(0, -1, 3)).toBe(2);
+  });
+});
+
+describe('mapKey', () => {
+  it('방마다 다른 키', () => {
+    expect(mapKey('abcdef')).not.toBe(mapKey('ghjkmn'));
+  });
+});
 
 describe('screenFor', () => {
   it('방 코드가 없으면 시작 화면', () => {

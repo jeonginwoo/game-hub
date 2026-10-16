@@ -10,7 +10,7 @@ import {
   withoutDoorParam,
 } from '../../src/launch/entry';
 import { buildRoom } from '../../../server/src/room-map';
-import { DEFAULT_ROOM } from '../../../server/src/room-templates';
+import { ROOM_TEMPLATES } from '../../../server/src/room-templates';
 import { GAMES, type GameEntry } from '../../src/data/games';
 import { parseMap } from '../../src/world/map';
 
@@ -143,22 +143,25 @@ describe('doorFront / spawnFromSearch', () => {
 });
 
 describe('실제 등록 표', () => {
-  const room = buildRoom(DEFAULT_ROOM);
-  const lobby = room.map;
-
   it('id 는 형식에 맞고 겹치지 않는다', () => {
     const ids = GAMES.map((g) => g.id);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9-]+$/);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('기본 방의 문 배정은 등록된 게임만 가리킨다', () => {
+  it('모든 방 템플릿의 문 배정은 등록된 게임만 가리킨다', () => {
     // 문 칸·한 문 한 게임은 buildRoom 이 본다 — 등록 표는 로비만 안다
-    expect(Object.keys(room.doorGames)).not.toHaveLength(0);
-    for (const id of Object.values(room.doorGames)) expect(GAMES.some((g) => g.id === id), `게임 ${id}`).toBe(true);
+    for (const t of ROOM_TEMPLATES) {
+      const room = buildRoom(t.room);
+      expect(Object.keys(room.doorGames), t.id).not.toHaveLength(0);
+      for (const id of Object.values(room.doorGames)) expect(GAMES.some((g) => g.id === id), `${t.id} 게임 ${id}`).toBe(true);
+    }
   });
 
-  it('로비의 모든 문 앞에 설 자리가 있다', () => {
-    for (const d of lobby.doors) expect(doorFront(lobby, d)).toBeDefined();
+  it('모든 방 템플릿의 모든 문 앞에 설 자리가 있다', () => {
+    for (const t of ROOM_TEMPLATES) {
+      const map = buildRoom(t.room).map;
+      for (const d of map.doors) expect(doorFront(map, d), t.id).toBeDefined();
+    }
   });
 });

@@ -3,8 +3,7 @@
 // 방장은 서버가 정한다(결정 2026-10-16): 처음 들어온 사람, 나가면 남은 사람 중 가장 먼저 들어온 사람.
 // 방 데이터는 메모리에만 — 방이 생길 때 받아 welcome 에 싣고, 마지막 사람이 나가면 방과 함께 사라진다 (결정 2026-10-16: 방이 상태를 갖는다).
 import type { ClientMsg, Look, Player, ServerMsg } from './protocol.ts';
-import type { RoomData } from './room-map.ts';
-import { DEFAULT_ROOM } from './room-templates.ts';
+import { DEFAULT_TEMPLATE, templateFor, type RoomTemplate } from './room-templates.ts';
 
 export interface Peer {
   send(msg: ServerMsg): void;
@@ -27,12 +26,12 @@ export class Roster {
   private ownerId: string | null = null;
 
   private readonly now: Clock;
-  /** 이 방의 맵·물체·문 배정 — 서버는 들고 보낼 뿐, 위치를 이것과 대조하지 않는다 */
-  readonly room: RoomData;
+  /** 이 방이 시작한 템플릿 — 맵·물체·문 배정. 서버는 들고 보낼 뿐, 위치를 이것과 대조하지 않는다 */
+  readonly template: RoomTemplate;
 
-  constructor(now: Clock = Date.now, room: RoomData = DEFAULT_ROOM) {
+  constructor(now: Clock = Date.now, template: RoomTemplate = DEFAULT_TEMPLATE) {
     this.now = now;
-    this.room = room;
+    this.template = template;
   }
 
   get size(): number {
@@ -54,7 +53,8 @@ export class Roster {
     this.broadcast({ t: 'join', player: info });
     this.players.set(id, { info, peer, chats: [] });
     this.ownerId ??= id;
-    peer.send({ t: 'welcome', id, owner: this.ownerId, players: [...this.players.values()].map((p) => p.info), room: this.room });
+    peer.send({ t: 'welcome', id, owner: this.ownerId, players: [...this.players.values()].map((p) => p.info),
+      room: this.template.room, map: this.template.id });
     return id;
   }
 
@@ -126,10 +126,11 @@ export class Rooms {
     return this.rooms.size;
   }
 
+  /** 방이 없으면 이 hello 의 map 으로 만든다 — 있으면 map 은 보지 않는다 (참여자는 맵을 바꾸지 못한다) */
   join(code: string, peer: Peer, hello: Extract<ClientMsg, { t: 'hello' }>): string {
     let roster = this.rooms.get(code);
     if (!roster) {
-      roster = new Roster(this.now);
+      roster = new Roster(this.now, templateFor(hello.map));
       this.rooms.set(code, roster);
     }
     return roster.join(peer, hello);

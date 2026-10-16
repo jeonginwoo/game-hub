@@ -15,6 +15,7 @@ function room(): Others {
     id: 'b',
     owner: 'a',
     room: DEFAULT_ROOM,
+    map: 'plaza',
     players: [
       { id: 'a', name: '영희', ...at, look: look(1) },
       { id: 'b', name: '철수', ...at, look: look(2) },

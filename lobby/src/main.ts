@@ -3,20 +3,20 @@
 // 칸은 타일(그림 32px)의 1/2 — 걷기·충돌만 잘게, 그림 크기는 그대로 (결정 2026-10-16: 칸 2배 밀도).
 import * as THREE from 'three';
 import type { Look, Spot } from '../../server/src/protocol';
-import { buildRoom, type RoomData } from '../../server/src/room-map';
-import { DEFAULT_ROOM } from '../../server/src/room-templates';
+import { buildRoom, type Room, type RoomData } from '../../server/src/room-map';
+import { DEFAULT_ROOM, templateFor } from '../../server/src/room-templates';
 import { avatarCanvas } from './avatar/avatar-art';
 import { bubbleText, chatLine, say, type Bubble } from './chat/chat';
 import { showChatBox, type ChatBox } from './chat/chat-box';
 import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './launch/entry';
-import { loadName, showEntryScreen, type Entered } from './room/entry-screen';
+import { loadName, loadRoomMap, saveRoomMap, showEntryScreen, type Entered } from './room/entry-screen';
 import { GAMES } from './data/games';
 import { noticeText, peopleCount, rosterRows } from './hud/hud';
 import { loadLook, showHud, type Hud } from './hud/hud-bar';
 import { AVATAR_PX, CELL_PX, drawZ } from './world/layers';
 import { OBJECT_ART } from './data/object-art';
 import { lookKey } from './avatar/look';
-import { sameRoomData, TILE_CELLS, type Pos } from './world/map';
+import { sameRoomData, TILE_CELLS, type Pos, type TileMap } from './world/map';
 import { facingOf, reversesWalk, stepHeld, type Dir } from './world/movement';
 import { connect, type Connection, type NetStatus } from './net/net';
 import { objectRect, objectZ, withSolidObjects, type MapObject } from './world/objects';
@@ -32,13 +32,6 @@ const STEP_MS = 80; // 한 칸 걷는 시간 (대각선은 거리만큼 √2 배
 
 const canvas = document.querySelector<HTMLCanvasElement>('#app');
 if (!canvas) throw new Error('#app 캔버스가 없다');
-
-// 방 데이터 — 맵·물체 검사(buildRoom)는 서버와 같은 공용 모듈. 서버 없이·welcome 전에도 그릴 수 있게 기본 방으로 시작한다.
-// 서버가 welcome 으로 보낸 방은 checkRoom 이 검사만 한다 — 지금은 서버도 모든 방이 기본 방 (결정 2026-10-16: 방이 상태를 갖는다)
-const roomData: RoomData = DEFAULT_ROOM;
-const room = buildRoom(roomData);
-const map = room.map;
-const objects: readonly MapObject[] = room.objects.map((o) => ({ ...o, ...OBJECT_ART[o.kind] }));
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -67,19 +60,12 @@ function placeRect(mesh: THREE.Mesh, left: number, bottom: number, w: number, h:
   mesh.position.set(left + w / 2, -(bottom - h / 2), z);
 }
 
-// 배경 한 장 — 문자 맵의 칸마다 Ninja Adventure 시트(tiles.ts 가 고른 16px 칸)의 한 조각을 찍은 맵 크기 캔버스. 그림은 32px 로 키운 크기 그대로.
-// 물체도 같은 시트에서 잘라 쓴다. 캐릭터와 픽셀 밀도는 맞추지 않는다. 시트 세 장이 다 오기 전에는 비어 있다
 const TILE_SHEET_DIR = `${import.meta.env.BASE_URL}assets/ninja-adventure/`;
 const TILE_SHEET_FILE: Readonly<Record<Sheet, string>> = {
   floor: 'TilesetFloor.png',
   house: 'TilesetHouse.png',
   nature: 'TilesetNature.png',
 };
-
-/** 그 번호의 문에 게임이 배정돼 있는지 — 열린 문과 닫힌 문을 다르게 그린다 */
-function isOpenDoor(door: number): boolean {
-  return gameAtDoor(door, GAMES, room.doorGames) !== undefined;
-}
 
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -90,10 +76,15 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-function paintBackground(c: HTMLCanvasElement, sheets: Readonly<Record<Sheet, HTMLImageElement>>): void {
+type Sheets = Readonly<Record<Sheet, HTMLImageElement>>;
+
+function paintBackground(c: HTMLCanvasElement, room: Room, sheets: Sheets): void {
   const g = c.getContext('2d');
   if (!g) throw new Error('2d 캔버스를 만들 수 없다');
   g.imageSmoothingEnabled = false;
+  const map = room.map;
+  // 열린 문(게임 배정)과 닫힌 문을 다르게 그린다
+  const isOpenDoor = (door: number): boolean => gameAtDoor(door, GAMES, room.doorGames) !== undefined;
   const src = SHEET_PX / TILE_CELLS; // 칸 하나가 시트에서 차지하는 px — 그림 크기는 그대로, 칸마다 한 조각
   const draw = (cell: Cell, part: Pos, x: number, y: number): void => {
     g.drawImage(sheets[cell.sheet], cell.col * SHEET_PX + part.x * src, cell.row * SHEET_PX + part.y * src, src, src,
@@ -109,7 +100,7 @@ function paintBackground(c: HTMLCanvasElement, sheets: Readonly<Record<Sheet, HT
 }
 
 /** 물체 그림 — 시트에서 sprite 칸부터 w×h 칸 넓이(시트 한 칸 = 타일 하나)를 잘라 타일 32px 로 키워 찍는다 */
-function paintObject(c: HTMLCanvasElement, o: MapObject, sheets: Readonly<Record<Sheet, HTMLImageElement>>): void {
+function paintObject(c: HTMLCanvasElement, o: MapObject, sheets: Sheets): void {
   const g = c.getContext('2d');
   if (!g) throw new Error('2d 캔버스를 만들 수 없다');
   g.imageSmoothingEnabled = false;
@@ -126,38 +117,77 @@ function blankTexture(wCells: number, hCells: number): { readonly canvas: HTMLCa
   return { canvas, tex: pixelTexture(canvas) };
 }
 
-const backgroundArt = blankTexture(map.width, map.height);
-const objectArt = objects.map((o) => ({ o, ...blankTexture(o.w, o.h) }));
+// --- 월드 (방 데이터 → 배경·물체·걷기 판정) ---------------------------------------
+// 방이 바뀌면(welcome 의 방이 지금 그린 방과 다르면) 통째로 버리고 다시 만든다 (결정 2026-10-16: 맵 템플릿 + 맵 선택)
 
-const SHEET_NAMES = Object.keys(TILE_SHEET_FILE) as Sheet[];
-Promise.all(SHEET_NAMES.map((k) => loadImage(TILE_SHEET_DIR + TILE_SHEET_FILE[k])))
-  .then((imgs) => {
-    const sheets = Object.fromEntries(SHEET_NAMES.map((k, i) => [k, imgs[i]])) as Record<Sheet, HTMLImageElement>;
-    paintBackground(backgroundArt.canvas, sheets);
+interface World {
+  readonly data: RoomData;
+  readonly room: Room;
+  /** 걷기 판정 — 맵의 벽 + 물체의 solid 칸 */
+  readonly walkMap: TileMap;
+  readonly meshes: readonly THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
+  /** 시트가 오면(이미 와 있으면 바로) 배경·물체 캔버스를 칠한다 */
+  readonly paint: (sheets: Sheets) => void;
+}
+
+/** 검사를 마친 방으로 월드를 만들어 장면에 넣는다 — buildRoom 이 던지면 아무것도 넣지 않는다 */
+function buildWorld(data: RoomData): World {
+  const room = buildRoom(data);
+  const map = room.map;
+  const objects: readonly MapObject[] = room.objects.map((o) => ({ ...o, ...OBJECT_ART[o.kind] }));
+
+  // 배경 한 장 — 문자 맵의 칸마다 Ninja Adventure 시트(tiles.ts 가 고른 16px 칸)의 한 조각을 찍은 맵 크기 캔버스. 그림은 32px 로 키운 크기 그대로.
+  // 물체도 같은 시트에서 잘라 쓴다. 캐릭터와 픽셀 밀도는 맞추지 않는다. 시트 세 장이 다 오기 전에는 비어 있다
+  const backgroundArt = blankTexture(map.width, map.height);
+  const background = new THREE.Mesh(new THREE.PlaneGeometry(map.width, map.height), new THREE.MeshBasicMaterial({ map: backgroundArt.tex }));
+  placeRect(background, -0.5, map.height - 0.5, map.width, map.height, drawZ('background'));
+
+  // 물체 — 바닥·정렬·상단 층. 앞화면 층은 그릴 그림이 생기면 배경처럼 맵 크기 한 장으로 얹는다
+  const objectArt = objects.map((o) => {
+    const art = blankTexture(o.w, o.h);
+    const r = objectRect(o);
+    // alphaTest: 투명 픽셀은 버린다 — 물체 그림의 빈 곳이 뒤를 가리지 않게 (정렬 없이)
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(o.w, o.h), new THREE.MeshBasicMaterial({ map: art.tex, alphaTest: 0.5 }));
+    placeRect(mesh, r.left, r.bottom, o.w, o.h, objectZ(o));
+    return { o, ...art, mesh };
+  });
+
+  const meshes = [background, ...objectArt.map((a) => a.mesh)];
+  for (const m of meshes) scene.add(m);
+
+  const paint = (sheets: Sheets): void => {
+    paintBackground(backgroundArt.canvas, room, sheets);
     backgroundArt.tex.needsUpdate = true;
     for (const a of objectArt) {
       paintObject(a.canvas, a.o, sheets);
       a.tex.needsUpdate = true;
     }
+  };
+  if (loadedSheets) paint(loadedSheets);
+  return { data, room, walkMap: withSolidObjects(map, objects), meshes, paint };
+}
+
+function disposeWorld(w: World): void {
+  for (const m of w.meshes) {
+    scene.remove(m);
+    m.geometry.dispose();
+    m.material.map?.dispose();
+    m.material.dispose();
+  }
+}
+
+let loadedSheets: Sheets | null = null;
+
+// 서버 없이·welcome 전에도 그릴 수 있게 기본 방으로 시작한다. 로비에 들어가면 고른·기억해 둔 맵, welcome 이 오면 그 방으로 바꾼다
+let world: World = buildWorld(DEFAULT_ROOM);
+
+const SHEET_NAMES = Object.keys(TILE_SHEET_FILE) as Sheet[];
+Promise.all(SHEET_NAMES.map((k) => loadImage(TILE_SHEET_DIR + TILE_SHEET_FILE[k])))
+  .then((imgs) => {
+    loadedSheets = Object.fromEntries(SHEET_NAMES.map((k, i) => [k, imgs[i]])) as Record<Sheet, HTMLImageElement>;
+    world.paint(loadedSheets);
   })
   .catch((e: unknown) => console.error(e));
-
-const background = new THREE.Mesh(
-  new THREE.PlaneGeometry(map.width, map.height),
-  new THREE.MeshBasicMaterial({ map: backgroundArt.tex }),
-);
-placeRect(background, -0.5, map.height - 0.5, map.width, map.height, drawZ('background'));
-scene.add(background);
-
-// 물체 — 바닥·정렬·상단 층. 앞화면 층은 그릴 그림이 생기면 배경처럼 맵 크기 한 장으로 얹는다
-const walkMap = withSolidObjects(map, objects); // 걷기 판정 — 맵의 벽 + 물체의 solid 칸
-for (const { o, tex } of objectArt) {
-  const r = objectRect(o);
-  // alphaTest: 투명 픽셀은 버린다 — 물체 그림의 빈 곳이 뒤를 가리지 않게 (정렬 없이)
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(o.w, o.h), new THREE.MeshBasicMaterial({ map: tex, alphaTest: 0.5 }));
-  placeRect(mesh, r.left, r.bottom, o.w, o.h, objectZ(o));
-  scene.add(mesh);
-}
 
 // --- 캐릭터 -------------------------------------------------------------------
 // 48×64 프레임(3×4칸), 발이 칸 아래 가운데. 그림은 avatar-art.ts 의 임시 코드 그림 — 외형마다 방향 4장
@@ -246,8 +276,10 @@ function placeHead(head: Head, x: number, y: number): void {
   head.root.style.visibility = 'visible';
 }
 
-// 게임에서 돌아왔으면(hub_door) 들어갔던 문 앞에 선다. 주소창에서는 지워 새로고침하면 시작점에서 시작하게
-const spawn = spawnFromSearch(map, location.search);
+// 게임에서 돌아왔으면(hub_door) 들어갔던 문 앞에 선다. 주소창에서는 지워 새로고침하면 시작점에서 시작하게.
+// 처음 쿼리는 첫 welcome 까지 들고 있는다 — 받은 방으로 월드를 다시 만들면 그 맵에서 다시 문 앞을 찾는다
+let arrivalSearch: string | null = location.search;
+const spawn = spawnFromSearch(world.room.map, location.search);
 history.replaceState(history.state, '', withoutDoorParam(location.href));
 
 let pos: Pos = spawn.pos; // 논리 위치 — 걷는 중이면 도착할 칸
@@ -266,9 +298,9 @@ let leaving = false; // 게임으로 이동 중 — 페이지가 바뀔 때까�
 
 /** 도착한 칸이 게임이 배정된 문 타일 안이면 그 게임으로 페이지를 옮긴다 */
 function enterIfDoor(p: Pos): void {
-  const door = doorIndexAt(map, p);
+  const door = doorIndexAt(world.room.map, p);
   if (door === undefined) return;
-  const game = gameAtDoor(door, GAMES, room.doorGames);
+  const game = gameAtDoor(door, GAMES, world.room.doorGames);
   if (!game) return;
   const back = returnUrl(location.href, door); // URL 을 다 만든 뒤에 leaving — 여기서 던지면 입력이 굳지 않게
   const target = entryUrl(game.url, back, location.href, entered ?? undefined);
@@ -287,7 +319,7 @@ window.addEventListener('pageshow', (e) => {
 });
 
 function resetAfterReturn(): void {
-  const back = spawnFromSearch(map, location.search);
+  const back = spawnFromSearch(world.room.map, location.search);
   history.replaceState(history.state, '', withoutDoorParam(location.href));
   pos = from = back.pos;
   facing = back.facing;
@@ -312,6 +344,8 @@ let others: Others = NO_OTHERS;
 let netStatus: NetStatus = 'connecting';
 let conn: Connection | null = null;
 let lastSent = ''; // 마지막으로 보낸 자리 — 같은 자리를 또 보내지 않게
+// 이 방의 맵 템플릿 id — hello 에 실어 방이 없을 때 이 맵으로 만들게 한다. 고른 맵 → 기억해 둔 맵 → welcome 이 알려 준 맵
+let roomMap: string | undefined;
 let hud: Hud | null = null;
 let chatBox: ChatBox | null = null;
 let bubbles: ReadonlyMap<string, Bubble> = new Map();
@@ -370,17 +404,28 @@ function syncViews(): void {
 }
 
 /**
- * 서버가 보낸 방을 지금 그린 방과 견준다. 받은 방으로 월드를 다시 만드는 일은 방마다 맵이 달라지는 6c(맵 선택) 몫이라
- * 지금은 다르거나 검사를 통과하지 못하면 콘솔에 남기기만 한다
+ * 월드를 이 방으로 바꾸고 그 맵에서 다시 등장한다 — search 에 hub_door 가 있으면 그 문 앞, 아니면 시작점.
+ * 바뀐 자리는 루프의 sendIfMoved 가 move 로 보낸다. 지금 그린 방과 같으면 아무것도 하지 않는다.
+ * 검사를 통과하지 못한 방은 콘솔에 남기고 지금 방 그대로 — 모두가 같은 맵이어야 하지만, 깨진 방으로는 걸을 수도 없다.
+ * 지금 그려진 것이 이 방이면 true
  */
-function checkRoom(data: RoomData): void {
+function switchRoom(data: RoomData, search: string): boolean {
+  if (sameRoomData(data, world.data)) return true;
+  let next: World;
   try {
-    buildRoom(data);
+    next = buildWorld(data);
   } catch (err) {
-    console.error('서버가 보낸 방 데이터가 검사를 통과하지 못했다 — 기본 방 그대로', err);
-    return;
+    console.error('방 데이터가 검사를 통과하지 못했다 — 지금 방 그대로', err);
+    return false;
   }
-  if (!sameRoomData(data, roomData)) console.warn('서버가 보낸 방이 지금 그린 방과 다르다 — 다시 그리기는 아직 없다');
+  disposeWorld(world);
+  world = next;
+  const s = spawnFromSearch(world.room.map, search);
+  pos = from = s.pos;
+  facing = s.facing;
+  t = 1;
+  tapped = null;
+  return true;
 }
 
 function startNet(e: Entered): void {
@@ -394,7 +439,7 @@ function startNet(e: Entered): void {
       const at = here();
       lastSent = spotKey(at);
       // 이름은 지금 것 — 끊긴 사이 바꾼 이름도 다시 붙을 때 실린다
-      return { t: 'hello', name: entered?.name ?? e.name, at, look: myLook };
+      return { t: 'hello', name: entered?.name ?? e.name, at, look: myLook, map: roomMap };
     },
     (msg) => {
       if (msg.t === 'chat') {
@@ -406,7 +451,14 @@ function startNet(e: Entered): void {
         }
         return;
       }
-      if (msg.t === 'welcome') checkRoom(msg.room);
+      if (msg.t === 'welcome') {
+        // 그릴 수 있었던 방이면 그 맵을 기억한다 — 방이 비어 사라진 뒤 다시 만드는 hello 가 같은 맵을 싣게
+        if (switchRoom(msg.room, arrivalSearch ?? '')) {
+          roomMap = msg.map;
+          saveRoomMap(e.room, msg.map);
+        }
+        arrivalSearch = null;
+      }
       others = applyMsg(others, msg);
       syncViews();
       refreshStatus();
@@ -441,6 +493,9 @@ let myHead: Head | null = null;
 
 function enterLobby(e: Entered): void {
   entered = e;
+  // 방을 만들며 고른 맵, 아니면 이 탭이 기억해 둔 이 방의 맵으로 먼저 그린다 — welcome 이 다른 방을 보내면 그때 다시
+  roomMap = e.map ?? loadRoomMap(e.room) ?? undefined;
+  void switchRoom(templateFor(roomMap).room, arrivalSearch ?? ''); // 템플릿은 테스트가 검사를 통과시킨다
   // 주소창에 방 코드를 남겨 둔다 — 새로고침·게임 복귀 URL(returnUrl 이 location.href 를 쓴다)이 같은 방으로 오게
   history.replaceState(history.state, '', withRoom(location.href, e.room));
   hud = showHud({ room: e.room, name: e.name, look: myLook, lobbyHref: location.href, onRename: rename, onLook: changeLook,
@@ -576,7 +631,7 @@ renderer.setAnimationLoop((now) => {
     }
   }
   if (t >= 1 && !leaving) {
-    const r = stepHeld(walkMap, pos, held.length > 0 ? held : tapped ? [tapped] : []);
+    const r = stepHeld(world.walkMap, pos, held.length > 0 ? held : tapped ? [tapped] : []);
     tapped = null;
     if (r) {
       facing = r.facing;
@@ -605,8 +660,8 @@ renderer.setAnimationLoop((now) => {
   }
 
   const viewX = camera.right - camera.left;
-  camera.position.x = clampAxis(x, map.width, viewX);
-  camera.position.y = -clampAxis(y, map.height, camera.top - camera.bottom);
+  camera.position.x = clampAxis(x, world.room.map.width, viewX);
+  camera.position.y = -clampAxis(y, world.room.map.height, camera.top - camera.bottom);
 
   renderer.render(scene, camera);
 

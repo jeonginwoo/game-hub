@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildRoom, checkObjects, objectRect, parseMap, parseRoomData, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
-import { DEFAULT_ROOM } from '../src/room-templates.ts';
+import { DEFAULT_ROOM, DEFAULT_TEMPLATE, ROOM_TEMPLATES, templateFor } from '../src/room-templates.ts';
 
 const tree: PlacedShape = { id: 'tree', x: 4, y: 5, w: 2, h: 3 };
 
@@ -179,8 +179,25 @@ describe('parseRoomData', () => {
   });
 });
 
-describe('기본 방', () => {
-  it('검사를 통과한다', () => {
-    expect(() => buildRoom(DEFAULT_ROOM)).not.toThrow();
+describe('방 템플릿', () => {
+  it('모두 검사를 통과하고 문 배정이 하나 이상 있다', () => {
+    for (const t of ROOM_TEMPLATES) {
+      expect(() => buildRoom(t.room), t.id).not.toThrow();
+      expect(t.room.doors.length, t.id).toBeGreaterThan(0);
+    }
+  });
+
+  it('id 가 겹치지 않고 첫 번째가 기본 방', () => {
+    expect(new Set(ROOM_TEMPLATES.map((t) => t.id)).size).toBe(ROOM_TEMPLATES.length);
+    expect(ROOM_TEMPLATES[0]).toBe(DEFAULT_TEMPLATE);
+    expect(DEFAULT_TEMPLATE.room).toBe(DEFAULT_ROOM);
+  });
+});
+
+describe('templateFor', () => {
+  it('id 의 템플릿, 없거나 모르는 id 면 기본', () => {
+    expect(templateFor('forest').id).toBe('forest');
+    expect(templateFor(undefined)).toBe(DEFAULT_TEMPLATE);
+    expect(templateFor('nowhere')).toBe(DEFAULT_TEMPLATE);
   });
 });

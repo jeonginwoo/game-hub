@@ -29,8 +29,10 @@
 - Connect URL is `/ws?room=<code>`. The code format (`isRoomCode`) lives in `protocol.ts`;
   a missing or malformed code is refused at the upgrade with 400. A room exists while
   someone is in it (`Rooms` in `roster.ts`) — no create call, no persistence. Each room's
-  `Roster` holds its room data (`RoomData`, from `room-templates.ts`) in memory and sends it in
-  `welcome`; it goes away with the room.
+  `Roster` holds its template (`RoomTemplate` from `room-templates.ts`: id + `RoomData`) in memory and
+  sends both in `welcome`; it goes away with the room. The template is the `map` of the `hello`
+  that creates the room (`templateFor` — unknown or missing id = default); a `hello` joining an
+  existing room cannot change it.
 - JSON over WebSocket, one object per message, discriminated by `t`.
 - Positions are client-authoritative, in **cell units** (`x` right, `y` down — same as
   `lobby-ts.md` §5). The server checks shape and bounds only; it holds the room data but never

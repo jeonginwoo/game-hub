@@ -9,6 +9,7 @@ const others = applyMsg(NO_OTHERS, {
   id: 'a',
   owner: 'a',
   room: DEFAULT_ROOM,
+  map: 'plaza',
   players: [
     { id: 'a', name: '나', x: 1, y: 1, dir: 'down', look: DEFAULT_LOOK },
     { id: 'b', name: '영희', x: 2, y: 2, dir: 'down', look: DEFAULT_LOOK },

@@ -7,7 +7,7 @@ const spot = (x: number, y: number, dir: Spot['dir'] = 'down'): Spot => ({ x, y,
 const player = (id: string, x: number, y: number): Player => ({ id, name: id.toUpperCase(), ...spot(x, y), look: DEFAULT_LOOK });
 
 function withB(): Others {
-  return applyMsg(NO_OTHERS, { t: 'welcome', id: 'a', owner: 'a', players: [player('a', 1, 1), player('b', 5, 5)], room: DEFAULT_ROOM });
+  return applyMsg(NO_OTHERS, { t: 'welcome', id: 'a', owner: 'a', players: [player('a', 1, 1), player('b', 5, 5)], room: DEFAULT_ROOM, map: 'plaza' });
 }
 
 describe('applyMsg', () => {

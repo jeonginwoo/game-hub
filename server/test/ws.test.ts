@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import type { ServerMsg } from '../src/protocol.ts';
-import { DEFAULT_ROOM } from '../src/room-templates.ts';
+import { templateFor } from '../src/room-templates.ts';
 import { Rooms } from '../src/roster.ts';
 import { attachLobby } from '../src/ws.ts';
 
@@ -55,14 +55,15 @@ describe('attachLobby', () => {
   it('두 접속자가 서로의 입장·이동·퇴장을 받는다', async () => {
     const port = await start();
     const a = await connect(port);
-    a.ws.send(JSON.stringify({ t: 'hello', name: 'A', at: { x: 1, y: 1, dir: 'down' } }));
-    expect(await a.next()).toMatchObject({ t: 'welcome', players: [{ name: 'A' }], room: DEFAULT_ROOM });
+    // 방을 만드는 hello 의 맵으로 방이 생긴다
+    a.ws.send(JSON.stringify({ t: 'hello', name: 'A', at: { x: 1, y: 1, dir: 'down' }, map: 'court' }));
+    expect(await a.next()).toMatchObject({ t: 'welcome', players: [{ name: 'A' }], map: 'court', room: templateFor('court').room });
 
     const b = await connect(port);
     // hello 전의 move 는 버려진다
     b.ws.send(JSON.stringify({ t: 'move', at: { x: 9, y: 9, dir: 'up' } }));
-    b.ws.send(JSON.stringify({ t: 'hello', name: 'B', at: { x: 2, y: 2, dir: 'left' } }));
-    expect(await b.next()).toMatchObject({ t: 'welcome', players: [{ name: 'A' }, { name: 'B', x: 2, y: 2 }] });
+    b.ws.send(JSON.stringify({ t: 'hello', name: 'B', at: { x: 2, y: 2, dir: 'left' }, map: 'forest' }));
+    expect(await b.next()).toMatchObject({ t: 'welcome', players: [{ name: 'A' }, { name: 'B', x: 2, y: 2 }], map: 'court' });
     expect(await a.next()).toMatchObject({ t: 'join', player: { name: 'B', x: 2, y: 2 } });
 
     b.ws.send(JSON.stringify({ t: 'move', at: { x: 3, y: 2, dir: 'right' } }));

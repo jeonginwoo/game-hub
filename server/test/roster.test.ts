@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LOOK, type ServerMsg, type Spot } from '../src/protocol.ts';
-import type { RoomData } from '../src/room-map.ts';
-import { DEFAULT_ROOM } from '../src/room-templates.ts';
+import { DEFAULT_ROOM, ROOM_TEMPLATES, type RoomTemplate } from '../src/room-templates.ts';
 import { CHAT_BURST, CHAT_WINDOW_MS, Rooms, Roster } from '../src/roster.ts';
 
 function peer(): { got: ServerMsg[]; send: (m: ServerMsg) => void } {
@@ -12,15 +11,15 @@ function peer(): { got: ServerMsg[]; send: (m: ServerMsg) => void } {
 const spot = (x: number, y: number): Spot => ({ x, y, dir: 'down' });
 
 describe('Roster', () => {
-  it('방 데이터를 welcome 에 싣는다 — 처음엔 기본 방, 만들 때 준 방이면 그 방', () => {
+  it('방 데이터와 템플릿 id 를 welcome 에 싣는다 — 처음엔 기본 방, 만들 때 준 템플릿이면 그 방', () => {
     const a = peer();
     new Roster().join(a, { t: 'hello', name: 'A', at: spot(1, 1), look: DEFAULT_LOOK });
-    expect(a.got[0]).toMatchObject({ t: 'welcome', room: DEFAULT_ROOM });
+    expect(a.got[0]).toMatchObject({ t: 'welcome', room: DEFAULT_ROOM, map: 'plaza' });
 
-    const small: RoomData = { rows: ['#S.D#'], objects: [], doors: [] };
+    const small: RoomTemplate = { id: 'small', name: '작은 방', room: { rows: ['#S.D#'], objects: [], doors: [] } };
     const b = peer();
     new Roster(Date.now, small).join(b, { t: 'hello', name: 'B', at: spot(1, 0), look: DEFAULT_LOOK });
-    expect(b.got[0]).toMatchObject({ t: 'welcome', room: small });
+    expect(b.got[0]).toMatchObject({ t: 'welcome', room: small.room, map: 'small' });
   });
 
   it('새 접속자는 본인 포함 명단을 받고, 나머지는 join 을 받는다', () => {
@@ -39,6 +38,7 @@ describe('Roster', () => {
           { id: idb, name: 'B', ...spot(2, 2), look: DEFAULT_LOOK },
         ],
         room: DEFAULT_ROOM,
+        map: 'plaza',
       },
     ]);
     expect(a.got.at(-1)).toEqual({ t: 'join', player: { id: idb, name: 'B', ...spot(2, 2), look: DEFAULT_LOOK } });
@@ -231,6 +231,37 @@ describe('Rooms', () => {
     now += CHAT_WINDOW_MS;
     rooms.handle('aaaaaa', ida, { t: 'chat', text: '다시' });
     expect(a.got.filter((m) => m.t === 'chat')).toHaveLength(CHAT_BURST + 1);
+  });
+
+  it('방을 만드는 hello 의 맵으로 방이 생기고, 참여자의 맵은 무시한다', () => {
+    const forest = ROOM_TEMPLATES.find((t) => t.id === 'forest');
+    if (!forest) throw new Error('숲길 템플릿이 없다');
+    const rooms = new Rooms();
+    const a = peer();
+    const b = peer();
+    rooms.join('aaaaaa', a, { t: 'hello', name: 'A', at: spot(1, 1), look: DEFAULT_LOOK, map: 'forest' });
+    rooms.join('aaaaaa', b, { t: 'hello', name: 'B', at: spot(2, 2), look: DEFAULT_LOOK, map: 'court' });
+    expect(a.got[0]).toMatchObject({ t: 'welcome', map: 'forest', room: forest.room });
+    expect(b.got[0]).toMatchObject({ t: 'welcome', map: 'forest', room: forest.room });
+  });
+
+  it('맵이 없거나 모르는 id 면 기본 방으로 만든다', () => {
+    const rooms = new Rooms();
+    const a = peer();
+    const b = peer();
+    rooms.join('aaaaaa', a, { t: 'hello', name: 'A', at: spot(1, 1), look: DEFAULT_LOOK });
+    rooms.join('bbbbbb', b, { t: 'hello', name: 'B', at: spot(1, 1), look: DEFAULT_LOOK, map: 'nowhere' });
+    expect(a.got[0]).toMatchObject({ map: 'plaza', room: DEFAULT_ROOM });
+    expect(b.got[0]).toMatchObject({ map: 'plaza', room: DEFAULT_ROOM });
+  });
+
+  it('비어 사라진 방은 다음 hello 의 맵으로 다시 생긴다', () => {
+    const rooms = new Rooms();
+    const ida = rooms.join('aaaaaa', peer(), { t: 'hello', name: 'A', at: spot(1, 1), look: DEFAULT_LOOK, map: 'forest' });
+    rooms.leave('aaaaaa', ida);
+    const b = peer();
+    rooms.join('aaaaaa', b, { t: 'hello', name: 'B', at: spot(1, 1), look: DEFAULT_LOOK, map: 'court' });
+    expect(b.got[0]).toMatchObject({ map: 'court' });
   });
 
   it('마지막 사람이 나가면 방이 사라진다', () => {

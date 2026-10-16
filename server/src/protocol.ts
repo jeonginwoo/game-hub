@@ -1,6 +1,7 @@
 // 로비 ↔ 멀티 서버 메시지 (JSON over WebSocket, 경로 /ws) — 순수 모듈, node·DOM 을 import 하지 않는다 (로비 src/ 도 쓴다).
 // 위치는 클라이언트 권위(결정 2026-10-09): 서버는 형식만 검사하고 명단 관리·중계만 한다. 좌표는 칸 단위(로비 타일의 1/2).
 // 방 데이터(맵·물체·문 배정)는 서버가 들고 welcome 에 실어 보낸다 (결정 2026-10-16: 방이 상태를 갖는다).
+// 방은 그 방을 만드는 hello 의 map(템플릿 id)으로 생긴다 — 이미 있는 방에 들어오는 hello 의 map 은 무시 (결정 2026-10-16: 맵 템플릿 + 맵 선택).
 import { parseRoomData, type RoomData } from './room-map.ts';
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
@@ -34,15 +35,20 @@ export interface Player extends Spot {
 }
 
 export type ClientMsg =
-  | { readonly t: 'hello'; readonly name: string; readonly at: Spot; readonly look: Look } // 접속 후 첫 메시지 — 그 전에는 명단에 없다
+  // 접속 후 첫 메시지 — 그 전에는 명단에 없다. map 은 방이 없을 때 만들 템플릿 id (없거나 모르는 id 면 기본)
+  | { readonly t: 'hello'; readonly name: string; readonly at: Spot; readonly look: Look; readonly map?: string }
   | { readonly t: 'move'; readonly at: Spot }
   | { readonly t: 'chat'; readonly text: string } // 같은 방 모두에게 — 보낸 사람에게도 돌아온다
   | { readonly t: 'rename'; readonly name: string } // 로비 안 닉네임 변경 — 보낸 사람은 이미 바꿨으므로 돌려받지 않는다
   | { readonly t: 'look'; readonly look: Look }; // 외형 바꾸기 — rename 처럼 보낸 사람은 돌려받지 않는다
 
 export type ServerMsg =
-  // players 에 본인 포함, owner 는 방장 id, room 은 이 방의 데이터 — 로비는 buildRoom 으로 다시 검사한다
-  | { readonly t: 'welcome'; readonly id: string; readonly owner: string; readonly players: readonly Player[]; readonly room: RoomData }
+  // players 에 본인 포함, owner 는 방장 id, room 은 이 방의 데이터 — 로비는 buildRoom 으로 다시 검사한다.
+  // map 은 이 방이 시작한 템플릿 id — 로비가 기억해 두었다가, 방이 비어 사라진 뒤 다시 만들 때 hello 에 싣는다
+  | {
+    readonly t: 'welcome'; readonly id: string; readonly owner: string; readonly players: readonly Player[];
+    readonly room: RoomData; readonly map: string;
+  }
   | { readonly t: 'join'; readonly player: Player }
   | { readonly t: 'move'; readonly id: string; readonly at: Spot }
   | { readonly t: 'leave'; readonly id: string }
@@ -71,6 +77,13 @@ export function isRoomCode(v: string): boolean {
 export function roomFromPath(path: string): string | null {
   const code = new URL(path, 'http://x').searchParams.get(ROOM_PARAM);
   return code !== null && isRoomCode(code) ? code : null;
+}
+
+// 맵 템플릿 id 형식 — 서버는 형식만 보고, 모르는 id 는 기본 템플릿으로 (room-templates.ts templateFor)
+const MAP_ID_RE = /^[a-z0-9-]{1,32}$/;
+
+export function isMapId(v: unknown): v is string {
+  return typeof v === 'string' && MAP_ID_RE.test(v);
 }
 
 const DIRS: readonly string[] = ['up', 'down', 'left', 'right'];
@@ -136,7 +149,10 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       const at = parseSpot(v.at);
       // 외형이 틀리면 접속을 막지 않고 기본 외형으로 — 이름을 다듬는 것과 같은 태도
       const look = parseLook(v.look) ?? DEFAULT_LOOK;
-      return at && typeof v.name === 'string' ? { t: 'hello', name: cleanName(v.name), at, look } : null;
+      if (!at || typeof v.name !== 'string') return null;
+      const hello: Extract<ClientMsg, { t: 'hello' }> = { t: 'hello', name: cleanName(v.name), at, look };
+      // 맵 id 가 틀려도 접속은 받는다 — 빼고 받으면 기본 템플릿
+      return isMapId(v.map) ? { ...hello, map: v.map } : hello;
     }
     case 'move': {
       const at = parseSpot(v.at);
@@ -178,7 +194,7 @@ export function parseServerMsg(raw: string): ServerMsg | null {
   if (!isRecord(v)) return null;
   switch (v.t) {
     case 'welcome': {
-      if (typeof v.id !== 'string' || typeof v.owner !== 'string' || !Array.isArray(v.players)) return null;
+      if (typeof v.id !== 'string' || typeof v.owner !== 'string' || !Array.isArray(v.players) || !isMapId(v.map)) return null;
       const room = parseRoomData(v.room);
       if (!room) return null;
       const players: Player[] = [];
@@ -187,7 +203,7 @@ export function parseServerMsg(raw: string): ServerMsg | null {
         if (!player) return null;
         players.push(player);
       }
-      return { t: 'welcome', id: v.id, owner: v.owner, players, room };
+      return { t: 'welcome', id: v.id, owner: v.owner, players, room, map: v.map };
     }
     case 'join': {
       const player = parsePlayer(v.player);

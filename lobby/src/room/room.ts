@@ -71,6 +71,19 @@ export function nameFromInput(raw: string): string | null {
   return normalizeName(raw) || null;
 }
 
+/** 맵 고르기 ◀ ▶ — 번호 i 를 delta 칸 넘긴 번호, 끝에서 처음으로 돈다 */
+export function cycleIndex(i: number, delta: number, count: number): number {
+  return (((i + delta) % count) + count) % count;
+}
+
+/**
+ * 방 코드별로 기억해 둔 맵 템플릿 id 의 저장 키 (sessionStorage). 혼자 게임에 들어가면 방이 비어 사라지므로,
+ * 돌아와 다시 만드는 hello 가 같은 맵을 싣게 한다 (결정 2026-10-16: 맵 템플릿 + 맵 선택)
+ */
+export function mapKey(room: string): string {
+  return `game-hub:map:${room}`;
+}
+
 /** 로비 안 이름 바꾸기 칸의 입력 — 비었거나 지금 이름과 같으면 null (바꿀 것이 없다) */
 export function renameFromInput(raw: string, current: string): string | null {
   const name = nameFromInput(raw);
