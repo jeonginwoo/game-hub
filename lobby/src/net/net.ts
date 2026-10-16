@@ -1,6 +1,6 @@
 // 로비 멀티 전송 — 같은 주소의 /ws?room=<코드> 에 붙는다 (결정 2026-10-14: 로비와 서버는 한 포트).
 // 전송 방식을 바꿀 때 고치는 곳은 이 파일 하나다 (결정 2026-10-09). 받은 메시지는 모두 parseServerMsg 를 거친다.
-import { parseServerMsg, ROOM_PARAM, type ClientMsg, type ServerMsg } from '../../server/src/protocol';
+import { parseServerMsg, ROOM_PARAM, type ClientMsg, type ServerMsg } from '../../../server/src/protocol';
 
 export type NetStatus = 'connecting' | 'open' | 'closed';
 

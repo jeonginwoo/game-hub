@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { parseMap } from '../src/map';
-import { tileLook } from '../src/tiles';
+import { parseMap } from '../../src/world/map';
+import { tileLook } from '../../src/world/tiles';
 
 const map = parseMap([
   '######',

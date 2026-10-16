@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampAxis } from '../src/view';
+import { clampAxis } from '../../src/world/view';
 
 describe('clampAxis', () => {
   // 맵 20칸, 화면 10칸 → 타일 0 의 왼쪽 끝(-0.5)이 화면 왼쪽 끝이 되는 중심은 4.5

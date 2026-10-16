@@ -2,26 +2,26 @@
 // 2026-10-14: ZEP 식 층). 배경·물체는 Ninja Adventure 타일(docs/assets.md), 캐릭터는 아직 임시 그림. 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
 import * as THREE from 'three';
 import type { Look, Spot } from '../../server/src/protocol';
-import { avatarCanvas } from './avatar-art';
-import { bubbleText, chatLine, say, type Bubble } from './chat';
-import { showChatBox, type ChatBox } from './chat-box';
-import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './entry';
-import { loadName, showEntryScreen, type Entered } from './entry-screen';
-import { DOOR_GAMES, GAMES } from './games';
-import { noticeText, peopleCount, rosterRows } from './hud';
-import { loadLook, showHud, type Hud } from './hud-bar';
-import { AVATAR_PX, drawZ, TILE_PX } from './layers';
-import { LOBBY_OBJECTS } from './lobby-objects';
-import { LOBBY_ROWS } from './lobby-map';
-import { lookKey } from './look';
-import { parseMap, type Pos } from './map';
-import { facingOf, reversesWalk, stepHeld, type Dir } from './movement';
-import { connect, type Connection, type NetStatus } from './net';
-import { checkObjects, objectRect, objectZ, withSolidObjects, type MapObject } from './objects';
-import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from './others';
-import { homeUrl, roomFromSearch, screenFor, withRoom } from './room';
-import { CELL_PX, tileLook, type Cell, type Sheet } from './tiles';
-import { clampAxis } from './view';
+import { avatarCanvas } from './avatar/avatar-art';
+import { bubbleText, chatLine, say, type Bubble } from './chat/chat';
+import { showChatBox, type ChatBox } from './chat/chat-box';
+import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './launch/entry';
+import { loadName, showEntryScreen, type Entered } from './room/entry-screen';
+import { DOOR_GAMES, GAMES } from './data/games';
+import { noticeText, peopleCount, rosterRows } from './hud/hud';
+import { loadLook, showHud, type Hud } from './hud/hud-bar';
+import { AVATAR_PX, drawZ, TILE_PX } from './world/layers';
+import { LOBBY_OBJECTS } from './data/lobby-objects';
+import { LOBBY_ROWS } from './data/lobby-map';
+import { lookKey } from './avatar/look';
+import { parseMap, type Pos } from './world/map';
+import { facingOf, reversesWalk, stepHeld, type Dir } from './world/movement';
+import { connect, type Connection, type NetStatus } from './net/net';
+import { checkObjects, objectRect, objectZ, withSolidObjects, type MapObject } from './world/objects';
+import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from './net/others';
+import { homeUrl, roomFromSearch, screenFor, withRoom } from './room/room';
+import { CELL_PX, tileLook, type Cell, type Sheet } from './world/tiles';
+import { clampAxis } from './world/view';
 
 // 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 칸 = TILE_PX × VIEW_ZOOM). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
 // 1.5 면 한 칸 48px — 16px 타일(Ninja Adventure)은 원본 1px 이 화면 3px 로 고르다. 32px 기준 그림(임시 캐릭터)은 1.5배라 고르지 않다

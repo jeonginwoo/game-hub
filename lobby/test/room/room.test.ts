@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { isRoomCode } from '../../server/src/protocol';
-import { homeUrl, inviteUrl, nameFromInput, newRoomCode, renameFromInput, roomFromInput, roomFromSearch, screenFor, withRoom } from '../src/room';
+import { isRoomCode } from '../../../server/src/protocol';
+import { homeUrl, inviteUrl, nameFromInput, newRoomCode, renameFromInput, roomFromInput, roomFromSearch, screenFor, withRoom } from '../../src/room/room';
 
 describe('screenFor', () => {
   it('방 코드가 없으면 시작 화면', () => {

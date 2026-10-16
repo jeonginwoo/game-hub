@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LOOK, LOOK_CHOICES } from '../../server/src/protocol';
-import { bodyColor, cycleLook, LOOK_PARTS, LOOK_TABLE, lookFromStorage, lookKey, randomLook } from '../src/look';
+import { DEFAULT_LOOK, LOOK_CHOICES } from '../../../server/src/protocol';
+import { bodyColor, cycleLook, LOOK_PARTS, LOOK_TABLE, lookFromStorage, lookKey, randomLook } from '../../src/avatar/look';
 
 describe('선택지 표', () => {
   it('부위마다 서버가 받는 선택지 수와 길이가 같다', () => {

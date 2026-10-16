@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LOOK } from '../../server/src/protocol';
-import { BUBBLE_MS, bubbleText, chatFromInput, chatLine, say } from '../src/chat';
-import { applyMsg, NO_OTHERS } from '../src/others';
+import { DEFAULT_LOOK } from '../../../server/src/protocol';
+import { BUBBLE_MS, bubbleText, chatFromInput, chatLine, say } from '../../src/chat/chat';
+import { applyMsg, NO_OTHERS } from '../../src/net/others';
 
 const others = applyMsg(NO_OTHERS, {
   t: 'welcome',

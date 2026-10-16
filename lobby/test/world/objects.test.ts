@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { drawZ } from '../src/layers';
-import { LOBBY_OBJECTS } from '../src/lobby-objects';
-import { LOBBY_ROWS } from '../src/lobby-map';
-import { parseMap } from '../src/map';
-import { checkObjects, objectRect, objectZ, solidCells, withSolidObjects, type MapObject } from '../src/objects';
+import { drawZ } from '../../src/world/layers';
+import { LOBBY_OBJECTS } from '../../src/data/lobby-objects';
+import { LOBBY_ROWS } from '../../src/data/lobby-map';
+import { parseMap } from '../../src/world/map';
+import { checkObjects, objectRect, objectZ, solidCells, withSolidObjects, type MapObject } from '../../src/world/objects';
 
 const tree: MapObject = { id: 'tree', layer: 'sorted', x: 4, y: 5, w: 2, h: 3, sprite: { sheet: 'nature', col: 0, row: 0 } };
 

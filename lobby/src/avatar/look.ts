@@ -1,6 +1,6 @@
 // 캐릭터 외형 — 부위별 선택지 표(색·이름), 무작위 첫 외형, 선택지 넘기기, 저장값 해석. Three.js·DOM 과 무관한 순수 함수.
 // 외형은 번호로만 오가고 색·그림은 여기서 정한다 (결정 2026-10-16: 캐릭터 꾸미기). 로비 안에서만 쓴다 — 입장 계약으로 넘기지 않는다
-import { LOOK_CHOICES, parseLook, type Look, type LookPart } from '../../server/src/protocol';
+import { LOOK_CHOICES, parseLook, type Look, type LookPart } from '../../../server/src/protocol';
 
 export interface Choice {
   readonly label: string;

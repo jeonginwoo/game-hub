@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { socketUrl } from '../src/net';
+import { socketUrl } from '../../src/net/net';
 
 describe('socketUrl', () => {
   it('같은 호스트의 /ws 에 방 코드', () => {

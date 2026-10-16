@@ -1,6 +1,6 @@
 // 로비 물체 — 바닥·정렬 층에 두어 ZEP 식 앞뒤 가림을 눈으로 확인한다. 위치는 lobby-map.ts 의 칸,
 // 그림은 Ninja Adventure 시트의 칸 (docs/assets.md).
-import type { MapObject } from './objects';
+import type { MapObject } from '../world/objects';
 
 /** 물체 종류 — 그림·크기·층·막는 칸. 놓을 때는 id 와 왼쪽 아래 칸만 정한다 */
 type ObjectKind = Omit<MapObject, 'id' | 'x' | 'y'>;

@@ -1,9 +1,9 @@
 // 임시 캐릭터 그림 — 외형(look.ts)대로 48×64 프레임 하나를 2d 캔버스에 그린다. DOM 캔버스만 쓰고 Three.js 와 무관.
 // 에셋 전 코드 그림 (결정 2026-10-16: 캐릭터 꾸미기는 코드 그림으로 구조만). 발이 프레임 아래 가운데 (layers.ts AVATAR_PX)
-import type { Look } from '../../server/src/protocol';
-import { AVATAR_PX } from './layers';
+import type { Look } from '../../../server/src/protocol';
+import { AVATAR_PX } from '../world/layers';
 import { bodyColor, hairColor } from './look';
-import type { Dir } from './movement';
+import type { Dir } from '../world/movement';
 
 const SKIN = '#e5c3a0';
 const EYE = '#2a1d16';

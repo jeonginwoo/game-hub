@@ -12,7 +12,7 @@
 
 | 파일 | 원본 경로 | 쓰는 곳 |
 |------|-----------|---------|
-| `TilesetFloor.png` | `Backgrounds/Tilesets/TilesetFloor.png` | 바닥 풀 (`lobby/src/tiles.ts`) · 흙 마당 물체 (`lobby/src/lobby-objects.ts`) |
+| `TilesetFloor.png` | `Backgrounds/Tilesets/TilesetFloor.png` | 바닥 풀 (`lobby/src/world/tiles.ts`) · 흙 마당 물체 (`lobby/src/data/lobby-objects.ts`) |
 | `TilesetHouse.png` | `Backgrounds/Tilesets/TilesetHouse.png` | 건물 정면·지붕·문 · 도리이 물체 |
 | `TilesetNature.png` | `Backgrounds/Tilesets/TilesetNature.png` | 벽 덤불 · 나무 물체 |
 

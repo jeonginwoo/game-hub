@@ -1,6 +1,6 @@
 // 로비 방·이름 — 첫 화면이 무엇을 보일지, 방 코드 만들기·읽기, 초대 링크. Three.js·DOM 과 무관한 순수 함수.
 // (결정 2026-10-14: 로그인 없이 방 + 닉네임 + 초대 링크). 방 코드 형식은 서버와 같은 server/src/protocol.ts.
-import { isRoomCode, normalizeName, ROOM_ALPHABET, ROOM_CODE_LENGTH, ROOM_PARAM } from '../../server/src/protocol';
+import { isRoomCode, normalizeName, ROOM_ALPHABET, ROOM_CODE_LENGTH, ROOM_PARAM } from '../../../server/src/protocol';
 
 /** 첫 화면 — start: 이름 + 만들기/참여, name: 초대 링크로 와서 이름만, lobby: 바로 로비 */
 export type Screen = 'start' | 'name' | 'lobby';

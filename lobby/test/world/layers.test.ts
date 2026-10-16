@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawZ, MAX_SORT_Y } from '../src/layers';
+import { drawZ, MAX_SORT_Y } from '../../src/world/layers';
 
 describe('drawZ', () => {
   it('층 순서대로 앞에 그린다 — 배경 < 바닥 < 정렬 < 상단 < 앞화면', () => {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LOOK, type Look, type Spot } from '../../server/src/protocol';
-import { noticeText, peopleCount, rosterRows } from '../src/hud';
-import { bodyColor } from '../src/look';
-import { applyMsg, NO_OTHERS, type Others } from '../src/others';
+import { DEFAULT_LOOK, type Look, type Spot } from '../../../server/src/protocol';
+import { noticeText, peopleCount, rosterRows } from '../../src/hud/hud';
+import { bodyColor } from '../../src/avatar/look';
+import { applyMsg, NO_OTHERS, type Others } from '../../src/net/others';
 
 const at: Spot = { x: 1, y: 1, dir: 'down' };
 const look = (body: number): Look => ({ ...DEFAULT_LOOK, body });

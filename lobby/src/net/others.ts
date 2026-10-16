@@ -1,6 +1,6 @@
 // 같은 방의 다른 플레이어 — 서버 메시지를 상태에 반영하고, 한 칸씩 걷는 모습을 보간한다. Three.js·DOM 과 무관한 순수 함수.
 // 위치는 클라이언트 권위(결정 2026-10-09): 받은 칸을 그대로 믿고, 이웃 칸이면 걸어가고 멀면 순간 이동한다.
-import type { Look, Player, ServerMsg, Spot } from '../../server/src/protocol';
+import type { Look, Player, ServerMsg, Spot } from '../../../server/src/protocol';
 
 export interface Remote {
   readonly id: string;

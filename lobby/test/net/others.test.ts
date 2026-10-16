@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LOOK, type Player, type Spot } from '../../server/src/protocol';
-import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from '../src/others';
+import { DEFAULT_LOOK, type Player, type Spot } from '../../../server/src/protocol';
+import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from '../../src/net/others';
 
 const spot = (x: number, y: number, dir: Spot['dir'] = 'down'): Spot => ({ x, y, dir });
 const player = (id: string, x: number, y: number): Player => ({ id, name: id.toUpperCase(), ...spot(x, y), look: DEFAULT_LOOK });

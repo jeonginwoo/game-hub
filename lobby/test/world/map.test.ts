@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseMap } from '../src/map';
+import { parseMap } from '../../src/world/map';
 
 describe('parseMap', () => {
   const rows = [

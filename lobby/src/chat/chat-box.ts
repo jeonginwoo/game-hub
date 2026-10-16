@@ -1,6 +1,6 @@
 // 로비 왼쪽 아래 채팅창 — DOM 연결만. 무엇을 보일지·글자 다듬기는 chat.ts (결정 2026-10-16: 채팅창 + 말풍선).
 // 화면 글자는 모두 textContent 로 넣는다. Enter 로 열고, Enter 로 보내고 닫는다 — 닫혀 있어야 방향키가 걷기로 간다.
-import { CHAT_MAX } from '../../server/src/protocol';
+import { CHAT_MAX } from '../../../server/src/protocol';
 import { chatFromInput, LINE_FADE_MS, LINE_SHOW_MS, LOG_MAX, type ChatLine } from './chat';
 
 export interface ChatBox {

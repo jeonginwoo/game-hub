@@ -1,9 +1,9 @@
 // 로비 오른쪽 위 버튼 줄(꾸미기·사람·설정)이 보일 것 — 접속자 목록 순서, 인원, 연결 알림. Three.js·DOM 과 무관한 순수 함수.
 // (결정 2026-10-16: 로비 정보는 오른쪽 위 버튼 둘로)
-import type { Look } from '../../server/src/protocol';
-import { bodyColor } from './look';
-import type { NetStatus } from './net';
-import type { Others } from './others';
+import type { Look } from '../../../server/src/protocol';
+import { bodyColor } from '../avatar/look';
+import type { NetStatus } from '../net/net';
+import type { Others } from '../net/others';
 
 export interface RosterRow {
   readonly id: string; // welcome 전의 나는 ''

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { parseMap } from '../src/map';
-import { facingOf, reversesWalk, step, stepHeld } from '../src/movement';
+import { parseMap } from '../../src/world/map';
+import { facingOf, reversesWalk, step, stepHeld } from '../../src/world/movement';
 
 const map = parseMap([
   '#####',

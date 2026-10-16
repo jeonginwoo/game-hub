@@ -1,13 +1,13 @@
 // 로비 오른쪽 위 버튼 줄 — 꾸미기 버튼(캐릭터 외형), 사람 버튼(인원 + 접속자 목록), 설정 버튼(초대 코드·이름 변경·로비 나가기),
 // 위쪽 가운데 연결 알림. DOM 연결만 — 무엇을 보일지는 hud.ts, 이름·주소 판정은 room.ts, 외형 선택지는 look.ts
 // (결정 2026-10-16: 로비 정보는 오른쪽 위 버튼 줄로 · 캐릭터 꾸미기). 화면 글자는 모두 textContent 로 넣는다.
-import type { Look } from '../../server/src/protocol';
-import { drawAvatar } from './avatar-art';
-import { el, saveName } from './entry-screen';
+import type { Look } from '../../../server/src/protocol';
+import { drawAvatar } from '../avatar/avatar-art';
+import { el, saveName } from '../room/entry-screen';
 import type { RosterRow } from './hud';
-import { AVATAR_PX } from './layers';
-import { choiceOf, cycleLook, LOOK_PARTS, lookFromStorage } from './look';
-import { inviteUrl, renameFromInput } from './room';
+import { AVATAR_PX } from '../world/layers';
+import { choiceOf, cycleLook, LOOK_PARTS, lookFromStorage } from '../avatar/look';
+import { inviteUrl, renameFromInput } from '../room/room';
 
 const LOOK_KEY = 'game-hub:look';
 

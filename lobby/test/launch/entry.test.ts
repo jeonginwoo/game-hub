@@ -7,10 +7,10 @@ import {
   returnUrl,
   spawnFromSearch,
   withoutDoorParam,
-} from '../src/entry';
-import { DOOR_GAMES, GAMES, type GameEntry } from '../src/games';
-import { LOBBY_ROWS } from '../src/lobby-map';
-import { parseMap } from '../src/map';
+} from '../../src/launch/entry';
+import { DOOR_GAMES, GAMES, type GameEntry } from '../../src/data/games';
+import { LOBBY_ROWS } from '../../src/data/lobby-map';
+import { parseMap } from '../../src/world/map';
 
 const LOBBY = 'http://localhost:5173/';
 

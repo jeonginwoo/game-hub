@@ -1,10 +1,10 @@
 // 게임 입장·복귀 — 계약(docs/game-entry-contract.md)의 로비 쪽 구현. Three.js·DOM 과 무관한 순수 함수.
 // 복귀 URL 에는 로비 전용 `hub_door` 를 넣어 들어갔던 문 앞에 다시 세운다 (게임에게는 불투명한 값).
 // 게임 URL 에는 `hub_return`·`hub_name`·`hub_room` 을 붙인다 (계약 v3).
-import { isRoomCode, normalizeName } from '../../server/src/protocol';
-import type { GameEntry } from './games';
-import type { Pos, TileMap } from './map';
-import { DIR_DELTA, type Dir } from './movement';
+import { isRoomCode, normalizeName } from '../../../server/src/protocol';
+import type { GameEntry } from '../data/games';
+import type { Pos, TileMap } from '../world/map';
+import { DIR_DELTA, type Dir } from '../world/movement';
 
 const RETURN_PARAM = 'hub_return';
 const DOOR_PARAM = 'hub_door';

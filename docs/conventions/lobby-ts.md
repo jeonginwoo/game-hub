@@ -11,6 +11,26 @@
 > checked through `tsconfig.node.json`) and `src/` importing `server/src/protocol.ts` — the
 > pure message/room-code module, shared so both ends parse the same way. Nothing else in `server/`.
 
+## Layout of `src/`
+
+Files are grouped by feature, not by layer: a feature's pure module and its wiring module
+(DOM/canvas) sit side by side in one folder. File names below are given without the folder.
+
+| Folder | Files | What |
+|--------|-------|------|
+| (root) | `main.ts` | wiring: scene, input, loop |
+| `world/` | `map.ts` `tiles.ts` `layers.ts` `objects.ts` `movement.ts` `view.ts` | map, draw order, movement, camera — all pure |
+| `data/` | `lobby-map.ts` `lobby-objects.ts` `games.ts` | what the lobby is configured with |
+| `launch/` | `entry.ts` | game entry contract (`docs/game-entry-contract.md`) |
+| `avatar/` | `look.ts` · `avatar-art.ts` | character look → drawing |
+| `net/` | `net.ts` · `others.ts` | transport → what it means for the scene |
+| `room/` | `room.ts` · `entry-screen.ts` | room code / name → first screen |
+| `chat/` | `chat.ts` · `chat-box.ts` | chat rules → chat box |
+| `hud/` | `hud.ts` · `hud-bar.ts` | roster / notice text → top-right buttons |
+
+A new module joins the folder of the feature it serves; a new folder is made when a feature
+has no home yet. `games/` is not used as a folder name (it is the repo-root games folder).
+
 ## 1. Pure logic vs. wiring
 
 - **Decisions live in pure modules.** Map parsing, movement, door/entry URLs, camera
@@ -39,7 +59,8 @@
 
 ## 2. Tests
 
-- Vitest, one file per pure module: `lobby/test/<module>.test.ts`. Data modules
+- Vitest, one file per pure module, in the same folder as the source:
+  `lobby/test/<folder>/<module>.test.ts` (`src/world/map.ts` → `test/world/map.test.ts`). Data modules
   (`games.ts`, `lobby-map.ts`) are checked in the test of the logic that consumes them.
 - `describe` takes the function name, or a short topic when a group covers several
   functions or real data (`'실제 등록 표'`); `it` states the behaviour in Korean

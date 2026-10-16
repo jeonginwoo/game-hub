@@ -1,7 +1,7 @@
 // 채팅 — 채팅창 한 줄과 머리 위 말풍선의 상태. Three.js·DOM 과 무관한 순수 함수.
 // (결정 2026-10-16: 채팅창 + 말풍선, 서버 중계). 글자 다듬기는 서버와 같은 server/src/protocol.ts.
-import { cleanChat, type ServerMsg } from '../../server/src/protocol';
-import type { Others } from './others';
+import { cleanChat, type ServerMsg } from '../../../server/src/protocol';
+import type { Others } from '../net/others';
 
 export const LOG_MAX = 50; // 줄 — 채팅창에 남기는 수
 export const BUBBLE_MS = 5_000; // 말풍선이 떠 있는 시간
