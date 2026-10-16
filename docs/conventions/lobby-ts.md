@@ -29,6 +29,7 @@ Files are grouped by feature, not by layer: a feature's pure module and its wiri
 | `room/` | `room.ts` · `entry-screen.ts` | room code / name → first screen |
 | `chat/` | `chat.ts` · `chat-box.ts` | chat rules → chat box |
 | `hud/` | `hud.ts` · `hud-bar.ts` | roster / notice text → top-right buttons |
+| `edit/` | `edit.ts` · `door-picker.ts` | owner's edit mode: who may edit, door marks, game choices → door game list |
 
 A new module joins the folder of the feature it serves; a new folder is made when a feature
 has no home yet. `games/` is not used as a folder name (it is the repo-root games folder).
@@ -42,9 +43,9 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
 - **`main.ts` is wiring only**: scene setup, input, the animation loop. It calls the pure
   modules and holds the mutable state. When a branch in `main.ts` starts deciding
   something, move the decision into a pure module.
-- **HTML UI over the canvas** (entry screen, top-right button bar with the look/people/settings
-  panels, chat box) is wiring too, each in its own module (`entry-screen.ts`, `hud-bar.ts`,
-  `chat-box.ts`); what to show is decided in a pure module (`room.ts`, `hud.ts`, `chat.ts`, `look.ts`). Icons are inline SVG drawn in code, not emoji. Text goes in
+- **HTML UI over the canvas** (entry screen, top-right button bar with the edit/look/people/settings
+  buttons and panels, chat box, door game list) is wiring too, each in its own module (`entry-screen.ts`, `hud-bar.ts`,
+  `chat-box.ts`, `door-picker.ts`); what to show is decided in a pure module (`room.ts`, `hud.ts`, `chat.ts`, `look.ts`, `edit.ts`). Icons are inline SVG drawn in code, not emoji. Text goes in
   with `textContent`, never `innerHTML`. Storage (`localStorage`) is read/written inside
   `try/catch` and the lobby works without it. Styles live in `index.html` (`hub-` classes).
 - **Character drawing** is `avatar-art.ts` (2d canvas only, no `three`): a look (`look.ts` — choice
@@ -67,6 +68,12 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   (`buildWorld`) and respawns; a room that fails `buildRoom` is logged and the current one kept.
   A `room` message (the owner changed a door's game) goes through the same `switchRoom` without
   respawning — it does not change the map rows, so the current cell stays valid.
+- **Edit mode** (owner only, `canEdit`) is a state in `main.ts`: while on, the lobby does not walk,
+  the door marks (part of the world, rebuilt with it) are visible, and a click on the map goes
+  screen → cell (`screenToCell` in `view.ts`) → door → `door-picker.ts`. Picking sends `door`; the
+  change shows only when the server's `room` comes back. It turns off when ownership moves or the
+  connection closes. An Esc that closed a button-bar panel is `preventDefault`ed so it does not also
+  end edit mode.
 
 ## 2. Tests
 
@@ -109,7 +116,7 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
 
 - Draw order is ZEP-style and decided only by `layers.ts`: background (one map-sized
   image) → floor objects → sorted (objects and characters by foot y) → top objects →
-  foreground. Every mesh gets its z from `drawZ` / `objectZ` — no hand-picked z values.
+  foreground → edit marks (only while editing). Every mesh gets its z from `drawZ` / `objectZ` — no hand-picked z values.
 - Everything is in **cells** (`CELL_PX` 16): one map character, positions, walking,
   collision, objects, the network and world units. Art keeps its size — a sheet cell is a
   **tile** (`TILE_PX` 32) spanning `TILE_CELLS` (2) × 2 cells, so `tileLook` picks the piece

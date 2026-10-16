@@ -1,9 +1,9 @@
 // ZEP 식 그리기 층과 픽셀 규격 — 무엇이 무엇 위에 그려지는지는 여기 한 곳에서 정한다. 순수.
-// 층: 배경 한 장 → 바닥 물체 → 정렬 층(물체·캐릭터를 발 y 로 앞뒤 정렬) → 상단 물체 → 앞화면.
+// 층: 배경 한 장 → 바닥 물체 → 정렬 층(물체·캐릭터를 발 y 로 앞뒤 정렬) → 상단 물체 → 앞화면 → 편집 표시(방장 편집 중에만).
 
 import { TILE_CELLS } from './map';
 
-export type Layer = 'background' | 'floor' | 'sorted' | 'top' | 'foreground';
+export type Layer = 'background' | 'floor' | 'sorted' | 'top' | 'foreground' | 'edit';
 
 export const CELL_PX = 16; // 한 칸(걷기·충돌·월드 좌표 1)의 픽셀 크기
 export const TILE_PX = CELL_PX * TILE_CELLS; // 그림 타일(시트 한 칸을 키운 크기)의 픽셀 크기 — 32 (ZEP 타일), 칸 2×2 에 걸친다
@@ -15,6 +15,7 @@ const LAYER_BASE: Readonly<Record<Layer, number>> = {
   sorted: 2,
   top: 3,
   foreground: 4,
+  edit: 5, // 문 테두리 등 편집 표시 — 무엇에도 가려지지 않게 맨 앞
 };
 
 // 정렬 층 안에서 발 y 1칸당 올라가는 z — MAX_SORT_Y 에서도 +0.5 라 상단 물체 층(+1)에 닿지 않는다

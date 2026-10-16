@@ -88,6 +88,12 @@
         background: rgb(46 52 64 / 0.9); color: #ebcb8b; font-size: 13px;
       }
       .hub-notice[hidden] { display: none; }
+      /* 편집 중 문을 누르면 그 옆에 뜨는 게임 목록 (src/edit/door-picker.ts) — 자리는 스크립트가 */
+      .hub-door-picker { position: fixed; z-index: 20; width: 200px; }
+      .hub-door-choices { display: flex; flex-direction: column; gap: 6px; }
+      .hub-door-choices .hub-btn { text-align: left; }
+      .hub-btn.hub-on { background: #5e81ac; font-weight: 600; }
+      .hub-edit-btn[hidden] { display: none; }
       /* 캐릭터 머리 위 — 말풍선(있을 때만) + 이름표. main.ts 가 매 프레임 자리를 옮긴다.
          z-index 층: 머리 위 10 < 버튼 줄·창·알림·채팅 20 < 첫 화면 30 — 사람이 들어올 때마다 body 끝에 붙어 창을 덮던 것 */
       .hub-head {

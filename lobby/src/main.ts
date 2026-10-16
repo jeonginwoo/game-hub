@@ -23,11 +23,14 @@ import { objectRect, objectZ, withSolidObjects, type MapObject } from './world/o
 import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from './net/others';
 import { homeUrl, roomFromSearch, screenFor, withRoom } from './room/room';
 import { SHEET_PX, tileLook, type Cell, type Sheet } from './world/tiles';
-import { clampAxis } from './world/view';
+import { clampAxis, screenToCell } from './world/view';
+import { canEdit, doorChoices, doorMarks } from './edit/edit';
+import { createDoorPicker } from './edit/door-picker';
 
 // 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 칸 = CELL_PX × VIEW_ZOOM). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
 // 1.5 면 한 칸 24px·그림 타일 48px — 16px 타일(Ninja Adventure)은 원본 1px 이 화면 3px 로 고르다. 32px 기준 그림(임시 캐릭터)은 1.5배라 고르지 않다
 const VIEW_ZOOM = 1.5;
+const CELL_SCREEN_PX = CELL_PX * VIEW_ZOOM; // 한 칸이 화면 몇 CSS px
 const STEP_MS = 80; // 한 칸 걷는 시간 (대각선은 거리만큼 √2 배) — 칸이 타일의 1/2 라 걷는 속도는 타일 하나에 160ms 그대로
 
 const canvas = document.querySelector<HTMLCanvasElement>('#app');
@@ -56,7 +59,7 @@ function pixelTexture(c: HTMLCanvasElement): THREE.CanvasTexture {
 }
 
 /** 크기 w×h(칸)인 사각형을 칸 좌표 가장자리(left, bottom)에 맞춰 놓는다 */
-function placeRect(mesh: THREE.Mesh, left: number, bottom: number, w: number, h: number, z: number): void {
+function placeRect(mesh: THREE.Object3D, left: number, bottom: number, w: number, h: number, z: number): void {
   mesh.position.set(left + w / 2, -(bottom - h / 2), z);
 }
 
@@ -126,6 +129,8 @@ interface World {
   /** 걷기 판정 — 맵의 벽 + 물체의 solid 칸 */
   readonly walkMap: TileMap;
   readonly meshes: readonly THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
+  /** 편집 중에만 보이는 문 테두리 — 배정된 문·빈 문 다른 색 */
+  readonly marks: THREE.Group;
   /** 시트가 오면(이미 와 있으면 바로) 배경·물체 캔버스를 칠한다 */
   readonly paint: (sheets: Sheets) => void;
 }
@@ -154,6 +159,9 @@ function buildWorld(data: RoomData): World {
 
   const meshes = [background, ...objectArt.map((a) => a.mesh)];
   for (const m of meshes) scene.add(m);
+  const marks = buildDoorMarks(room);
+  marks.visible = editing;
+  scene.add(marks);
 
   const paint = (sheets: Sheets): void => {
     paintBackground(backgroundArt.canvas, room, sheets);
@@ -164,7 +172,32 @@ function buildWorld(data: RoomData): World {
     }
   };
   if (loadedSheets) paint(loadedSheets);
-  return { data, room, walkMap: withSolidObjects(map, objects), meshes, paint };
+  return { data, room, walkMap: withSolidObjects(map, objects), meshes, marks, paint };
+}
+
+const OPEN_DOOR_COLOR = 0xa3be8c; // 게임이 배정된 문
+const EMPTY_DOOR_COLOR = 0xebcb8b; // 빈 문
+
+/** 문마다 반투명 칠 + 테두리 선 — 편집 표시 층(맨 앞) */
+function buildDoorMarks(room: Room): THREE.Group {
+  const group = new THREE.Group();
+  for (const m of doorMarks(room, GAMES)) {
+    const color = m.open ? OPEN_DOOR_COLOR : EMPTY_DOOR_COLOR;
+    const fill = new THREE.Mesh(new THREE.PlaneGeometry(m.w, m.h), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5 }));
+    const hw = m.w / 2;
+    const hh = m.h / 2;
+    const edge = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-hw, -hh, 0), new THREE.Vector3(hw, -hh, 0), new THREE.Vector3(hw, hh, 0), new THREE.Vector3(-hw, hh, 0),
+      ]),
+      new THREE.LineBasicMaterial({ color }),
+    );
+    for (const o of [fill, edge]) {
+      placeRect(o, m.x - 0.5, m.y + m.h - 0.5, m.w, m.h, drawZ('edit'));
+      group.add(o);
+    }
+  }
+  return group;
 }
 
 function disposeWorld(w: World): void {
@@ -174,9 +207,18 @@ function disposeWorld(w: World): void {
     m.material.map?.dispose();
     m.material.dispose();
   }
+  scene.remove(w.marks);
+  w.marks.traverse((o) => {
+    if (!(o instanceof THREE.Mesh || o instanceof THREE.LineLoop)) return;
+    o.geometry.dispose();
+    const mats: THREE.Material[] = Array.isArray(o.material) ? o.material : [o.material];
+    for (const mat of mats) mat.dispose();
+  });
 }
 
 let loadedSheets: Sheets | null = null;
+// 방장의 편집 모드 — 걷지 않고 맵의 문을 눌러 게임을 고른다 (결정 2026-10-16: 문 배정은 편집 모드에서 문을 눌러서)
+let editing = false;
 
 // 서버 없이·welcome 전에도 그릴 수 있게 기본 방으로 시작한다. 로비에 들어가면 고른·기억해 둔 맵, welcome 이 오면 그 방으로 바꾼다
 let world: World = buildWorld(DEFAULT_ROOM);
@@ -267,11 +309,15 @@ function setBubble(head: Head, text: string | null): void {
   head.bubble.hidden = false;
 }
 
+/** 월드 점 → 화면 점(CSS px, 왼쪽 위 기준) — 지금 카메라 행렬로 */
+function toScreen(wx: number, wy: number): { readonly sx: number; readonly sy: number } {
+  tagPoint.set(wx, wy, 0).project(camera);
+  return { sx: ((tagPoint.x + 1) / 2) * window.innerWidth, sy: ((1 - tagPoint.y) / 2) * window.innerHeight };
+}
+
 function placeHead(head: Head, x: number, y: number): void {
   const headTop = -(y + 0.5 - AVATAR_H); // 월드 y — 발 선에서 캐릭터 키만큼 위
-  tagPoint.set(x, headTop, 0).project(camera);
-  const sx = ((tagPoint.x + 1) / 2) * window.innerWidth;
-  const sy = ((1 - tagPoint.y) / 2) * window.innerHeight;
+  const { sx, sy } = toScreen(x, headTop);
   head.root.style.transform = `translate(${sx}px, ${sy}px) translate(-50%, -100%)`;
   head.root.style.visibility = 'visible';
 }
@@ -374,7 +420,9 @@ function refreshStatus(): void {
   hud.update({
     count: peopleCount(netStatus, others),
     rows: rosterRows(others, entered.name, myLook),
-    notice: noticeText(netStatus),
+    notice: noticeText(netStatus, editing),
+    owner: canEdit(others),
+    editing,
   });
 }
 
@@ -462,9 +510,13 @@ function startNet(e: Entered): void {
         arrivalSearch = null;
       }
       // 방장이 문 배정을 바꿈 — 배경(열린 문·닫힌 문)과 문 → 게임을 다시 만든다 (결정 2026-10-16: 방장이 문마다 게임 고르기)
-      if (msg.t === 'room') void switchRoom(msg.room, null);
+      if (msg.t === 'room') {
+        void switchRoom(msg.room, null);
+        doorPicker.close(); // 열린 목록의 「지금 것」 표시가 옛 배정이다
+      }
       others = applyMsg(others, msg);
       syncViews();
+      if (editing && !canEdit(others)) setEditing(false); // 방장이 넘어갔다 — 서버도 더는 내 door 를 받지 않는다
       refreshStatus();
     },
     (s) => {
@@ -473,6 +525,7 @@ function startNet(e: Entered): void {
         // 끊긴 뒤에는 다른 사람 자리를 알 수 없다 — 멈춘 유령을 남기지 않는다
         others = NO_OTHERS;
         syncViews();
+        setEditing(false); // 끊기면 고른 것을 보낼 수 없다
       }
       refreshStatus();
     },
@@ -489,6 +542,45 @@ window.addEventListener('pagehide', () => {
   syncViews();
 });
 
+// --- 편집 모드 (edit.ts) -------------------------------------------------------
+// 방장만. 켜면 걷기를 멈추고 문 테두리를 보이며, 맵의 문을 누르면 옆에 게임 목록 → 고르면 door.
+// 배정이 바뀌면 서버의 room 이 월드를 다시 만든다 (테두리 색도 그때)
+
+const doorPicker = createDoorPicker();
+
+function setEditing(on: boolean): void {
+  const next = on && canEdit(others);
+  if (!next) doorPicker.close();
+  if (next === editing) return;
+  editing = next;
+  world.marks.visible = next;
+  held.length = 0; // 켜는 순간 누르고 있던 방향키로 계속 걷지 않게
+  tapped = null;
+  refreshStatus();
+}
+
+/** 편집 중 맵을 눌렀다 — 문이면 그 문 오른쪽 위에 게임 목록, 아니면 목록을 닫는다 */
+function pickDoorAt(sx: number, sy: number): void {
+  const cell = screenToCell(sx, sy, {
+    w: window.innerWidth,
+    h: window.innerHeight,
+    cellPx: CELL_SCREEN_PX,
+    center: { x: camera.position.x, y: -camera.position.y },
+  });
+  const map = world.room.map;
+  const door = map.doorAt(cell);
+  const rect = door === undefined ? undefined : map.doors[door];
+  if (door === undefined || !rect) {
+    doorPicker.close();
+    return;
+  }
+  const anchor = toScreen(rect.x + rect.w - 0.5, -(rect.y - 0.5));
+  doorPicker.open(anchor.sx, anchor.sy, doorChoices(door, GAMES, world.room.doorGames), (game) => {
+    // 문의 아무 칸이나 — 서버 assignDoor 가 문 하나로 묶는다
+    conn?.send({ t: 'door', x: cell.x, y: cell.y, game });
+  });
+}
+
 // --- 방·이름 (room.ts) --------------------------------------------------------
 // 방 코드와 이름이 정해지기 전에는 로비가 뒤에 그려지기만 하고 움직이지 않는다
 
@@ -504,6 +596,7 @@ function enterLobby(e: Entered): void {
   history.replaceState(history.state, '', withRoom(location.href, e.room));
   hud = showHud({ room: e.room, name: e.name, look: myLook, lobbyHref: location.href, onRename: rename, onLook: changeLook,
     onLeave: leaveLobby,
+    onEdit: () => setEditing(!editing),
     onOpen: () => {
       held.length = 0;
       tapped = null;
@@ -567,13 +660,19 @@ window.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return; // Ctrl+S·Ctrl+D 같은 브라우저 단축키는 건드리지 않는다
   // 접속자·설정 창이 열려 있으면 그 창이 키를 받는다(Esc 로 닫기) — 걷기·채팅으로 새지 않게
   if (entered === null || isTyping(e.target) || hud?.isOpen()) return;
+  // 버튼 줄 창을 닫은 Esc 는 넘긴다(defaultPrevented). 목록이 열려 있으면 목록만, 아니면 편집 모드를 끝낸다
+  if (e.key === 'Escape' && editing && !e.defaultPrevented) {
+    if (doorPicker.isOpen()) doorPicker.close();
+    else setEditing(false);
+    return;
+  }
   if (e.key === 'Enter' && !leaving) {
     e.preventDefault();
     chatBox?.focus();
     return;
   }
   const dir = KEY_DIR[e.code];
-  if (!dir) return;
+  if (!dir || editing) return; // 편집 중에는 걷지 않는다
   e.preventDefault();
   if (!held.includes(dir)) held.push(dir);
   if (e.repeat || leaving) return;
@@ -595,8 +694,9 @@ window.addEventListener('keyup', (e) => {
 });
 window.addEventListener('blur', () => { held.length = 0; tapped = null; }); // 포커스를 잃으면 키가 눌린 채로 남지 않게
 // 맵을 누르면 입력 칸에서 빠져나온다 — 채팅 칸에 포커스가 남아 방향키가 먹지 않는 일이 없게
-canvas.addEventListener('pointerdown', () => {
+canvas.addEventListener('pointerdown', (e) => {
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  if (editing) pickDoorAt(e.clientX, e.clientY);
 });
 
 // --- 카메라 -------------------------------------------------------------------
@@ -605,9 +705,8 @@ function resize(): void {
   const w = window.innerWidth;
   const h = window.innerHeight;
   renderer.setSize(w, h, false);
-  const cellScreenPx = CELL_PX * VIEW_ZOOM; // 월드 1 = 한 칸
-  const halfY = h / cellScreenPx / 2;
-  const halfX = w / cellScreenPx / 2;
+  const halfY = h / CELL_SCREEN_PX / 2; // 월드 1 = 한 칸
+  const halfX = w / CELL_SCREEN_PX / 2;
   camera.left = -halfX;
   camera.right = halfX;
   camera.top = halfY;
@@ -634,7 +733,7 @@ renderer.setAnimationLoop((now) => {
       enterIfDoor(pos);
     }
   }
-  if (t >= 1 && !leaving) {
+  if (t >= 1 && !leaving && !editing) {
     const r = stepHeld(world.walkMap, pos, held.length > 0 ? held : tapped ? [tapped] : []);
     tapped = null;
     if (r) {

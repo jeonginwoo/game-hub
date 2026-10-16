@@ -28,9 +28,9 @@ export function peopleCount(status: NetStatus, others: Others): number | null {
   return status === 'open' ? others.players.size + 1 : null;
 }
 
-/** 위쪽 가운데 연결 알림 — 열려 있으면 null */
-export function noticeText(status: NetStatus): string | null {
+/** 위쪽 가운데 알림 — 연결 알림이 먼저, 열려 있으면 편집 중 안내, 둘 다 아니면 null */
+export function noticeText(status: NetStatus, editing = false): string | null {
   if (status === 'connecting') return '연결 중…';
   if (status === 'closed') return '연결 끊김 — 새로고침';
-  return null;
+  return editing ? '편집 중 — 문을 눌러 게임 고르기 (Esc 끝)' : null;
 }

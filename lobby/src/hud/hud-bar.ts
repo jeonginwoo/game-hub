@@ -1,6 +1,6 @@
-// 로비 오른쪽 위 버튼 줄 — 꾸미기 버튼(캐릭터 외형), 사람 버튼(인원 + 접속자 목록), 설정 버튼(초대 코드·이름 변경·로비 나가기),
+// 로비 오른쪽 위 버튼 줄 — 편집 버튼(방장만, 문에 게임 고르기), 꾸미기 버튼(캐릭터 외형), 사람 버튼(인원 + 접속자 목록), 설정 버튼(초대 코드·이름 변경·로비 나가기),
 // 위쪽 가운데 연결 알림. DOM 연결만 — 무엇을 보일지는 hud.ts, 이름·주소 판정은 room.ts, 외형 선택지는 look.ts
-// (결정 2026-10-16: 로비 정보는 오른쪽 위 버튼 줄로 · 캐릭터 꾸미기). 화면 글자는 모두 textContent 로 넣는다.
+// (결정 2026-10-16: 로비 정보는 오른쪽 위 버튼 줄로 · 캐릭터 꾸미기 · 문 배정은 편집 모드에서). 화면 글자는 모두 textContent 로 넣는다.
 import type { Look } from '../../../server/src/protocol';
 import { drawAvatar } from '../avatar/avatar-art';
 import { el, saveName } from '../room/entry-screen';
@@ -36,6 +36,10 @@ export interface HudView {
   readonly count: number | null;
   readonly rows: readonly RosterRow[];
   readonly notice: string | null;
+  /** 내가 방장 — 편집 버튼을 보인다 */
+  readonly owner: boolean;
+  /** 편집 중 — 편집 버튼을 눌린 모양으로 */
+  readonly editing: boolean;
 }
 
 export interface Hud {
@@ -53,6 +57,8 @@ export interface HudOptions {
   /** 꾸미기 창에서 부위 하나를 바꿀 때마다 — 저장은 이 창이 이미 했다 */
   readonly onLook: (look: Look) => void;
   readonly onLeave: () => void;
+  /** 편집 버튼 — 편집 모드를 켜고 끈다 (방장인지는 로비가 다시 본다) */
+  readonly onEdit: () => void;
   /** 창이 열릴 때 — 로비가 누르고 있던 방향키를 놓게 (열린 동안 keyup 전까지 계속 걷지 않게) */
   readonly onOpen: () => void;
 }
@@ -93,6 +99,11 @@ const GEAR_ICON: IconParts = [
 // 셔츠 — 꾸미기 (결정 2026-10-16: 캐릭터 꾸미기)
 const SHIRT_ICON: IconParts = [
   ['path', { d: 'M7 2.5 2 5l1.5 4.5L6 8.5V18h8V8.5l2.5 1L18 5l-5-2.5c-.4 1.4-1.6 2.3-3 2.3S7.4 3.9 7 2.5z', fill: 'currentColor' }],
+];
+
+// 연필 — 편집 모드 (결정 2026-10-16: 문 배정은 편집 모드에서 문을 눌러서)
+const PENCIL_ICON: IconParts = [
+  ['path', { d: 'M13.5 2.5l4 4L7 17l-5 1 1-5z', fill: 'currentColor' }],
 ];
 
 // 왕관 — 접속자 목록의 방장 표시 (결정 2026-10-16: 서버가 정한 방장)
@@ -137,7 +148,9 @@ export function showHud(opts: HudOptions): Hud {
   const count = el('span', 'hub-people-count', '–');
   peopleBtn.append(count);
   const settingsBtn = iconButton('hub-settings-btn', '설정', icon(GEAR_ICON));
-  bar.append(lookBtn, peopleBtn, settingsBtn);
+  const editBtn = iconButton('hub-edit-btn', '로비 편집', icon(PENCIL_ICON));
+  editBtn.hidden = true;
+  bar.append(editBtn, lookBtn, peopleBtn, settingsBtn);
 
   // 접속자 목록
   const peoplePanel = el('div', 'hub-panel');
@@ -249,7 +262,10 @@ export function showHud(opts: HudOptions): Hud {
     if (open !== null && e.target instanceof Node && !root.contains(e.target)) show(null);
   });
   document.addEventListener('keydown', (e) => {
-    if (open !== null && e.key === 'Escape') show(null);
+    if (open !== null && e.key === 'Escape') {
+      e.preventDefault(); // 창을 닫는 데 쓴 Esc — 로비가 같은 키로 편집 모드까지 끄지 않게
+      show(null);
+    }
   });
 
   copy.addEventListener('click', () => copyLink(copy, inviteUrl(opts.lobbyHref, opts.room)));
@@ -276,12 +292,19 @@ export function showHud(opts: HudOptions): Hud {
     rename();
   });
   leaveBtn.addEventListener('click', opts.onLeave);
+  editBtn.addEventListener('click', () => {
+    show(null);
+    editBtn.blur(); // 포커스가 남으면 스페이스가 다시 누른다
+    opts.onEdit();
+  });
 
   return {
     update(view) {
       count.textContent = view.count === null ? '–' : `${view.count}`;
       notice.hidden = view.notice === null;
       notice.textContent = view.notice ?? '';
+      editBtn.hidden = !view.owner;
+      editBtn.classList.toggle('hub-on', view.editing);
       const items = view.rows.map((r) => {
         const li = el('li', r.mine ? 'hub-person hub-person-mine' : 'hub-person');
         const dot = el('span', 'hub-person-dot');
