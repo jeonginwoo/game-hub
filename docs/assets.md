@@ -13,7 +13,7 @@
 | 파일 | 원본 경로 | 쓰는 곳 |
 |------|-----------|---------|
 | `TilesetFloor.png` | `Backgrounds/Tilesets/TilesetFloor.png` | 바닥 풀 (`lobby/src/world/tiles.ts`) · 흙 마당 물체 (`lobby/src/data/object-art.ts`) |
-| `TilesetHouse.png` | `Backgrounds/Tilesets/TilesetHouse.png` | 건물 정면·지붕·문 · 도리이 물체 |
+| `TilesetHouse.png` | `Backgrounds/Tilesets/TilesetHouse.png` | 건물 정면·지붕·문 · 혼자 서 있는 그림을 물체로 (건물 통째·석상·통·자루·상자·항아리·솥·가구·깃발·돌 아치 등 118종, 도리이 포함 — `lobby/src/data/object-art.ts`. 울타리·담·마루 판·벽에 거는 것·한 층 더 쌓는 조각은 뺌) |
 | `TilesetNature.png` | `Backgrounds/Tilesets/TilesetNature.png` | 벽 덤불 · 혼자 서 있는 그림 전부를 물체로 (나무·바위·풀·꽃 등 135종 — `lobby/src/data/object-art.ts`. 잎이 옆 그림과 겹치는 키 큰 주황 나무(시트 12,16)와 그 옆 줄기 조각만 뺌) |
 
 시트 규격: 16×16 칸 — 로비 배경 캔버스에 32px(2×2 칸)로 2배 키운 크기로, 칸마다 한 조각씩 찍는다(캐릭터와 픽셀 밀도는 맞추지 않음, PROGRESS 결정 기록 2026-10-15). 캐릭터는 이 팩을 쓰지 않는다.

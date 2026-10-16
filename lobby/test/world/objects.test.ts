@@ -66,8 +66,18 @@ describe('물체 그림 표', () => {
     }
   });
 
-  it('같은 시트 칸을 두 종류가 쓰지 않는다', () => {
-    const cells = Object.values(OBJECT_ART).map((a) => `${a.sprite.sheet}:${a.sprite.col},${a.sprite.row}`);
-    expect(new Set(cells).size).toBe(cells.length);
+  it('같은 시트 칸을 두 종류가 쓰지 않는다 — 잘라 쓰는 영역 전체가 안 겹친다', () => {
+    const owner = new Map<string, ObjectKind>();
+    for (const kind of Object.keys(OBJECT_ART).filter((k): k is ObjectKind => Object.hasOwn(OBJECT_SHAPES, k))) {
+      const { w, h } = OBJECT_SHAPES[kind];
+      const { sheet, col, row } = OBJECT_ART[kind].sprite;
+      for (let dy = 0; dy < h / 2; dy++) {
+        for (let dx = 0; dx < w / 2; dx++) {
+          const cell = `${sheet}:${col + dx},${row + dy}`;
+          expect(owner.get(cell), `${kind} ↔ ${owner.get(cell)} (${cell})`).toBeUndefined();
+          owner.set(cell, kind);
+        }
+      }
+    }
   });
 });
