@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, isRoomCode, normalizeName, parseClientMsg, parseServerMsg, roomFromPath } from '../src/protocol.ts';
+import { CHAT_MAX, cleanChat, cleanName, isRoomCode, normalizeName, parseClientMsg, parseServerMsg, roomFromPath } from '../src/protocol.ts';
 
 const at = { x: 3, y: 4, dir: 'down' };
 
@@ -20,6 +20,12 @@ describe('parseClientMsg', () => {
     expect(parseClientMsg(JSON.stringify({ t: 'move' }))).toBeNull();
     expect(parseClientMsg(JSON.stringify({ t: 'hello', at }))).toBeNull();
     expect(parseClientMsg(JSON.stringify({ t: 'move', at: { ...at, dir: 'north' } }))).toBeNull();
+  });
+
+  it('chat 은 다듬은 글자로 받고, 비면 null', () => {
+    expect(parseClientMsg(JSON.stringify({ t: 'chat', text: ' 안녕\n하세요 ', at }))).toEqual({ t: 'chat', text: '안녕 하세요' });
+    expect(parseClientMsg(JSON.stringify({ t: 'chat', text: ' \u0000 ' }))).toBeNull();
+    expect(parseClientMsg(JSON.stringify({ t: 'chat', text: 3 }))).toBeNull();
   });
 
   it('좌표는 0 이상 COORD_MAX 미만의 정수만', () => {
@@ -82,10 +88,22 @@ describe('normalizeName', () => {
   });
 });
 
+describe('cleanChat', () => {
+  it('제어 문자는 공백으로, 앞뒤 공백은 자른다', () => {
+    expect(cleanChat('\t가\r\n나 ')).toBe('가  나');
+    // \p{Cc} 밖의 줄·문단 구분자도 — 말풍선이 여러 줄로 갈라지지 않게
+    expect(cleanChat('가 나 다')).toBe('가 나 다');
+  });
+
+  it('CHAT_MAX 글자로 자른다', () => {
+    expect(cleanChat('a'.repeat(CHAT_MAX + 5))).toHaveLength(CHAT_MAX);
+  });
+});
+
 describe('parseServerMsg', () => {
   const player = { id: 'p1', name: 'A', ...at };
 
-  it('서버가 보내는 네 가지를 받는다', () => {
+  it('서버가 보내는 다섯 가지를 받는다', () => {
     expect(parseServerMsg(JSON.stringify({ t: 'welcome', id: 'p1', players: [player] }))).toEqual({
       t: 'welcome',
       id: 'p1',
@@ -94,6 +112,7 @@ describe('parseServerMsg', () => {
     expect(parseServerMsg(JSON.stringify({ t: 'join', player }))).toEqual({ t: 'join', player });
     expect(parseServerMsg(JSON.stringify({ t: 'move', id: 'p1', at }))).toEqual({ t: 'move', id: 'p1', at });
     expect(parseServerMsg(JSON.stringify({ t: 'leave', id: 'p1' }))).toEqual({ t: 'leave', id: 'p1' });
+    expect(parseServerMsg(JSON.stringify({ t: 'chat', id: 'p1', text: '안녕' }))).toEqual({ t: 'chat', id: 'p1', text: '안녕' });
   });
 
   it('형식이 틀리면 null — 명단에 틀린 사람이 하나라도 있으면 통째로', () => {
@@ -102,6 +121,7 @@ describe('parseServerMsg', () => {
     expect(parseServerMsg(JSON.stringify({ t: 'join', player: { ...player, x: -1 } }))).toBeNull();
     expect(parseServerMsg(JSON.stringify({ t: 'move', id: 3, at }))).toBeNull();
     expect(parseServerMsg(JSON.stringify({ t: 'leave' }))).toBeNull();
+    expect(parseServerMsg(JSON.stringify({ t: 'chat', id: 'p1', text: '  ' }))).toBeNull();
   });
 
   it('이름은 다시 다듬는다 — 화면에 그대로 나가는 값이라', () => {

@@ -26,8 +26,8 @@
   `try/catch` and the lobby works without it. Styles live in `index.html` (`hub-` classes).
 - **Networking** goes through `net.ts` only (the one file to change if the transport
   changes); every received message passes `parseServerMsg`. What the messages mean for the
-  scene is the pure `others.ts`. Name tags are DOM (`hub-tag`, `textContent`) placed after
-  `renderer.render` each frame, so the camera matrices are current.
+  scene is the pure `others.ts`. Name tags and chat bubbles are DOM (`hub-head`, `textContent`) placed
+  after `renderer.render` each frame, so the camera matrices are current.
 - Keyboard handlers skip events whose target is a text field (`isTyping` in `main.ts`), and an
   Enter handler on a text field ignores `isComposing` and `keyCode === 229` (Korean IME confirms
   a syllable with Enter; Safari reports only the keyCode).

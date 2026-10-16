@@ -64,6 +64,8 @@ export function applyMsg(state: Others, msg: ServerMsg): Others {
       players.delete(msg.id);
       return { ...state, players };
     }
+    case 'chat':
+      return state; // 채팅은 chat.ts
   }
 }
 

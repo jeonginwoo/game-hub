@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ServerMsg, Spot } from '../src/protocol.ts';
-import { Rooms, Roster } from '../src/roster.ts';
+import { CHAT_BURST, CHAT_WINDOW_MS, Rooms, Roster } from '../src/roster.ts';
 
 function peer(): { got: ServerMsg[]; send: (m: ServerMsg) => void } {
   const got: ServerMsg[] = [];
@@ -60,6 +60,30 @@ describe('Roster', () => {
     expect(a.got.length).toBe(count);
   });
 
+  it('채팅은 보낸 사람을 포함한 모두에게 간다', () => {
+    const roster = new Roster();
+    const a = peer();
+    const b = peer();
+    const ida = roster.join(a, { t: 'hello', name: 'A', at: spot(1, 1) });
+    roster.join(b, { t: 'hello', name: 'B', at: spot(2, 2) });
+    roster.handle(ida, { t: 'chat', text: '안녕' });
+    expect(a.got.at(-1)).toEqual({ t: 'chat', id: ida, text: '안녕' });
+    expect(b.got.at(-1)).toEqual({ t: 'chat', id: ida, text: '안녕' });
+  });
+
+  it('CHAT_WINDOW_MS 안에 CHAT_BURST 줄을 넘으면 버리고, 시간이 지나면 다시 받는다', () => {
+    let now = 1_000;
+    const roster = new Roster(() => now);
+    const a = peer();
+    const ida = roster.join(a, { t: 'hello', name: 'A', at: spot(1, 1) });
+    const chats = (): number => a.got.filter((m) => m.t === 'chat').length;
+    for (let i = 0; i < CHAT_BURST + 2; i++) roster.handle(ida, { t: 'chat', text: `${i}` });
+    expect(chats()).toBe(CHAT_BURST);
+    now += CHAT_WINDOW_MS;
+    roster.handle(ida, { t: 'chat', text: '다시' });
+    expect(chats()).toBe(CHAT_BURST + 1);
+  });
+
   it('명단에 든 뒤의 hello 는 무시한다', () => {
     const roster = new Roster();
     const a = peer();
@@ -82,6 +106,17 @@ describe('Rooms', () => {
     rooms.handle('bbbbbb', idb, { t: 'move', at: spot(3, 3) });
     expect(a.got.map((m) => m.t)).toEqual(['welcome']);
     expect(b.got[0]).toMatchObject({ t: 'welcome', players: [{ name: 'B' }] });
+  });
+
+  it('시계를 방마다의 명단에 넘긴다 — 도배 제한이 같은 시계로 돈다', () => {
+    let now = 0;
+    const rooms = new Rooms(() => now);
+    const a = peer();
+    const ida = rooms.join('aaaaaa', a, { t: 'hello', name: 'A', at: spot(1, 1) });
+    for (let i = 0; i < CHAT_BURST + 1; i++) rooms.handle('aaaaaa', ida, { t: 'chat', text: `${i}` });
+    now += CHAT_WINDOW_MS;
+    rooms.handle('aaaaaa', ida, { t: 'chat', text: '다시' });
+    expect(a.got.filter((m) => m.t === 'chat')).toHaveLength(CHAT_BURST + 1);
   });
 
   it('마지막 사람이 나가면 방이 사라진다', () => {

@@ -2,6 +2,8 @@
 // 2026-10-14: ZEP 식 층). 배경·물체는 Ninja Adventure 타일(docs/assets.md), 캐릭터는 아직 임시 그림. 월드 좌표: x = 타일 x, y = -타일 y (화면 위쪽이 맵 윗줄).
 import * as THREE from 'three';
 import type { Spot } from '../../server/src/protocol';
+import { bubbleText, chatLine, say, type Bubble } from './chat';
+import { showChatBox, type ChatBox } from './chat-box';
 import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './entry';
 import { loadName, showEntryScreen, showRoomBadge, type Entered } from './entry-screen';
 import { DOOR_GAMES, GAMES } from './games';
@@ -210,25 +212,47 @@ function placeAvatar(mesh: THREE.Mesh, x: number, y: number): void {
   placeRect(mesh, x - AVATAR_W / 2, foot, AVATAR_W, AVATAR_H, drawZ('sorted', foot));
 }
 
-// 이름표 — 화면 글자라 DOM(textContent)으로 띄우고 매 프레임 머리 위로 옮긴다. 그림처럼 확대되어 번지지 않게
+// 머리 위 — 말풍선(채팅 몇 초) + 이름표. 화면 글자라 DOM(textContent)으로 띄우고 매 프레임 머리 위로 옮긴다.
+// 그림처럼 확대되어 번지지 않게
 const tagPoint = new THREE.Vector3();
 
-function makeTag(name: string): HTMLDivElement {
+interface Head {
+  readonly root: HTMLDivElement;
+  readonly bubble: HTMLDivElement;
+}
+
+function makeHead(name: string): Head {
+  const root = document.createElement('div');
+  root.className = 'hub-head';
+  root.style.visibility = 'hidden'; // 첫 placeHead 전에 왼쪽 위에 한 프레임 보이지 않게
+  const bubble = document.createElement('div');
+  bubble.className = 'hub-bubble';
+  bubble.hidden = true;
   const tag = document.createElement('div');
   tag.className = 'hub-tag';
   tag.textContent = name;
-  tag.style.visibility = 'hidden'; // 첫 placeTag 전에 왼쪽 위에 한 프레임 보이지 않게
-  document.body.append(tag);
-  return tag;
+  root.append(bubble, tag);
+  document.body.append(root);
+  return { root, bubble };
 }
 
-function placeTag(tag: HTMLElement, x: number, y: number): void {
+/** 말풍선 글을 바꾼다 — null 이면 내린다. 같은 글이면 DOM 을 건드리지 않는다 */
+function setBubble(head: Head, text: string | null): void {
+  if (text === null) {
+    head.bubble.hidden = true;
+    return;
+  }
+  if (head.bubble.textContent !== text) head.bubble.textContent = text;
+  head.bubble.hidden = false;
+}
+
+function placeHead(head: Head, x: number, y: number): void {
   const headTop = -(y + 0.5 - AVATAR_H); // 월드 y — 발 선에서 캐릭터 키만큼 위
   tagPoint.set(x, headTop, 0).project(camera);
   const sx = ((tagPoint.x + 1) / 2) * window.innerWidth;
   const sy = ((1 - tagPoint.y) / 2) * window.innerHeight;
-  tag.style.transform = `translate(${sx}px, ${sy}px) translate(-50%, -100%)`;
-  tag.style.visibility = 'visible';
+  head.root.style.transform = `translate(${sx}px, ${sy}px) translate(-50%, -100%)`;
+  head.root.style.visibility = 'visible';
 }
 
 // 게임에서 돌아왔으면(hub_door) 들어갔던 문 앞에 선다. 주소창에서는 지워 새로고침하면 시작점에서 시작하게
@@ -289,7 +313,7 @@ interface RemoteView {
   readonly mesh: THREE.Mesh;
   readonly mat: THREE.MeshBasicMaterial;
   readonly tex: Readonly<Record<Dir, THREE.CanvasTexture>>;
-  readonly tag: HTMLDivElement;
+  readonly head: Head;
 }
 
 let others: Others = NO_OTHERS;
@@ -297,6 +321,8 @@ let netStatus: NetStatus = 'connecting';
 let conn: Connection | null = null;
 let lastSent = ''; // 마지막으로 보낸 자리 — 같은 자리를 또 보내지 않게
 let setStatus: (text: string) => void = () => {};
+let chatBox: ChatBox | null = null;
+let bubbles: ReadonlyMap<string, Bubble> = new Map();
 const views = new Map<string, RemoteView>();
 
 function spotKey(s: Spot): string {
@@ -326,7 +352,7 @@ function syncViews(): void {
     if (others.players.has(id)) continue;
     scene.remove(v.mesh);
     v.mat.dispose();
-    v.tag.remove();
+    v.head.root.remove();
     views.delete(id);
   }
   for (const [id, r] of others.players) {
@@ -335,7 +361,7 @@ function syncViews(): void {
     const mat = new THREE.MeshBasicMaterial({ map: tex[r.at.dir], alphaTest: 0.5 });
     const mesh = new THREE.Mesh(avatarGeo, mat);
     scene.add(mesh);
-    views.set(id, { mesh, mat, tex, tag: makeTag(r.name) });
+    views.set(id, { mesh, mat, tex, head: makeHead(r.name) });
   }
 }
 
@@ -352,6 +378,15 @@ function startNet(e: Entered): void {
       return { t: 'hello', name: e.name, at };
     },
     (msg) => {
+      if (msg.t === 'chat') {
+        // 채팅은 명단을 바꾸지 않는다 — 채팅창 한 줄과 말풍선만
+        const line = chatLine(msg, others, e.name);
+        if (line) {
+          chatBox?.add(line);
+          bubbles = say(bubbles, msg.id, msg.text, performance.now());
+        }
+        return;
+      }
       others = applyMsg(others, msg);
       syncViews();
       refreshStatus();
@@ -382,14 +417,15 @@ window.addEventListener('pagehide', () => {
 // 방 코드와 이름이 정해지기 전에는 로비가 뒤에 그려지기만 하고 움직이지 않는다
 
 let entered: Entered | null = null;
-let myTag: HTMLDivElement | null = null;
+let myHead: Head | null = null;
 
 function enterLobby(e: Entered): void {
   entered = e;
   // 주소창에 방 코드를 남겨 둔다 — 새로고침·게임 복귀 URL(returnUrl 이 location.href 를 쓴다)이 같은 방으로 오게
   history.replaceState(history.state, '', withRoom(location.href, e.room));
   setStatus = showRoomBadge(e, location.href);
-  myTag = makeTag(e.name);
+  myHead = makeHead(e.name);
+  chatBox = showChatBox((text) => conn?.send({ t: 'chat', text }));
   startNet(e);
 }
 
@@ -422,6 +458,11 @@ const held: Dir[] = [];
 window.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return; // Ctrl+S·Ctrl+D 같은 브라우저 단축키는 건드리지 않는다
   if (entered === null || isTyping(e.target)) return;
+  if (e.key === 'Enter' && !leaving) {
+    e.preventDefault();
+    chatBox?.focus();
+    return;
+  }
   const dir = KEY_DIR[e.code];
   if (!dir) return;
   e.preventDefault();
@@ -444,6 +485,10 @@ window.addEventListener('keyup', (e) => {
   if (i >= 0) held.splice(i, 1);
 });
 window.addEventListener('blur', () => { held.length = 0; tapped = null; }); // 포커스를 잃으면 키가 눌린 채로 남지 않게
+// 맵을 누르면 입력 칸에서 빠져나온다 — 채팅 칸에 포커스가 남아 방향키가 먹지 않는 일이 없게
+canvas.addEventListener('pointerdown', () => {
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+});
 
 // --- 카메라 -------------------------------------------------------------------
 
@@ -515,12 +560,16 @@ renderer.setAnimationLoop((now) => {
 
   renderer.render(scene, camera);
 
-  // 이름표는 렌더 뒤에 — 카메라 행렬이 이번 프레임 위치로 갱신된 다음 화면 좌표로 옮긴다
-  if (myTag) placeTag(myTag, x, y);
+  // 머리 위 글은 렌더 뒤에 — 카메라 행렬이 이번 프레임 위치로 갱신된 다음 화면 좌표로 옮긴다
+  if (myHead) {
+    setBubble(myHead, others.me === null ? null : bubbleText(bubbles, others.me, now));
+    placeHead(myHead, x, y);
+  }
   for (const [id, r] of others.players) {
     const v = views.get(id);
     if (!v) continue;
     const p = remotePos(r);
-    placeTag(v.tag, p.x, p.y);
+    setBubble(v.head, bubbleText(bubbles, id, now));
+    placeHead(v.head, p.x, p.y);
   }
 });

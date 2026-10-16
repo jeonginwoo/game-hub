@@ -16,17 +16,20 @@ export interface Player extends Spot {
 
 export type ClientMsg =
   | { readonly t: 'hello'; readonly name: string; readonly at: Spot } // 접속 후 첫 메시지 — 그 전에는 명단에 없다
-  | { readonly t: 'move'; readonly at: Spot };
+  | { readonly t: 'move'; readonly at: Spot }
+  | { readonly t: 'chat'; readonly text: string }; // 같은 방 모두에게 — 보낸 사람에게도 돌아온다
 
 export type ServerMsg =
   | { readonly t: 'welcome'; readonly id: string; readonly players: readonly Player[] } // players 에 본인 포함
   | { readonly t: 'join'; readonly player: Player }
   | { readonly t: 'move'; readonly id: string; readonly at: Spot }
-  | { readonly t: 'leave'; readonly id: string };
+  | { readonly t: 'leave'; readonly id: string }
+  | { readonly t: 'chat'; readonly id: string; readonly text: string };
 
 export const NAME_MAX = 16; // 글자
 export const COORD_MAX = 1000; // 타일 — 맵 크기를 서버가 모르므로 넉넉한 상한만 둔다
 export const DEFAULT_NAME = '손님';
+export const CHAT_MAX = 200; // 글자
 
 // 방 코드 — 접속 주소 `/ws?room=<코드>`. 로비가 만들고 서버는 형식만 본다 (결정 2026-10-14: 로그인 없이 방 + 초대 링크).
 // 헷갈리는 글자(0·o, 1·l·i)는 뺀다 — 사람이 보고 옮겨 적는 값이라
@@ -76,7 +79,12 @@ export function cleanName(raw: string): string {
   return normalizeName(raw) || DEFAULT_NAME;
 }
 
-/** 형식이 틀리면 null — 서버는 그 메시지를 조용히 버린다 */
+/** 채팅 한 줄 — 제어 문자·줄/문단 구분자(줄바꿈 포함)는 공백으로, 앞뒤 공백을 자르고 CHAT_MAX 글자로. 빈 문자열일 수 있다 */
+export function cleanChat(raw: string): string {
+  return raw.replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ').trim().slice(0, CHAT_MAX).trim();
+}
+
+/** 형식이 틀리면 null — 서버는 그 메시지를 조용히 버린다. 빈 채팅도 null */
 export function parseClientMsg(raw: string): ClientMsg | null {
   let v: unknown;
   try {
@@ -85,13 +93,19 @@ export function parseClientMsg(raw: string): ClientMsg | null {
     return null;
   }
   if (!isRecord(v)) return null;
-  const at = parseSpot(v.at);
-  if (!at) return null;
   switch (v.t) {
-    case 'hello':
-      return typeof v.name === 'string' ? { t: 'hello', name: cleanName(v.name), at } : null;
-    case 'move':
-      return { t: 'move', at };
+    case 'hello': {
+      const at = parseSpot(v.at);
+      return at && typeof v.name === 'string' ? { t: 'hello', name: cleanName(v.name), at } : null;
+    }
+    case 'move': {
+      const at = parseSpot(v.at);
+      return at ? { t: 'move', at } : null;
+    }
+    case 'chat': {
+      const text = typeof v.text === 'string' ? cleanChat(v.text) : '';
+      return text ? { t: 'chat', text } : null;
+    }
     default:
       return null;
   }
@@ -133,6 +147,11 @@ export function parseServerMsg(raw: string): ServerMsg | null {
     }
     case 'leave':
       return typeof v.id === 'string' ? { t: 'leave', id: v.id } : null;
+    case 'chat': {
+      // 화면에 그대로 나가는 값이라 로비도 다시 다듬는다
+      const text = typeof v.text === 'string' ? cleanChat(v.text) : '';
+      return typeof v.id === 'string' && text ? { t: 'chat', id: v.id, text } : null;
+    }
     default:
       return null;
   }

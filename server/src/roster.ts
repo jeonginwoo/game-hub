@@ -6,9 +6,22 @@ export interface Peer {
   send(msg: ServerMsg): void;
 }
 
+// 채팅 도배 막기 — 한 사람이 CHAT_WINDOW_MS 안에 CHAT_BURST 줄까지. 넘친 줄은 조용히 버린다
+export const CHAT_BURST = 5;
+export const CHAT_WINDOW_MS = 5_000;
+
+/** 지금 시각(ms) — 테스트에서 고정값을 넣는다 */
+export type Clock = () => number;
+
 export class Roster {
-  private readonly players = new Map<string, { info: Player; peer: Peer }>();
+  private readonly players = new Map<string, { info: Player; peer: Peer; chats: readonly number[] }>();
   private nextId = 1;
+
+  private readonly now: Clock;
+
+  constructor(now: Clock = Date.now) {
+    this.now = now;
+  }
 
   get size(): number {
     return this.players.size;
@@ -22,7 +35,7 @@ export class Roster {
     const id = `p${this.nextId++}`;
     const info: Player = { id, name: hello.name, ...hello.at };
     this.broadcast({ t: 'join', player: info });
-    this.players.set(id, { info, peer });
+    this.players.set(id, { info, peer, chats: [] });
     peer.send({ t: 'welcome', id, players: [...this.players.values()].map((p) => p.info) });
     return id;
   }
@@ -36,9 +49,24 @@ export class Roster {
   /** 명단에 든 뒤의 메시지. hello 를 또 보내면 무시한다(이름 바꾸기는 v0 에 없음) */
   handle(id: string, msg: ClientMsg): void {
     const me = this.players.get(id);
-    if (!me || msg.t !== 'move') return;
-    me.info = { ...me.info, ...msg.at };
-    this.broadcast({ t: 'move', id, at: msg.at }, id);
+    if (!me) return;
+    switch (msg.t) {
+      case 'move':
+        me.info = { ...me.info, ...msg.at };
+        this.broadcast({ t: 'move', id, at: msg.at }, id);
+        return;
+      case 'chat': {
+        const now = this.now();
+        const recent = me.chats.filter((t) => now - t < CHAT_WINDOW_MS);
+        if (recent.length >= CHAT_BURST) return;
+        me.chats = [...recent, now];
+        // 보낸 사람에게도 보낸다 — 모두가 같은 순서로 보고, 버려진 줄은 본인 화면에도 안 나온다
+        this.broadcast({ t: 'chat', id, text: msg.text });
+        return;
+      }
+      case 'hello':
+        return;
+    }
   }
 
   private broadcast(msg: ServerMsg, except?: string): void {
@@ -51,6 +79,11 @@ export class Roster {
 /** 방 코드별 명단. 방은 처음 들어온 사람이 만들고, 마지막 사람이 나가면 없앤다 (결정 2026-10-14) */
 export class Rooms {
   private readonly rooms = new Map<string, Roster>();
+  private readonly now: Clock;
+
+  constructor(now: Clock = Date.now) {
+    this.now = now;
+  }
 
   /** 지금 열린 방 수 */
   get count(): number {
@@ -60,7 +93,7 @@ export class Rooms {
   join(code: string, peer: Peer, hello: Extract<ClientMsg, { t: 'hello' }>): string {
     let roster = this.rooms.get(code);
     if (!roster) {
-      roster = new Roster();
+      roster = new Roster(this.now);
       this.rooms.set(code, roster);
     }
     return roster.join(peer, hello);

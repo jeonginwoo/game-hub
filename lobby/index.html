@@ -42,12 +42,52 @@
       .hub-badge-room { font-weight: 600; letter-spacing: 0.05em; }
       .hub-badge-name { color: #a3adc2; }
       .hub-badge-status { color: #a3be8c; font-size: 13px; }
-      /* 캐릭터 머리 위 이름표 (main.ts 가 매 프레임 자리를 옮긴다) */
-      .hub-tag {
-        position: fixed; left: 0; top: 0; transform: translate(-50%, -100%); padding: 1px 6px;
-        border-radius: 6px; background: rgb(46 52 64 / 0.75); font-size: 12px; white-space: nowrap;
-        pointer-events: none;
+      /* 캐릭터 머리 위 — 말풍선(있을 때만) + 이름표. main.ts 가 매 프레임 자리를 옮긴다 */
+      .hub-head {
+        position: fixed; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+        transform: translate(-50%, -100%); pointer-events: none;
       }
+      .hub-tag {
+        padding: 1px 6px; border-radius: 6px; background: rgb(46 52 64 / 0.75); font-size: 12px; white-space: nowrap;
+      }
+      .hub-bubble {
+        max-width: 220px; padding: 4px 8px; border-radius: 8px; background: #eceff4; color: #2e3440;
+        font-size: 13px; overflow-wrap: anywhere;
+      }
+      .hub-bubble[hidden] { display: none; }
+      /* 채팅창 (src/chat-box.ts) */
+      .hub-chat {
+        position: fixed; left: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px;
+        width: min(360px, calc(100vw - 24px));
+      }
+      /* 닫힌 창(기본): 새 줄만 잠깐, 배경 없이 글자 그림자로만 읽히게, 스크롤 없음 */
+      .hub-chat-log {
+        display: flex; flex-direction: column; gap: 2px; max-height: 160px; overflow: hidden; padding: 6px 10px;
+        border-radius: 10px; font-size: 13px; text-shadow: 0 1px 2px rgb(0 0 0 / 0.9), 0 0 4px rgb(0 0 0 / 0.6);
+      }
+      .hub-chat-log:empty, .hub-chat-quiet { display: none; }
+      .hub-chat-line { overflow-wrap: anywhere; transition: opacity 1s; } /* 1s = chat.ts LINE_FADE_MS */
+      .hub-chat-fading { opacity: 0; }
+      .hub-chat-old { display: none; }
+      .hub-chat-name { margin-right: 6px; color: #88c0d0; font-weight: 600; }
+      .hub-chat-mine .hub-chat-name { color: #a3be8c; }
+      .hub-chat-input {
+        flex: none; padding: 8px 10px; border-color: transparent; background: rgb(59 66 82 / 0.45); font-size: 14px;
+      }
+      .hub-chat-input::placeholder { color: rgb(236 239 244 / 0.75); }
+      /* 열린 창(입력 중): 지난 줄까지 모두, 진한 배경, 스크롤 */
+      .hub-chat-open .hub-chat-log {
+        display: flex; overflow-y: auto; background: rgb(46 52 64 / 0.85); text-shadow: none;
+        scrollbar-width: thin; scrollbar-color: rgb(136 192 208 / 0.5) transparent;
+      }
+      .hub-chat-open .hub-chat-log:empty { display: none; }
+      .hub-chat-open .hub-chat-fading { opacity: 1; }
+      .hub-chat-open .hub-chat-old { display: block; }
+      .hub-chat-open .hub-chat-input { border-color: #4c566a; background: rgb(59 66 82 / 0.9); }
+      /* 크롬·사파리 옛 버전용 — scrollbar-width 를 모르면 이 모양 */
+      .hub-chat-log::-webkit-scrollbar { width: 6px; }
+      .hub-chat-log::-webkit-scrollbar-track { background: transparent; }
+      .hub-chat-log::-webkit-scrollbar-thumb { border-radius: 3px; background: rgb(136 192 208 / 0.5); }
       .hub-small { padding: 6px 10px; font-size: 13px; }
     </style>
   </head>
