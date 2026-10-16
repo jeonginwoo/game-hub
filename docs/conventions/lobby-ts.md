@@ -22,7 +22,7 @@ Files are grouped by feature, not by layer: a feature's pure module and its wiri
 |--------|-------|------|
 | (root) | `main.ts` | wiring: scene, input, loop |
 | `world/` | `map.ts` `tiles.ts` `layers.ts` `objects.ts` `movement.ts` `view.ts` | map, draw order, movement, camera — all pure |
-| `data/` | `object-art.ts` `games.ts` | what the lobby is configured with (art per object kind, game table) |
+| `data/` | `object-art.ts` `object-names.ts` `games.ts` | what the lobby is configured with (art per object kind, group and shown name per object kind, game table) |
 | `launch/` | `entry.ts` | game entry contract (`docs/game-entry-contract.md`) |
 | `avatar/` | `look.ts` · `avatar-art.ts` | character look → drawing |
 | `net/` | `net.ts` · `others.ts` | transport → what it means for the scene |
@@ -57,10 +57,10 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
 - Keyboard handlers skip events whose target is a text field (`isTyping` in `main.ts`), and an
   Enter handler on a text field ignores `isComposing` and `keyCode === 229` (Korean IME confirms
   a syllable with Enter; Safari reports only the keyCode).
-- Data the lobby is configured with (object art, game table) is its own module
-  (`object-art.ts`, `games.ts`) — one place per kind of data. Room data (map rows, object
+- Data the lobby is configured with (object art, object names and groups, game table) is its own module
+  (`object-art.ts`, `object-names.ts`, `games.ts`) — one place per kind of data. Room data (map rows, object
   placement, door → game id) is not lobby data: it lives in `server/src/room-templates.ts` and
-  is checked by `buildRoom`; the lobby adds only art (`OBJECT_ART` by kind) and game URLs (`GAMES`).
+  is checked by `buildRoom`; the lobby adds only art (`OBJECT_ART` by kind), shown names and groups (`OBJECT_INFO` by kind) and game URLs (`GAMES`).
   The lobby draws `DEFAULT_ROOM` from the start (behind the first screen, and alone when the
   server is unreachable), then the room's template once it enters (picked on 「로비 만들기」 or
   remembered per room in `sessionStorage`, `mapKey`). When the room in `welcome` differs from what
