@@ -301,6 +301,53 @@ export function placeObject(data: RoomData, kind: ObjectKind, at: Pos): RoomData
   return next;
 }
 
+/** 칠할 수 있는 맵 글자 — parseMap 의 LEGEND 와 같은 넷 */
+export type TileChar = '#' | '.' | 'D' | 'S';
+
+export function isTileChar(v: unknown): v is TileChar {
+  return typeof v === 'string' && Object.hasOwn(LEGEND, v);
+}
+
+/** 칠하기 전 문(at 이 속한 묶음)의 칸 중 칠한 뒤에도 문인 첫 칸 — 훑는 순서는 위→아래, 왼→오른. 문이 통째로 지워졌으면 undefined */
+function remainingDoorCell(before: TileMap, after: TileMap, at: Pos): Pos | undefined {
+  const id = before.doorAt(at);
+  const d = id === undefined ? undefined : before.doors[id];
+  if (!d) return undefined;
+  for (let y = d.y; y < d.y + d.h; y++) {
+    for (let x = d.x; x < d.x + d.w; x++) {
+      if (before.doorAt({ x, y }) === id && after.doorAt({ x, y }) !== undefined) return { x, y };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * 칸 at 의 맵 글자를 ch 로 바꾼 새 방 데이터. 문 배정은 따라간다 — 적힌 칸이 지워지면 그 문의 남은 칸으로 옮기고,
+ * 문이 통째로 지워지면 버리고, 문이 붙어 하나가 되며 겹치면 먼저 적힌 것만 남긴다. 문 하나를 지우는 칠하기가 배정 때문에 막히지 않게. 결과는 buildRoom 으로 검사한다 — 맵 밖·이미 그 글자·마지막 시작점을 지움·
+ * 물체의 solid 가 새 문/시작점을 막으면 throw (결정 2026-10-17: 타일 편집)
+ */
+export function paintTile(data: RoomData, at: Pos, ch: TileChar): RoomData {
+  const row = data.rows[at.y];
+  if (row === undefined || at.x < 0 || at.x >= row.length) throw new Error(`(${at.x}, ${at.y}) 은 맵 밖이다`);
+  if (row[at.x] === ch) throw new Error(`(${at.x}, ${at.y}) 은 이미 '${ch}'`);
+  const rows = data.rows.map((r, y) => (y === at.y ? r.slice(0, at.x) + ch + r.slice(at.x + 1) : r));
+  const before = parseMap(data.rows);
+  const map = parseMap(rows);
+  const assigned = new Set<number>();
+  const doors: DoorGame[] = [];
+  for (const d of data.doors) {
+    // 배정이 적힌 칸이 지워져도 그 문의 다른 칸이 남아 있으면 배정은 그 칸으로 옮긴다
+    const cell = map.doorAt(d) !== undefined ? d : remainingDoorCell(before, map, d);
+    const door = cell && map.doorAt(cell);
+    if (cell === undefined || door === undefined || assigned.has(door)) continue;
+    assigned.add(door);
+    doors.push({ x: cell.x, y: cell.y, game: d.game });
+  }
+  const next: RoomData = { ...data, rows, doors };
+  buildRoom(next);
+  return next;
+}
+
 /** id 물체를 치운 새 방 데이터 — 없는 id 면 throw. 치워서 검사에 걸리는 방은 없으므로 buildRoom 은 다시 돌리지 않는다 */
 export function removeObject(data: RoomData, id: string): RoomData {
   if (!data.objects.some((o) => o.id === id)) throw new Error(`물체 '${id}' 가 없다`);

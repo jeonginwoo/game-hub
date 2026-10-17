@@ -33,10 +33,10 @@
   someone is in it (`Rooms` in `roster.ts`) — no create call, no persistence. Each room's
   `Roster` holds its template (`RoomTemplate` from `room-templates.ts`: id + `RoomData`) and the room's current `RoomData` in memory and
   sends both in `welcome`; it goes away with the room. The current data starts as the template's and
-  changes only through the owner's `door`, `place` and `remove` (`assignDoor`, `placeObject` — the server
-  picks the new object's id —, `removeObject` in `room-map.ts`; one path, `editRoom` in `roster.ts`), relayed to
+  changes only through the owner's `door`, `place`, `remove` and `paint` (`assignDoor`, `placeObject` — the server
+  picks the new object's id —, `removeObject`, `paintTile` — door assignments follow the painted map — in `room-map.ts`; one path, `editRoom` in `roster.ts`), relayed to
   everyone, sender included, as `room{room}`; one from anyone else, or one that throws (fails `buildRoom`, unknown
-  object id, `MAX_OBJECTS` reached), is dropped. The template is the `map` of the `hello`
+  object id, `MAX_OBJECTS` reached, cell outside the map or already that character), is dropped. The template is the `map` of the `hello`
   that creates the room (`templateFor` — unknown or missing id = default); a `hello` joining an
   existing room cannot change it.
 - JSON over WebSocket, one object per message, discriminated by `t`.

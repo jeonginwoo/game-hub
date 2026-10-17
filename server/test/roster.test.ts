@@ -322,6 +322,40 @@ describe('Roster — 물체 놓기·치우기', () => {
   });
 });
 
+describe('Roster — 칠하기', () => {
+  // 문 (3~4, 0) 에 a-1, 시작점 (1, 4)
+  const small: RoomTemplate = {
+    id: 'small',
+    name: '작은 방',
+    room: { rows: ['###DD###', '#......#', '#......#', '#......#', '#S.....#', '########'], objects: [], doors: [{ x: 3, y: 0, game: 'a-1' }] },
+  };
+  const hello = (name: string): Extract<ClientMsg, { t: 'hello' }> => ({ t: 'hello', name, at: spot(1, 4), look: DEFAULT_LOOK });
+
+  it('방장이 칠하면 보낸 방장 포함 모두에게 room — 문 배정은 남은 문 칸으로 옮겨진다', () => {
+    const roster = new Roster(Date.now, small);
+    const [a, b] = [peer(), peer()];
+    const ida = roster.join(a, hello('A'));
+    roster.join(b, hello('B'));
+    roster.handle(ida, { t: 'paint', x: 3, y: 0, ch: '#' });
+    const room = { ...small.room, rows: ['####D###', ...small.room.rows.slice(1)], doors: [{ x: 4, y: 0, game: 'a-1' }] };
+    expect(a.got.at(-1)).toEqual({ t: 'room', room });
+    expect(b.got.at(-1)).toEqual({ t: 'room', room });
+  });
+
+  it('방장이 아니거나 칠할 수 없으면 아무것도 보내지 않는다', () => {
+    const roster = new Roster(Date.now, small);
+    const [a, b] = [peer(), peer()];
+    const ida = roster.join(a, hello('A'));
+    const idb = roster.join(b, hello('B'));
+    const count = [a.got.length, b.got.length];
+    roster.handle(idb, { t: 'paint', x: 2, y: 2, ch: '#' });
+    roster.handle(ida, { t: 'paint', x: 0, y: 0, ch: '#' }); // 이미 벽
+    roster.handle(ida, { t: 'paint', x: 1, y: 4, ch: '.' }); // 마지막 시작점
+    roster.handle(ida, { t: 'paint', x: 20, y: 2, ch: '#' }); // 맵 밖
+    expect([a.got.length, b.got.length]).toEqual(count);
+  });
+});
+
 describe('Rooms', () => {
   it('같은 방끼리만 서로를 본다', () => {
     const rooms = new Rooms();

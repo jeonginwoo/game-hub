@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignDoor, buildRoom, checkObjects, MAX_OBJECTS, OBJECT_SHAPES, objectRect, parseMap, parseRoomData, placeObject, removeObject, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
+import { assignDoor, buildRoom, checkObjects, MAX_OBJECTS, OBJECT_SHAPES, objectRect, parseMap, parseRoomData, paintTile, placeObject, removeObject, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
 import { DEFAULT_ROOM, DEFAULT_TEMPLATE, ROOM_TEMPLATES, templateFor } from '../src/room-templates.ts';
 
 const tree: PlacedShape = { id: 'tree', x: 4, y: 5, w: 2, h: 3 };
@@ -218,6 +218,57 @@ describe('placeObject', () => {
   it(`물체가 MAX_OBJECTS 개면 더 놓지 않는다`, () => {
     const full: RoomData = { ...data, objects: Array.from({ length: MAX_OBJECTS }, (_, i) => ({ id: `y${i}`, kind: 'yard', x: 1, y: 5 })) };
     expect(() => placeObject(full, 'yard', { x: 1, y: 5 })).toThrow(/더 놓을 수 없다/);
+  });
+});
+
+describe('paintTile', () => {
+  // 문 0 = (3~4, 0) 에 snake-race, 문 1 = (6, 3) 에 maze. 시작점 (1, 3). 나무 (1, 4) 의 밑둥은 (2, 4)·(3, 4)
+  const data: RoomData = {
+    rows: ['###DD##', '#.....#', '#.....#', '#S....D', '#.....#', '#######'],
+    objects: [{ id: 't', kind: 'tree', x: 1, y: 4 }],
+    doors: [{ x: 4, y: 0, game: 'snake-race' }, { x: 6, y: 3, game: 'maze' }],
+  };
+
+  it('그 칸의 글자만 바꾸고 받은 방 데이터는 그대로', () => {
+    const next = paintTile(data, { x: 2, y: 4 }, '#');
+    expect(next.rows).toEqual(['###DD##', '#.....#', '#.....#', '#S....D', '#.#...#', '#######']);
+    expect(next.doors).toEqual(data.doors);
+    expect(data.rows[4]).toBe('#.....#');
+  });
+
+  it('문 칸을 지우면 그 문의 배정도 지운다 — 다른 문은 그대로', () => {
+    expect(paintTile(data, { x: 6, y: 3 }, '#').doors).toEqual([{ x: 4, y: 0, game: 'snake-race' }]);
+  });
+
+  it('배정이 적힌 칸만 지워지고 문이 남으면 배정을 그 문의 남은 칸으로 옮긴다', () => {
+    // 배정은 (4, 0) 으로 적혀 있었다 — 문 0 은 (3, 0) 한 칸으로 남는다
+    const next = paintTile(data, { x: 4, y: 0 }, '#');
+    expect(next.doors).toEqual([{ x: 3, y: 0, game: 'snake-race' }, { x: 6, y: 3, game: 'maze' }]);
+    expect(buildRoom(next).doorGames).toEqual({ 0: 'snake-race', 1: 'maze' });
+  });
+
+  it('문이 둘로 갈라지면 배정은 적힌 칸 쪽에 남는다', () => {
+    const wide: RoomData = { ...data, rows: ['#DDD###', '#.....#', '#.....#', '#S....#', '#.....#', '#######'], doors: [{ x: 3, y: 0, game: 'a' }] };
+    expect(buildRoom(paintTile(wide, { x: 2, y: 0 }, '#')).doorGames).toEqual({ 1: 'a' });
+  });
+
+  it('두 문이 붙어 하나가 되면 먼저 적힌 배정만 남긴다', () => {
+    const two: RoomData = { ...data, rows: ['#D.D###', '#.....#', '#.....#', '#S....#', '#.....#', '#######'], doors: [{ x: 1, y: 0, game: 'a' }, { x: 3, y: 0, game: 'b' }] };
+    expect(paintTile(two, { x: 2, y: 0 }, 'D').doors).toEqual([{ x: 1, y: 0, game: 'a' }]);
+  });
+
+  it('시작점·문을 새로 칠할 수 있다', () => {
+    expect(buildRoom(paintTile(data, { x: 5, y: 4 }, 'S')).map.starts).toHaveLength(2);
+    expect(buildRoom(paintTile(data, { x: 0, y: 4 }, 'D')).map.doors).toHaveLength(3);
+  });
+
+  it('맵 밖·이미 그 글자·마지막 시작점·물체의 solid 가 막는 문/시작점이면 거부한다', () => {
+    expect(() => paintTile(data, { x: 7, y: 0 }, '#')).toThrow(/맵 밖/);
+    expect(() => paintTile(data, { x: 0, y: 6 }, '#')).toThrow(/맵 밖/);
+    expect(() => paintTile(data, { x: 0, y: 0 }, '#')).toThrow(/이미/);
+    expect(() => paintTile(data, { x: 1, y: 3 }, '.')).toThrow(/시작점/);
+    expect(() => paintTile(data, { x: 2, y: 4 }, 'S')).toThrow(/막는다/);
+    expect(() => paintTile(data, { x: 3, y: 4 }, 'D')).toThrow(/막는다/);
   });
 });
 

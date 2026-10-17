@@ -1,10 +1,10 @@
 // 로비 명단 — 방 하나의 접속자 목록과 중계, 그리고 방 코드별 묶음. 전송(ws)과 분리한 순수 모듈이라 소켓 없이 단위 테스트한다.
 // 위치는 클라이언트 권위(결정 2026-10-09): 받은 위치를 그대로 기록하고 다른 사람에게 전한다.
 // 방장은 서버가 정한다(결정 2026-10-16): 처음 들어온 사람, 나가면 남은 사람 중 가장 먼저 들어온 사람.
-// 방 데이터는 메모리에만 — 방이 생길 때 템플릿에서 받아 welcome 에 싣고, 방장의 문 배정(door)·물체 놓기/치우기(place·remove)로
-// 바뀌며, 마지막 사람이 나가면 방과 함께 사라진다 (결정 2026-10-16: 방이 상태를 갖는다 · 방장이 문마다 게임 고르기 · 물체 배치 편집).
+// 방 데이터는 메모리에만 — 방이 생길 때 템플릿에서 받아 welcome 에 싣고, 방장의 문 배정(door)·물체 놓기/치우기(place·remove)·칠하기(paint)로
+// 바뀌며, 마지막 사람이 나가면 방과 함께 사라진다 (결정 2026-10-16: 방이 상태를 갖는다 · 방장이 문마다 게임 고르기 · 물체 배치 편집 · 2026-10-17 타일 편집).
 import type { ClientMsg, Look, Player, ServerMsg } from './protocol.ts';
-import { assignDoor, buildRoom, placeObject, removeObject, type RoomData } from './room-map.ts';
+import { assignDoor, buildRoom, paintTile, placeObject, removeObject, type RoomData } from './room-map.ts';
 import { DEFAULT_TEMPLATE, templateFor, type RoomTemplate } from './room-templates.ts';
 
 export interface Peer {
@@ -113,6 +113,9 @@ export class Roster {
         return;
       case 'remove':
         this.editRoom(id, (room) => removeObject(room, msg.id));
+        return;
+      case 'paint':
+        this.editRoom(id, (room) => paintTile(room, msg, msg.ch));
         return;
       case 'hello':
         return;

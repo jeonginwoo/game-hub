@@ -2,7 +2,7 @@
 // 위치는 클라이언트 권위(결정 2026-10-09): 서버는 형식만 검사하고 명단 관리·중계만 한다. 좌표는 칸 단위(로비 타일의 1/2).
 // 방 데이터(맵·물체·문 배정)는 서버가 들고 welcome 에 실어 보낸다 (결정 2026-10-16: 방이 상태를 갖는다).
 // 방은 그 방을 만드는 hello 의 map(템플릿 id)으로 생긴다 — 이미 있는 방에 들어오는 hello 의 map 은 무시 (결정 2026-10-16: 맵 템플릿 + 맵 선택).
-import { isGameId, isObjectKind, parseRoomData, type ObjectKind, type RoomData } from './room-map.ts';
+import { isGameId, isObjectKind, isTileChar, parseRoomData, type ObjectKind, type RoomData, type TileChar } from './room-map.ts';
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
 
@@ -46,7 +46,9 @@ export type ClientMsg =
   // 물체 놓기 — (x, y) 는 왼쪽 아래 칸, id 는 서버가 붙인다. 치우기는 물체 id 로 — 그림이 겹친 칸에서 무엇을 치울지는 화면을 보는 로비 몫.
   // 방장만 (결정 2026-10-16: 물체 배치 편집)
   | { readonly t: 'place'; readonly kind: ObjectKind; readonly x: number; readonly y: number }
-  | { readonly t: 'remove'; readonly id: string };
+  | { readonly t: 'remove'; readonly id: string }
+  // 칸 하나의 맵 글자 바꾸기 — 방장만. 배정이 떨어져 나간 문은 서버가 정리한다 (결정 2026-10-17: 타일 편집)
+  | { readonly t: 'paint'; readonly x: number; readonly y: number; readonly ch: TileChar };
 
 export type ServerMsg =
   // players 에 본인 포함, owner 는 방장 id, room 은 이 방의 데이터 — 로비는 buildRoom 으로 다시 검사한다.
@@ -62,7 +64,7 @@ export type ServerMsg =
   | { readonly t: 'rename'; readonly id: string; readonly name: string }
   | { readonly t: 'look'; readonly id: string; readonly look: Look }
   | { readonly t: 'owner'; readonly id: string } // 방장이 바뀜 — 방장이 나가 승계될 때 (결정 2026-10-16: 서버가 정한 방장)
-  // 방 데이터가 바뀜(문 배정·물체 놓기/치우기) — 보낸 방장에게도 간다. 로비는 welcome 처럼 buildRoom 으로 다시 검사한다
+  // 방 데이터가 바뀜(문 배정·물체 놓기/치우기·칠하기) — 보낸 방장에게도 간다. 로비는 welcome 처럼 buildRoom 으로 다시 검사한다
   | { readonly t: 'room'; readonly room: RoomData };
 
 export const NAME_MAX = 16; // 글자
@@ -197,6 +199,12 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       const { id } = v;
       if (typeof id !== 'string' || id.length === 0 || id.length > OBJECT_ID_MAX) return null;
       return { t: 'remove', id };
+    }
+    case 'paint': {
+      // 맵 안인지·칠해도 되는지는 방 데이터를 아는 명단 몫(paintTile) — 여기서는 모양만
+      const { x, y, ch } = v;
+      if (!isCoord(x) || !isCoord(y) || !isTileChar(ch)) return null;
+      return { t: 'paint', x, y, ch };
     }
     default:
       return null;
