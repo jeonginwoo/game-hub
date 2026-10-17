@@ -3,8 +3,8 @@
 import { OBJECT_SHAPES, placeObject, type ObjectKind, type Pos, type RoomData } from '../../../server/src/room-map';
 import { objectRect, objectZ, type MapObject } from '../world/objects';
 
-/** 편집 도구 줄 — 문 배정 · 물체 놓기 · 물체 치우기 */
-export type EditTool = 'door' | 'place' | 'remove';
+/** 편집 도구 줄 — 문 배정 · 물체 놓기 · 물체 치우기 · 타일 칠하기 */
+export type EditTool = 'door' | 'place' | 'remove' | 'paint';
 
 /** 포인터가 든 칸을 물체 아래쪽 가운데로 보고, 방 데이터의 왼쪽 아래 칸으로 — 폭이 짝수면 가운데 두 칸 중 오른쪽이 포인터 */
 export function placeAt(kind: ObjectKind, cell: Pos): Pos {

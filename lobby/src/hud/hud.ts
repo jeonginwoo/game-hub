@@ -40,4 +40,5 @@ const EDIT_NOTICE: Readonly<Record<EditTool, string>> = {
   door: '편집 중 — 문을 눌러 게임 고르기 (Esc 끝)',
   place: '편집 중 — 고른 물체를 맵에 놓기 (Esc 끝)',
   remove: '편집 중 — 누른 물체 치우기 (Esc 끝)',
+  paint: '편집 중 — 누르거나 끌어서 칸 칠하기 (Esc 끝)',
 };

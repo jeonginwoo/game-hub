@@ -28,6 +28,7 @@ import { canEdit, doorChoices, doorMarks } from './edit/edit';
 import { createDoorPicker } from './edit/door-picker';
 import { createEditTools } from './edit/edit-tools';
 import { canPlace, placeAt, topObjectAt } from './edit/place';
+import { cellsBetween, paintCheck } from './edit/paint';
 
 // 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 칸 = CELL_PX × VIEW_ZOOM). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
 // 1.5 면 한 칸 24px·그림 타일 48px — 16px 타일(Ninja Adventure)은 원본 1px 이 화면 3px 로 고르다. 32px 기준 그림(임시 캐릭터)은 1.5배라 고르지 않다
@@ -550,7 +551,8 @@ window.addEventListener('pagehide', () => {
 // --- 편집 모드 (edit.ts · place.ts) ----------------------------------------------
 // 방장만. 켜면 걷기를 멈추고 아래쪽 가운데에 도구 줄(문·놓기·치우기). 문: 맵의 문을 누르면 옆에 게임 목록 → 고르면 door.
 // 놓기: 고른 물체의 반투명 미리보기가 포인터를 따라가고(놓을 수 없으면 밑에 빨간 칠) 누르면 place. 치우기: 포인터 아래 맨 앞 물체에 빨간 칠, 누르면 remove.
-// 무엇이 바뀌든 서버의 room 이 돌아와야 월드가 다시 만들어진다 (결정 2026-10-16: 물체 배치 편집)
+// 칠하기: 포인터 칸에 흰 테두리(칠할 수 없으면 빨간 칠), 누르거나 누른 채 끌면 지나간 칸마다 paint.
+// 무엇이 바뀌든 서버의 room 이 돌아와야 월드가 다시 만들어진다 (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집)
 
 const doorPicker = createDoorPicker();
 const editTools = createEditTools(() => {
@@ -568,9 +570,18 @@ const redMark = new THREE.Mesh(
   new THREE.PlaneGeometry(1, 1),
   new THREE.MeshBasicMaterial({ color: RED_MARK_COLOR, transparent: true, opacity: 0.45 }),
 );
-preview.renderOrder = 1; // 같은 편집 층 — 빨간 칠 위에 그림
-preview.visible = redMark.visible = false;
-scene.add(preview, redMark);
+// 칠하기 붓이 닿을 칸 — 한 칸짜리 테두리
+const cellFrame = new THREE.LineLoop(
+  new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-0.5, -0.5, 0), new THREE.Vector3(0.5, -0.5, 0), new THREE.Vector3(0.5, 0.5, 0), new THREE.Vector3(-0.5, 0.5, 0),
+  ]),
+  new THREE.LineBasicMaterial({ color: 0xffffff }),
+);
+preview.renderOrder = cellFrame.renderOrder = 1; // 같은 편집 층 — 빨간 칠 위에 그림
+preview.visible = redMark.visible = cellFrame.visible = false;
+scene.add(preview, redMark, cellFrame);
+/** 칠하기로 누른 채 끄는 중 — 마지막 칸(다음 칸까지 cellsBetween 으로 잇는다)과 이번 끌기에서 이미 보낸 칸 */
+let stroke: { last: Pos; readonly sent: Set<string> } | null = null;
 let previewKind: ObjectKind | null = null; // 미리보기에 칠해 둔 종류 — 시트가 오기 전이면 null 로 남아 다시 칠한다
 /** 편집 중 포인터가 든 칸 — 맵 밖으로 나가면 null */
 let hoverCell: Pos | null = null;
@@ -580,6 +591,7 @@ function setEditing(on: boolean): void {
   if (!next) {
     doorPicker.close();
     hoverCell = null; // 다시 켤 때 옛 칸에 미리보기가 뜨지 않게
+    stroke = null;
   }
   if (next === editing) return;
   editing = next;
@@ -602,17 +614,17 @@ function paintPreview(kind: ObjectKind): void {
   previewKind = kind;
 }
 
-/** 크기 w×h 의 1×1 판을 칸 가장자리(left, bottom)에 */
-function placeScaled(mesh: THREE.Mesh, left: number, bottom: number, w: number, h: number): void {
+/** 크기 w×h 의 1×1 판(테두리)을 칸 가장자리(left, bottom)에 */
+function placeScaled(mesh: THREE.Object3D, left: number, bottom: number, w: number, h: number): void {
   mesh.scale.set(w, h, 1);
   placeRect(mesh, left, bottom, w, h, drawZ('edit'));
 }
 
-/** 도구·포인터 칸·방이 바뀌면 — 문 테두리(문 도구일 때만), 놓기 미리보기, 치울 물체 표시 */
+/** 도구·포인터 칸·방이 바뀌면 — 문 테두리(문 도구일 때만), 놓기 미리보기, 치울 물체 표시, 칠할 칸 테두리 */
 function updateEditView(): void {
   const tool = editTools.tool();
   world.marks.visible = editing && tool === 'door';
-  preview.visible = redMark.visible = false;
+  preview.visible = redMark.visible = cellFrame.visible = false;
   if (!editing || !hoverCell) return;
   const kind = editTools.kind();
   if (tool === 'place' && kind) {
@@ -631,7 +643,28 @@ function updateEditView(): void {
     const r = objectRect(o);
     placeScaled(redMark, r.left, r.bottom, o.w, o.h);
     redMark.visible = true;
+  } else if (tool === 'paint') {
+    placeScaled(cellFrame, hoverCell.x - 0.5, hoverCell.y + 0.5, 1, 1);
+    cellFrame.visible = true;
+    if (paintCheck(world.data, hoverCell, editTools.brush()) === 'no') {
+      placeScaled(redMark, hoverCell.x - 0.5, hoverCell.y + 0.5, 1, 1);
+      redMark.visible = true;
+    }
   }
+}
+
+/** 칠하기 끌기가 cell 에 닿았다 — 마지막 칸부터 이어 지나간 칸마다, 이번 끌기에서 처음이고 칠할 수 있으면 paint */
+function paintTo(cell: Pos): void {
+  if (!stroke) return;
+  const ch = editTools.brush();
+  for (const c of cellsBetween(stroke.last, cell)) {
+    const key = `${c.x},${c.y}`;
+    // 판정은 room 이 돌아오기 전 방 데이터 — 이번 끌기에서 보낸 칸은 다시 보내지 않는다
+    if (stroke.sent.has(key) || paintCheck(world.data, c, ch) !== 'ok') continue;
+    stroke.sent.add(key);
+    conn?.send({ t: 'paint', x: c.x, y: c.y, ch });
+  }
+  stroke.last = cell;
 }
 
 /** 화면 점(CSS px) → 칸 */
@@ -664,6 +697,11 @@ function editAt(cell: Pos): void {
     const at = placeAt(kind, cell);
     // 빨간 자리는 보내지 않는다 — 서버도 같은 검사로 버린다
     if (canPlace(world.data, kind, at)) conn?.send({ t: 'place', kind, x: at.x, y: at.y });
+    return;
+  }
+  if (tool === 'paint') {
+    stroke = { last: cell, sent: new Set() };
+    paintTo(cell);
     return;
   }
   const o = topObjectAt(world.objects, cell);
@@ -805,9 +843,16 @@ canvas.addEventListener('pointerdown', (e) => {
   if (editing) editAt(cellAt(e.clientX, e.clientY));
 });
 canvas.addEventListener('pointermove', (e) => {
-  if (editing) hoverAt(cellAt(e.clientX, e.clientY));
+  if (!editing) return;
+  const cell = cellAt(e.clientX, e.clientY);
+  hoverAt(cell);
+  if (stroke && editTools.tool() === 'paint') paintTo(cell);
 });
-canvas.addEventListener('pointerleave', () => hoverAt(null));
+canvas.addEventListener('pointerleave', () => {
+  hoverAt(null);
+  stroke = null; // 도구 줄·창 위로 끌고 나가면 끌기 끝 — 돌아와도 그 사이 칸을 잇지 않는다
+});
+for (const ev of ['pointerup', 'pointercancel', 'blur'] as const) window.addEventListener(ev, () => { stroke = null; });
 
 // --- 카메라 -------------------------------------------------------------------
 
