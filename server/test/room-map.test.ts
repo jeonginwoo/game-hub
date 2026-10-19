@@ -327,6 +327,31 @@ describe('방 템플릿', () => {
     }
   });
 
+  it('어느 시작점에서든 게임이 배정된 문까지 걸어갈 수 있다 — 물체가 길을 막지 않는다', () => {
+    for (const t of ROOM_TEMPLATES) {
+      const { map, objects, doorGames } = buildRoom(t.room);
+      const blocked = new Set(objects.flatMap(solidCells).map((p) => `${p.x},${p.y}`));
+      const walkable = (x: number, y: number): boolean => map.tileAt({ x, y }) !== 'wall' && !blocked.has(`${x},${y}`);
+      for (const start of map.starts) {
+        const seen = new Set([`${start.x},${start.y}`]);
+        const queue = [start];
+        for (let p = queue.shift(); p; p = queue.shift()) {
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+            const n = { x: p.x + dx, y: p.y + dy };
+            const key = `${n.x},${n.y}`;
+            if (seen.has(key) || !walkable(n.x, n.y)) continue;
+            seen.add(key);
+            queue.push(n);
+          }
+        }
+        for (const door of Object.keys(doorGames).map(Number)) {
+          const d = map.doors[door];
+          expect(d && seen.has(`${d.x},${d.y}`), `${t.id}: (${start.x}, ${start.y}) → 문 ${door}`).toBe(true);
+        }
+      }
+    }
+  });
+
   it('물체 전시에는 모든 물체 종류가 한 번씩 있다', () => {
     const kinds = templateFor('gallery').room.objects.map((o) => o.kind);
     expect(kinds).toEqual(Object.keys(OBJECT_SHAPES));

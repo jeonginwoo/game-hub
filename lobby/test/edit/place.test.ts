@@ -20,18 +20,18 @@ describe('placeAt', () => {
 
 describe('canPlace (광장)', () => {
   it('빈 바닥이면 놓을 수 있다', () => {
-    expect(canPlace(DEFAULT_ROOM, 'tree', { x: 30, y: 30 })).toBe(true);
+    expect(canPlace(DEFAULT_ROOM, 'tree', { x: 60, y: 30 })).toBe(true);
   });
 
   it('다른 물체의 막는 칸과 겹치면 안 된다 — 그림만 겹치는 것은 괜찮다', () => {
-    // 왼쪽 나무(8, 11)의 밑둥은 (9, 11)·(10, 11)
-    expect(canPlace(DEFAULT_ROOM, 'tree', { x: 8, y: 11 })).toBe(false);
-    expect(canPlace(DEFAULT_ROOM, 'tree', { x: 8, y: 10 })).toBe(true);
+    // 왼쪽 나무 줄 첫 그루(4, 23)의 밑둥은 (5, 23)·(6, 23). 바닥 채움 위는 그림만 겹친다
+    expect(canPlace(DEFAULT_ROOM, 'tree', { x: 4, y: 23 })).toBe(false);
+    expect(canPlace(DEFAULT_ROOM, 'tree', { x: 4, y: 22 })).toBe(true);
   });
 
   it('시작점을 막거나 맵을 벗어나면 안 된다', () => {
-    // 밑둥이 시작점 (22, 14) 에 걸린다
-    expect(canPlace(DEFAULT_ROOM, 'tree', { x: 21, y: 14 })).toBe(false);
+    // 밑둥이 시작점 (38, 48) 에 걸린다
+    expect(canPlace(DEFAULT_ROOM, 'tree', { x: 37, y: 48 })).toBe(false);
     expect(canPlace(DEFAULT_ROOM, 'tree', { x: -1, y: 30 })).toBe(false);
     expect(canPlace(DEFAULT_ROOM, 'tree', { x: 30, y: 2 })).toBe(false); // 위로 뻗어 맵 밖
   });

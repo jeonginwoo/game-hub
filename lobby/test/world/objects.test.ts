@@ -32,7 +32,15 @@ describe('withSolidObjects', () => {
 });
 
 describe('실제 로비 물체', () => {
-  const room = buildRoom(DEFAULT_ROOM);
+  // 템플릿 배치와 상관없이 — 광장 맵 위에 나무 둘과 도리이만
+  const room = buildRoom({
+    ...DEFAULT_ROOM,
+    objects: [
+      { id: 'tree-left', kind: 'tree', x: 8, y: 11 },
+      { id: 'tree-right', kind: 'tree', x: 32, y: 11 },
+      { id: 'torii', kind: 'torii', x: 4, y: 27 },
+    ],
+  });
   const objects: MapObject[] = room.objects.map((o) => ({ ...o, ...OBJECT_ART[o.kind] }));
 
   it('나무는 밑둥 두 칸만 막히고, 도리이는 두 기둥 칸만 막혀 기둥 사이로 지나간다', () => {

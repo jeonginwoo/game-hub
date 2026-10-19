@@ -46,15 +46,17 @@ describe('canEdit', () => {
 describe('doorMarks', () => {
   it('문마다 사각형 하나 — 등록 표에 있는 게임이 배정된 문만 열림', () => {
     expect(doorMarks(buildRoom(DEFAULT_ROOM), GAMES)).toEqual([
-      { door: 0, x: 6, y: 2, w: 2, h: 2, open: false },
-      { door: 1, x: 20, y: 2, w: 2, h: 2, open: true },
-      { door: 2, x: 34, y: 2, w: 2, h: 2, open: false },
+      { door: 0, x: 10, y: 2, w: 2, h: 2, open: false },
+      { door: 1, x: 24, y: 2, w: 2, h: 2, open: false },
+      { door: 2, x: 38, y: 2, w: 2, h: 2, open: true },
+      { door: 3, x: 52, y: 2, w: 2, h: 2, open: false },
+      { door: 4, x: 66, y: 2, w: 2, h: 2, open: false },
     ]);
   });
 
   // 서버는 게임 목록을 모른다 — 모르는 id 의 문은 닫힌 문으로 그리는 것과 같게
   it('등록 표에 없는 id 가 배정된 문은 닫힘', () => {
-    expect(doorMarks(buildRoom(DEFAULT_ROOM), TWO_GAMES).map((m) => m.open)).toEqual([false, false, false]);
+    expect(doorMarks(buildRoom(DEFAULT_ROOM), TWO_GAMES).map((m) => m.open)).toEqual([false, false, false, false, false]);
   });
 });
 
