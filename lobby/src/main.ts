@@ -23,7 +23,7 @@ import { objectRect, objectZ, withSolidObjects, type MapObject } from './world/o
 import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from './net/others';
 import { homeUrl, roomFromSearch, screenFor, withRoom } from './room/room';
 import { SHEET_PX, tileLook, type Cell, type Sheet } from './world/tiles';
-import { clampAxis, screenToCell } from './world/view';
+import { clampAxis, driftCenter, screenToCell } from './world/view';
 import { canEdit, doorChoices, doorMarks } from './edit/edit';
 import { createDoorPicker } from './edit/door-picker';
 import { createEditTools } from './edit/edit-tools';
@@ -33,7 +33,8 @@ import { cellsBetween, paintCheck } from './edit/paint';
 // 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 칸 = CELL_PX × VIEW_ZOOM). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
 // 1.5 면 한 칸 24px·그림 타일 48px — 16px 타일(Ninja Adventure)은 원본 1px 이 화면 3px 로 고르다. 32px 기준 그림(임시 캐릭터)은 1.5배라 고르지 않다
 const VIEW_ZOOM = 1.5;
-const CELL_SCREEN_PX = CELL_PX * VIEW_ZOOM; // 한 칸이 화면 몇 CSS px
+// 첫 화면 뒤 배경만 더 크게 — 1.5 면 큰 창이 광장(48×34칸)보다 넓어 카메라가 흐를 자리가 없다. 3 이면 원본 1px 이 화면 6px 로 고르다
+const BACKDROP_ZOOM = 3;
 const STEP_MS = 80; // 한 칸 걷는 시간 (대각선은 거리만큼 √2 배) — 칸이 타일의 1/2 라 걷는 속도는 타일 하나에 160ms 그대로
 
 const canvas = document.querySelector<HTMLCanvasElement>('#app');
@@ -267,6 +268,7 @@ const avatarGeo = new THREE.PlaneGeometry(AVATAR_W, AVATAR_H);
 const playerMat = new THREE.MeshBasicMaterial({ map: avatarTextures(myLook).down, alphaTest: 0.5 });
 const player = new THREE.Mesh(avatarGeo, playerMat);
 scene.add(player);
+player.visible = false; // 첫 화면 뒤 배경엔 내 캐릭터가 없다 — 로비에 들어가면 보인다
 
 /** 칸 좌표 (x, y) 에 선 캐릭터를 놓는다 — 발 선으로 정렬 층 깊이를 정한다 */
 function placeAvatar(mesh: THREE.Mesh, x: number, y: number): void {
@@ -672,7 +674,7 @@ function cellAt(sx: number, sy: number): Pos {
   return screenToCell(sx, sy, {
     w: window.innerWidth,
     h: window.innerHeight,
-    cellPx: CELL_SCREEN_PX,
+    cellPx: cellScreenPx(),
     center: { x: camera.position.x, y: -camera.position.y },
   });
 }
@@ -732,6 +734,9 @@ let myHead: Head | null = null;
 
 function enterLobby(e: Entered): void {
   entered = e;
+  // 첫 화면 뒤 배경이 끝났다 — 내 캐릭터가 나타나고 카메라는 로비 배율로 캐릭터를 따라간다
+  player.visible = true;
+  resize();
   // 방을 만들며 고른 맵, 아니면 이 탭이 기억해 둔 이 방의 맵으로 먼저 그린다 — welcome 이 다른 방을 보내면 그때 다시
   roomMap = e.map ?? loadRoomMap(e.room) ?? undefined;
   void switchRoom(templateFor(roomMap).room, arrivalSearch ?? ''); // 템플릿은 테스트가 검사를 통과시킨다
@@ -856,12 +861,17 @@ for (const ev of ['pointerup', 'pointercancel', 'blur'] as const) window.addEven
 
 // --- 카메라 -------------------------------------------------------------------
 
+/** 한 칸이 화면 몇 CSS px — 로비에 들어가기 전(첫 화면 뒤 배경)과 뒤가 다르다 */
+function cellScreenPx(): number {
+  return CELL_PX * (entered ? VIEW_ZOOM : BACKDROP_ZOOM);
+}
+
 function resize(): void {
   const w = window.innerWidth;
   const h = window.innerHeight;
   renderer.setSize(w, h, false);
-  const halfY = h / CELL_SCREEN_PX / 2; // 월드 1 = 한 칸
-  const halfX = w / CELL_SCREEN_PX / 2;
+  const halfY = h / cellScreenPx() / 2; // 월드 1 = 한 칸
+  const halfX = w / cellScreenPx() / 2;
   camera.left = -halfX;
   camera.right = halfX;
   camera.top = halfY;
@@ -918,8 +928,12 @@ renderer.setAnimationLoop((now) => {
   }
 
   const viewX = camera.right - camera.left;
-  camera.position.x = clampAxis(x, world.room.map.width, viewX);
-  camera.position.y = -clampAxis(y, world.room.map.height, camera.top - camera.bottom);
+  const viewY = camera.top - camera.bottom;
+  const center = entered
+    ? { x: clampAxis(x, world.room.map.width, viewX), y: clampAxis(y, world.room.map.height, viewY) }
+    : driftCenter(now, { w: world.room.map.width, h: world.room.map.height }, { w: viewX, h: viewY });
+  camera.position.x = center.x;
+  camera.position.y = -center.y;
 
   renderer.render(scene, camera);
 

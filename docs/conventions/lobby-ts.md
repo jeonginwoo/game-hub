@@ -21,7 +21,7 @@ Files are grouped by feature, not by layer: a feature's pure module and its wiri
 | Folder | Files | What |
 |--------|-------|------|
 | (root) | `main.ts` | wiring: scene, input, loop |
-| `world/` | `map.ts` `tiles.ts` `layers.ts` `objects.ts` `movement.ts` `view.ts` | map, draw order, movement, camera — all pure |
+| `world/` | `map.ts` `tiles.ts` `layers.ts` `objects.ts` `movement.ts` `view.ts` | map, draw order, movement, camera (following, first-screen drift) — all pure |
 | `data/` | `object-art.ts` `object-names.ts` `games.ts` | what the lobby is configured with (art per object kind, group and shown name per object kind, game table) |
 | `launch/` | `entry.ts` | game entry contract (`docs/game-entry-contract.md`) |
 | `avatar/` | `look.ts` · `avatar-art.ts` | character look → drawing |
@@ -62,7 +62,9 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   placement, door → game id) is not lobby data: it lives in `server/src/room-templates.ts` and
   is checked by `buildRoom`; the lobby adds only art (`OBJECT_ART` by kind), shown names and groups (`OBJECT_INFO` by kind) and game URLs (`GAMES`).
   The lobby draws `DEFAULT_ROOM` from the start (behind the first screen, and alone when the
-  server is unreachable), then the room's template once it enters (picked on 「로비 만들기」 or
+  server is unreachable). Behind the first screen the player is hidden and the camera drifts on its own
+  (`driftCenter` in `view.ts`) at a larger zoom (`BACKDROP_ZOOM`, so a big window still has room to move);
+  entering the lobby shows the player and switches to `VIEW_ZOOM` and following. On entering it draws the room's template (picked on 「로비 만들기」 or
   remembered per room in `sessionStorage`, `mapKey`). When the room in `welcome` differs from what
   is drawn, `switchRoom` in `main.ts` throws the world away (`disposeWorld`), builds it again
   (`buildWorld`) and respawns; a room that fails `buildRoom` is logged and the current one kept.
