@@ -1,11 +1,26 @@
 // 물체 종류별 그림 — 층과 Ninja Adventure 시트의 칸 (docs/assets.md). 크기·막는 칸은 공용 표 OBJECT_SHAPES(server/src/object-shapes.ts).
 // 칸은 그림의 왼쪽 위 시트 칸 — 거기서 OBJECT_SHAPES 크기만큼 잘라 쓴다 (시트 한 칸 = 로비 2×2 칸).
+import { FLOOR_TILES, type FloorTileKind } from '../../../server/src/object-shapes';
 import type { ObjectKind } from '../../../server/src/room-map';
 import type { ObjectArt, ObjectLayer } from '../world/objects';
+import type { Cell } from '../world/tiles';
 
 /** Nature 시트 칸 — 대부분 정렬 층(캐릭터와 발 선으로 앞뒤), 바닥 무늬만 바닥 층 */
 function nature(col: number, row: number, layer: ObjectLayer = 'sorted'): ObjectArt {
   return { layer, sprite: { sheet: 'nature', col, row } };
+}
+
+/** Floor 시트 칸 — 바닥 층 */
+function floorCell(col: number, row: number): Cell {
+  return { sheet: 'floor', col, row };
+}
+
+/**
+ * 채움 — base 칸을 되풀이하고, variantCols 가 있으면 같은 줄의 그 열 무늬를 가끔 섞는다.
+ * 예전 배경의 풀처럼 무늬 칸은 4/16 (paintFill 이 자리마다 고른다)
+ */
+function fill(col: number, row: number, variantCols: readonly number[] = []): ObjectArt {
+  return { layer: 'floor', sprite: floorCell(col, row), fill: [floorCell(col, row), ...variantCols.map((c) => floorCell(c, row))] };
 }
 
 /** House 시트 칸 — 모두 정렬 층 */
@@ -13,7 +28,14 @@ function house(col: number, row: number): ObjectArt {
   return { layer: 'sorted', sprite: { sheet: 'house', col, row } };
 }
 
+// Floor 시트 칸마다 한 종류 — 모양 표와 같은 목록(FLOOR_TILES)에서 만든다
+const FLOOR_TILE_ART = Object.fromEntries(
+  FLOOR_TILES.map((t): [FloorTileKind, ObjectArt] => [t.kind, { layer: 'floor', sprite: floorCell(t.col, t.row) }]),
+) as Record<FloorTileKind, ObjectArt>;
+
 export const OBJECT_ART: Readonly<Record<ObjectKind, ObjectArt>> = {
+  ...FLOOR_TILE_ART,
+
   // 흙 마당 — 캐릭터가 위를 밟고 지나간다
   yard: { layer: 'floor', sprite: { sheet: 'floor', col: 0, row: 7 } },
   // 2타일 폭 나무 — 위로 지나가면 나무가 캐릭터를 가리고, 아랫줄 앞으로 지나가면 캐릭터가 앞
@@ -286,4 +308,25 @@ export const OBJECT_ART: Readonly<Record<ObjectKind, ObjectArt>> = {
   'banner-crimson': house(26, 20),
   'banner-purple': house(27, 20),
   'banner-yellow': house(28, 20),
+
+  // 건물 줄 — 바닥 층 (문 앞 캐릭터가 늘 그 앞에 선다)
+  'roof-1': { layer: 'floor', sprite: { sheet: 'house', col: 1, row: 1 } },
+  'roof-2': { layer: 'floor', sprite: { sheet: 'house', col: 2, row: 1 } },
+  facade: { layer: 'floor', sprite: { sheet: 'house', col: 2, row: 2 } },
+
+  // 채움 — 재질마다 바깥 바닥(무늬 섞임)과 안쪽 바닥. 시트의 덩어리 가운데 칸이 안쪽 바닥
+  'fill-sand': fill(0, 5, [1, 2, 3, 4]),
+  'fill-sand-light': fill(1, 1),
+  'fill-pink': fill(11, 5, [12, 13, 14, 15]),
+  'fill-pink-light': fill(12, 1),
+  'fill-grass': fill(0, 12, [1, 2, 3, 4]),
+  'fill-dirt': fill(1, 8),
+  'fill-grass-dark': fill(11, 12, [12, 13, 14, 15]),
+  'fill-dirt-dark': fill(12, 8),
+  'fill-snow': fill(0, 19, [1, 2, 3, 4]),
+  'fill-snow-white': fill(1, 15),
+  'fill-soil': fill(11, 19, [12, 13, 14, 15]),
+  'fill-planks': fill(12, 15),
+  'fill-ice': fill(1, 22),
+  'fill-clay': fill(12, 22),
 };

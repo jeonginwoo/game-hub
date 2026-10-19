@@ -22,7 +22,7 @@ import { connect, type Connection, type NetStatus } from './net/net';
 import { objectRect, objectZ, withSolidObjects, type MapObject } from './world/objects';
 import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from './net/others';
 import { homeUrl, roomFromSearch, screenFor, withRoom } from './room/room';
-import { SHEET_PX, tileLook, type Cell, type Sheet } from './world/tiles';
+import { fillCell, SHEET_PX, tileLook, type Sheet } from './world/tiles';
 import { clampAxis, driftCenter, screenToCell } from './world/view';
 import { canEdit, doorChoices, doorMarks } from './edit/edit';
 import { createDoorPicker } from './edit/door-picker';
@@ -85,23 +85,48 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 
 type Sheets = Readonly<Record<Sheet, HTMLImageElement>>;
 
-function paintBackground(c: HTMLCanvasElement, room: Room, sheets: Sheets): void {
+/**
+ * 배경 한 장 — 바닥 층 물체를 방 데이터 순서대로(나중 것이 위) 찍고, 문자 맵에서는 문만 그린다. 그 밖은 투명 — 장면 바탕색이 보인다
+ * (결정 2026-10-19: 문자 맵은 투명, 바닥은 물체). 바닥 물체를 메시 하나씩 두지 않고 한 장에 굽는다 — 채움으로 넓게 깔아도 메시가 늘지 않게
+ */
+function paintBackground(c: HTMLCanvasElement, room: Room, floorObjects: readonly MapObject[], sheets: Sheets): void {
   const g = c.getContext('2d');
   if (!g) throw new Error('2d 캔버스를 만들 수 없다');
   g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, c.width, c.height);
+  const tilePx = CELL_PX * TILE_CELLS;
+  for (const o of floorObjects) {
+    const left = o.x;
+    const top = o.y - o.h + 1;
+    if (o.fill) {
+      // 채움 — 타일 하나씩, 자리마다 무늬를 고른다
+      for (let ty = 0; ty < o.h / TILE_CELLS; ty++) {
+        for (let tx = 0; tx < o.w / TILE_CELLS; tx++) {
+          const x = left + tx * TILE_CELLS;
+          const y = top + ty * TILE_CELLS;
+          const cell = fillCell(o.fill, Math.floor(x / TILE_CELLS), Math.floor(y / TILE_CELLS));
+          if (cell) g.drawImage(sheets[cell.sheet], cell.col * SHEET_PX, cell.row * SHEET_PX, SHEET_PX, SHEET_PX, x * CELL_PX, y * CELL_PX, tilePx, tilePx);
+        }
+      }
+      continue;
+    }
+    const s = o.sprite;
+    const cellSrc = SHEET_PX / TILE_CELLS;
+    g.drawImage(sheets[s.sheet], s.col * SHEET_PX, s.row * SHEET_PX, o.w * cellSrc, o.h * cellSrc, left * CELL_PX, top * CELL_PX, o.w * CELL_PX, o.h * CELL_PX);
+  }
   const map = room.map;
   // 열린 문(게임 배정)과 닫힌 문을 다르게 그린다
   const isOpenDoor = (door: number): boolean => gameAtDoor(door, GAMES, room.doorGames) !== undefined;
   const src = SHEET_PX / TILE_CELLS; // 칸 하나가 시트에서 차지하는 px — 그림 크기는 그대로, 칸마다 한 조각
-  const draw = (cell: Cell, part: Pos, x: number, y: number): void => {
-    g.drawImage(sheets[cell.sheet], cell.col * SHEET_PX + part.x * src, cell.row * SHEET_PX + part.y * src, src, src,
-      x * CELL_PX, y * CELL_PX, CELL_PX, CELL_PX);
-  };
-  for (let y = 0; y < map.height; y++) {
-    for (let x = 0; x < map.width; x++) {
-      const look = tileLook(map, { x, y }, isOpenDoor);
-      draw(look.base, look.part, x, y);
-      if (look.over) draw(look.over, look.part, x, y);
+  for (const d of map.doors) {
+    for (let y = d.y; y < d.y + d.h; y++) {
+      for (let x = d.x; x < d.x + d.w; x++) {
+        const look = tileLook(map, { x, y }, isOpenDoor);
+        if (!look) continue;
+        const { base, part } = look;
+        g.drawImage(sheets[base.sheet], base.col * SHEET_PX + part.x * src, base.row * SHEET_PX + part.y * src, src, src,
+          x * CELL_PX, y * CELL_PX, CELL_PX, CELL_PX);
+      }
     }
   }
 }
@@ -137,6 +162,8 @@ interface World {
   readonly meshes: readonly THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
   /** 편집 중에만 보이는 문 테두리 — 배정된 문·빈 문 다른 색 */
   readonly marks: THREE.Group;
+  /** 칠하기 도구일 때만 보이는 벽·시작점 칠 — 문자 맵은 그림이 없어 평소엔 보이지 않는다 */
+  readonly cellMarks: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   /** 시트가 오면(이미 와 있으면 바로) 배경·물체 캔버스를 칠한다 */
   readonly paint: (sheets: Sheets) => void;
 }
@@ -147,14 +174,18 @@ function buildWorld(data: RoomData): World {
   const map = room.map;
   const objects: readonly MapObject[] = room.objects.map((o) => ({ ...o, ...OBJECT_ART[o.kind] }));
 
-  // 배경 한 장 — 문자 맵의 칸마다 Ninja Adventure 시트(tiles.ts 가 고른 16px 칸)의 한 조각을 찍은 맵 크기 캔버스. 그림은 32px 로 키운 크기 그대로.
-  // 물체도 같은 시트에서 잘라 쓴다. 캐릭터와 픽셀 밀도는 맞추지 않는다. 시트 세 장이 다 오기 전에는 비어 있다
+  // 배경 한 장 — 바닥 층 물체와 문을 Ninja Adventure 시트에서 잘라 찍은 맵 크기 캔버스. 그림은 32px 로 키운 크기 그대로.
+  // 캐릭터와 픽셀 밀도는 맞추지 않는다. 시트 세 장이 다 오기 전에는 비어 있다. 아무것도 없는 칸은 투명
+  const floorObjects = objects.filter((o) => o.layer === 'floor');
   const backgroundArt = blankTexture(map.width, map.height);
-  const background = new THREE.Mesh(new THREE.PlaneGeometry(map.width, map.height), new THREE.MeshBasicMaterial({ map: backgroundArt.tex }));
+  const background = new THREE.Mesh(
+    new THREE.PlaneGeometry(map.width, map.height),
+    new THREE.MeshBasicMaterial({ map: backgroundArt.tex, alphaTest: 0.5 }),
+  );
   placeRect(background, -0.5, map.height - 0.5, map.width, map.height, drawZ('background'));
 
-  // 물체 — 바닥·정렬·상단 층. 앞화면 층은 그릴 그림이 생기면 배경처럼 맵 크기 한 장으로 얹는다
-  const objectArt = objects.map((o) => {
+  // 물체 — 정렬·상단 층 (바닥 층은 배경에 구웠다). 앞화면 층은 그릴 그림이 생기면 배경처럼 맵 크기 한 장으로 얹는다
+  const objectArt = objects.filter((o) => o.layer !== 'floor').map((o) => {
     const art = blankTexture(o.w, o.h);
     const r = objectRect(o);
     // alphaTest: 투명 픽셀은 버린다 — 물체 그림의 빈 곳이 뒤를 가리지 않게 (정렬 없이)
@@ -163,14 +194,16 @@ function buildWorld(data: RoomData): World {
     return { o, ...art, mesh };
   });
 
-  const meshes = [background, ...objectArt.map((a) => a.mesh)];
+  const cellMarks = buildCellMarks(map);
+  cellMarks.visible = false; // 보이기는 updateEditView 가
+  const meshes = [background, ...objectArt.map((a) => a.mesh), cellMarks];
   for (const m of meshes) scene.add(m);
   const marks = buildDoorMarks(room);
   marks.visible = false; // 보이기는 updateEditView 가 — 편집 중이고 문 도구일 때만
   scene.add(marks);
 
   const paint = (sheets: Sheets): void => {
-    paintBackground(backgroundArt.canvas, room, sheets);
+    paintBackground(backgroundArt.canvas, room, floorObjects, sheets);
     backgroundArt.tex.needsUpdate = true;
     for (const a of objectArt) {
       paintObject(a.canvas, a.o, sheets);
@@ -178,7 +211,29 @@ function buildWorld(data: RoomData): World {
     }
   };
   if (loadedSheets) paint(loadedSheets);
-  return { data, room, walkMap: withSolidObjects(map, objects), objects, meshes, marks, paint };
+  return { data, room, walkMap: withSolidObjects(map, objects), objects, meshes, marks, cellMarks, paint };
+}
+
+const WALL_MARK = 'rgba(191, 97, 106, 0.45)'; // 벽 '#'
+const START_MARK = 'rgba(94, 129, 172, 0.6)'; // 시작점 'S'
+
+/** 벽·시작점 칸을 반투명으로 칠한 맵 크기 한 장 — 편집 표시 층 */
+function buildCellMarks(map: TileMap): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> {
+  const art = blankTexture(map.width, map.height);
+  const g = art.canvas.getContext('2d');
+  if (!g) throw new Error('2d 캔버스를 만들 수 없다');
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      const start = map.starts.some((p) => p.x === x && p.y === y);
+      if (!start && map.tileAt({ x, y }) !== 'wall') continue;
+      g.fillStyle = start ? START_MARK : WALL_MARK;
+      g.fillRect(x * CELL_PX, y * CELL_PX, CELL_PX, CELL_PX);
+    }
+  }
+  art.tex.needsUpdate = true;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(map.width, map.height), new THREE.MeshBasicMaterial({ map: art.tex, transparent: true }));
+  placeRect(mesh, -0.5, map.height - 0.5, map.width, map.height, drawZ('edit'));
+  return mesh;
 }
 
 const OPEN_DOOR_COLOR = 0xa3be8c; // 게임이 배정된 문
@@ -626,6 +681,7 @@ function placeScaled(mesh: THREE.Object3D, left: number, bottom: number, w: numb
 function updateEditView(): void {
   const tool = editTools.tool();
   world.marks.visible = editing && tool === 'door';
+  world.cellMarks.visible = editing && tool === 'paint';
   preview.visible = redMark.visible = cellFrame.visible = false;
   if (!editing || !hoverCell) return;
   const kind = editTools.kind();

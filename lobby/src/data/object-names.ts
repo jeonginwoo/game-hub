@@ -1,5 +1,6 @@
 // 물체 종류의 묶음과 보일 이름 — 방장 편집 도구 줄이 물체를 묶음별로 늘어놓을 때 쓴다. 순수 데이터 + 묶음별 목록.
 // 종류는 공용 모양 표 OBJECT_SHAPES(server/src/object-shapes.ts)의 키 — 표에 종류가 늘면 여기도 한 줄 (타입이 강제).
+import { FLOOR_TILES, type FloorTileKind } from '../../../server/src/object-shapes';
 import { OBJECT_SHAPES, type ObjectKind } from '../../../server/src/room-map';
 
 /** 편집 도구 줄의 묶음 — 이 순서로 늘어놓는다 */
@@ -8,6 +9,14 @@ export const OBJECT_GROUPS = [
   { id: 'plant', name: '풀·꽃' },
   { id: 'rock', name: '바위·돌' },
   { id: 'floor', name: '바닥' },
+  { id: 'tile-sand', name: '모래 조각' },
+  { id: 'tile-pink', name: '분홍 모래 조각' },
+  { id: 'tile-grass', name: '풀 조각' },
+  { id: 'tile-grass-dark', name: '짙은 풀 조각' },
+  { id: 'tile-snow', name: '눈 조각' },
+  { id: 'tile-soil', name: '흙·마루 조각' },
+  { id: 'tile-ice', name: '얼음 조각' },
+  { id: 'tile-clay', name: '주황 조각' },
   { id: 'building', name: '건물' },
   { id: 'statue', name: '석상' },
   { id: 'furniture', name: '가구' },
@@ -33,7 +42,29 @@ const furniture = (name: string): ObjectInfo => ({ group: 'furniture', name });
 const goods = (name: string): ObjectInfo => ({ group: 'goods', name });
 const decor = (name: string): ObjectInfo => ({ group: 'decor', name });
 
+// Floor 시트 칸 — 시트는 재질 여덟 구역(가로 둘 × 세로 넷, 구역마다 11열 × 7줄)이다. 이름은 구역 묶음 이름 + 구역 안 차례(「풀 조각 3」)
+const TILE_GROUPS: readonly (readonly [ObjectGroup, ObjectGroup])[] = [
+  ['tile-sand', 'tile-pink'],
+  ['tile-grass', 'tile-grass-dark'],
+  ['tile-snow', 'tile-soil'],
+  ['tile-ice', 'tile-clay'],
+];
+
+function floorTileInfo(): Record<FloorTileKind, ObjectInfo> {
+  const count = new Map<ObjectGroup, number>();
+  const groupName = (g: ObjectGroup): string => OBJECT_GROUPS.find((x) => x.id === g)?.name ?? g;
+  return Object.fromEntries(
+    FLOOR_TILES.map((t): [FloorTileKind, ObjectInfo] => {
+      const group = TILE_GROUPS[Math.min(Math.floor(t.row / 7), 3)]?.[t.col < 11 ? 0 : 1] ?? 'floor';
+      const n = (count.get(group) ?? 0) + 1;
+      count.set(group, n);
+      return [t.kind, { group, name: `${groupName(group)} ${n}` }];
+    }),
+  ) as Record<FloorTileKind, ObjectInfo>;
+}
+
 export const OBJECT_INFO: Readonly<Record<ObjectKind, ObjectInfo>> = {
+  ...floorTileInfo(),
   yard: floor('흙 마당'),
   tree: tree('뿌리 나무'),
   torii: decor('도리이'),
@@ -297,6 +328,25 @@ export const OBJECT_INFO: Readonly<Record<ObjectKind, ObjectInfo>> = {
   'banner-crimson': decor('진홍 깃발'),
   'banner-purple': decor('보라 깃발'),
   'banner-yellow': decor('노란 깃발'),
+
+  'roof-1': building('지붕 1'),
+  'roof-2': building('지붕 2'),
+  facade: building('건물 정면'),
+
+  'fill-sand': floor('모래 채움'),
+  'fill-sand-light': floor('옅은 모래 채움'),
+  'fill-pink': floor('분홍 모래 채움'),
+  'fill-pink-light': floor('옅은 분홍 모래 채움'),
+  'fill-grass': floor('풀 채움'),
+  'fill-dirt': floor('흙 채움'),
+  'fill-grass-dark': floor('짙은 풀 채움'),
+  'fill-dirt-dark': floor('짙은 흙 채움'),
+  'fill-snow': floor('눈 채움'),
+  'fill-snow-white': floor('흰 눈 채움'),
+  'fill-soil': floor('갈색 흙 채움'),
+  'fill-planks': floor('마루 채움'),
+  'fill-ice': floor('얼음 채움'),
+  'fill-clay': floor('주황 채움'),
 };
 
 /** 묶음 순서대로, 각 묶음의 종류를 모양 표 순서로 — 편집 도구 줄이 이대로 늘어놓는다 */

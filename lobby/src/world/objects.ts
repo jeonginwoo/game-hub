@@ -15,6 +15,8 @@ export interface ObjectArt {
   readonly layer: ObjectLayer;
   /** 타일 시트에서 이 칸을 왼쪽 위로 w×h 칸 넓이를 잘라 쓴다 (시트 한 칸 = 타일 하나 = TILE_CELLS × TILE_CELLS 칸) */
   readonly sprite: Cell;
+  /** 채움 — 있으면 sprite 를 잘라 키우지 않고 시트 칸 하나씩 물체 넓이만큼 되풀이한다. 첫 칸이 바탕, 나머지는 가끔 섞는 무늬 */
+  readonly fill?: readonly Cell[];
 }
 
 export interface MapObject extends PlacedShape, ObjectArt {}

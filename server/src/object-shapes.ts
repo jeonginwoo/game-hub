@@ -3,6 +3,8 @@
 // 크기는 칸 단위(16px) — 시트 한 칸(16px)이 로비에서는 2×2 칸으로 커지므로 크기는 모두 짝수다.
 // 막는 칸은 그림마다 고르지 않고 규칙으로 (결정 2026-10-16: 물체 종류 늘리기) — 나무는 밑둥, 꽉 찬 것(바위·그루터기 등)은 아랫부분,
 // 풀·꽃·바닥 무늬는 막지 않는다.
+// 바닥은 모두 물체다 — 문자 맵은 그림이 없다(문만 그린다). Floor 시트의 칸마다 한 종류(floor-열-줄)와,
+// 한 무늬를 넓게 되풀이하는 채움(fill-*)이 있다 (결정 2026-10-19: 문자 맵은 투명, 바닥은 물체).
 import type { Pos } from './room-map.ts';
 
 /** 물체 종류의 모양 — 크기와 막는 칸 */
@@ -16,6 +18,9 @@ export interface ObjectShape {
    */
   readonly solid?: readonly Pos[];
 }
+
+/** 채움 물체 한 변의 칸 수 */
+export const FILL = 8;
 
 /** 막지 않는다 — 풀·꽃·바닥 무늬 */
 function open(w: number, h: number): ObjectShape {
@@ -320,8 +325,84 @@ const SHAPES = {
   'banner-crimson': base(2, 4),
   'banner-purple': base(2, 4),
   'banner-yellow': base(2, 4),
+
+  // 건물 줄 — 예전 배경이 문 줄 벽에 그리던 지붕 두 무늬와 정면. 바닥 층, 막는 것은 맵의 '#'
+  'roof-1': open(2, 2),
+  'roof-2': open(2, 2),
+  facade: open(2, 2),
+
+  // 채움 — 시트 한 칸 무늬를 8×8 칸(타일 4×4)으로 되풀이. 넓은 바닥을 물체 몇 개로 깐다
+  'fill-sand': open(FILL, FILL),
+  'fill-sand-light': open(FILL, FILL),
+  'fill-pink': open(FILL, FILL),
+  'fill-pink-light': open(FILL, FILL),
+  'fill-grass': open(FILL, FILL),
+  'fill-dirt': open(FILL, FILL),
+  'fill-grass-dark': open(FILL, FILL),
+  'fill-dirt-dark': open(FILL, FILL),
+  'fill-snow': open(FILL, FILL),
+  'fill-snow-white': open(FILL, FILL),
+  'fill-soil': open(FILL, FILL),
+  'fill-planks': open(FILL, FILL),
+  'fill-ice': open(FILL, FILL),
+  'fill-clay': open(FILL, FILL),
 } satisfies Record<string, ObjectShape>;
 
-export type ObjectKind = keyof typeof SHAPES;
+// --- Floor 시트 칸 하나씩 -------------------------------------------------------------
 
-export const OBJECT_SHAPES: Readonly<Record<ObjectKind, ObjectShape>> = SHAPES;
+/** Floor 시트에서 그림이 있는 칸 — 줄마다 열 0 부터, '#' 있음 · '.' 빈 칸 (docs/assets.md) */
+const FLOOR_SHEET_MASK = [
+  '##########.##########.',
+  '##########.##########.',
+  '######################',
+  '######################',
+  '##..#####..##..#####..',
+  '#####......#####......',
+  '######.....######.....',
+  '##########.##########.',
+  '##########.##########.',
+  '######################',
+  '######################',
+  '#########..##.######..',
+  '#####......#####......',
+  '######.....######.....',
+  '##########.##########.',
+  '##########.##########.',
+  '######################',
+  '######################',
+  '##.######..##.######..',
+  '#####......#####......',
+  '######.....######.....',
+  '##########.##########.',
+  '##########.##########.',
+  '######################',
+  '###.##########.#######',
+  '#...#####......#####..',
+] as const;
+
+type SheetCol = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21;
+type SheetRow = SheetCol | 22 | 23 | 24 | 25;
+
+/**
+ * Floor 시트 칸 하나 = 바닥 조각 한 종류. 타입은 시트 22열 × 26줄 전부지만 표에 있는 것은 그림이 있는 칸(FLOOR_TILES)뿐 —
+ * 방 데이터로 들어오는 종류는 isObjectKind(표에 있는지)로 거른다
+ */
+export type FloorTileKind = `floor-${SheetCol}-${SheetRow}`;
+
+export interface FloorTile {
+  readonly kind: FloorTileKind;
+  readonly col: number;
+  readonly row: number;
+}
+
+/** 그림이 있는 시트 칸 전부 — 줄 순서, 줄 안에선 열 순서 */
+export const FLOOR_TILES: readonly FloorTile[] = FLOOR_SHEET_MASK.flatMap((line, row) =>
+  [...line].flatMap((ch, col): FloorTile[] => (ch === '#' ? [{ kind: `floor-${col}-${row}` as FloorTileKind, col, row }] : [])),
+);
+
+export type ObjectKind = keyof typeof SHAPES | FloorTileKind;
+
+export const OBJECT_SHAPES: Readonly<Record<ObjectKind, ObjectShape>> = {
+  ...SHAPES,
+  ...(Object.fromEntries(FLOOR_TILES.map((t) => [t.kind, open(2, 2)])) as Record<FloorTileKind, ObjectShape>),
+};

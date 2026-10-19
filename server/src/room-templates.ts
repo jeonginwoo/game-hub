@@ -2,11 +2,59 @@
 // 「로비 만들기」에서 하나를 고르고, 방을 만드는 hello{map} 이 그 id 를 싣는다 (결정 2026-10-16: 맵 템플릿 + 맵 선택).
 // 한 글자 = 칸 하나(16px). 그림(32px)은 2×2 칸에 걸쳐 그려지므로 벽·문은 2칸 단위로 그리면 그림과 맞는다.
 // 물체 자리는 칸 — 타일 (tx, ty) 의 왼쪽 아래 칸은 (2·tx, 2·ty + 1).
-import { OBJECT_SHAPES, type ObjectKind } from './object-shapes.ts';
-import type { RoomData, RoomObject } from './room-map.ts';
+// 문자 맵은 그림이 없다(문만) — 바닥·벽·건물 그림도 물체로 깐다 (결정 2026-10-19: 문자 맵은 투명, 바닥은 물체).
+import { FILL, FLOOR_TILES, OBJECT_SHAPES, type ObjectKind } from './object-shapes.ts';
+import { parseMap, type RoomData, type RoomObject } from './room-map.ts';
+
+/** 물체 하나 — [종류, 왼쪽 아래 칸 x, y] */
+type Spot = readonly [ObjectKind, number, number];
+
+/** 물체 목록 — id 는 종류 이름, 같은 종류가 또 나오면 kind-2, kind-3 … */
+function objects(...groups: readonly (readonly Spot[])[]): RoomObject[] {
+  const count = new Map<string, number>();
+  return groups.flat().map(([kind, x, y]) => {
+    const n = (count.get(kind) ?? 0) + 1;
+    count.set(kind, n);
+    return { id: n === 1 ? kind : `${kind}-${n}`, kind, x, y };
+  });
+}
+
+/** 맵 전체에 채움 하나를 깐다 — 끝에서 남는 줄·열은 마지막 채움을 안쪽으로 당겨 겹친다 */
+function covered(kind: ObjectKind, width: number, height: number): Spot[] {
+  const starts = (size: number): number[] => {
+    const out: number[] = [];
+    for (let v = 0; v < size; v += FILL) out.push(Math.min(v, size - FILL));
+    return out;
+  };
+  return starts(height).flatMap((top) => starts(width).map((left): Spot => [kind, left, top + FILL - 1]));
+}
+
+/** 방 데이터에 맵 옷(dressed)을 입힌다 — 옷이 먼저(아래), 템플릿의 물체가 그 위 */
+function dress(data: RoomData): RoomData {
+  return { ...data, objects: [...objects(dressed(data.rows)), ...data.objects] };
+}
+
+/**
+ * 예전 배경 그대로의 옷 — 풀 채움 위에, 문이 있는 줄의 벽은 건물 정면, 그 위 두 칸은 지붕(두 무늬 번갈아), 나머지 벽은 둥근 덤불.
+ * 벽은 32px 타일(2×2 칸) 단위로 본다 — 타일 왼쪽 위 칸이 벽이면 그 타일 전체. 벽·문이 짝수 칸에 맞춰진 맵만 예전과 같아 보인다
+ */
+function dressed(rows: readonly string[]): Spot[] {
+  const map = parseMap(rows);
+  const doorRow = (y: number): boolean => map.doors.some((d) => y >= d.y && y < d.y + d.h);
+  const building = (x: number, y: number): boolean => map.tileAt({ x, y }) === 'door' || (map.tileAt({ x, y }) === 'wall' && doorRow(y));
+  const spots: Spot[] = covered('fill-grass', map.width, map.height);
+  for (let y = 0; y + 1 < map.height; y += 2) {
+    for (let x = 0; x + 1 < map.width; x += 2) {
+      if (map.tileAt({ x, y }) !== 'wall') continue;
+      const kind: ObjectKind = doorRow(y) ? 'facade' : building(x, y + 2) ? ((x / 2) % 2 === 0 ? 'roof-1' : 'roof-2') : 'hedge-round';
+      spots.push([kind, x, y + 1]);
+    }
+  }
+  return spots;
+}
 
 /** 광장 — 처음부터 있던 기본 방 */
-export const DEFAULT_ROOM: RoomData = {
+export const DEFAULT_ROOM: RoomData = dress({
   rows: [
     '################################################',
     '################################################',
@@ -51,10 +99,10 @@ export const DEFAULT_ROOM: RoomData = {
   ],
   // 가운데 문 — 시작점에서 가장 가깝다
   doors: [{ x: 20, y: 2, game: 'whiteboard-3d' }],
-};
+});
 
 // 숲길 — 세로로 길고 나무가 많다. 덤불 벽 둘이 길을 꺾는다
-const FOREST_ROOM: RoomData = {
+const FOREST_ROOM: RoomData = dress({
   rows: [
     '########################################',
     '########################################',
@@ -115,10 +163,10 @@ const FOREST_ROOM: RoomData = {
   ],
   // 오른쪽 문 — 시작점에서 숲을 지나 간다
   doors: [{ x: 30, y: 2, game: 'whiteboard-3d' }],
-};
+});
 
 // 작은 마당 — 낮고 넓다. 화면보다 작아 카메라가 거의 움직이지 않는다
-const COURT_ROOM: RoomData = {
+const COURT_ROOM: RoomData = dress({
   rows: [
     '########################################################',
     '########################################################',
@@ -149,10 +197,12 @@ const COURT_ROOM: RoomData = {
     { id: 'torii-right', kind: 'torii', x: 42, y: 9 },
   ],
   doors: [{ x: 26, y: 2, game: 'whiteboard-3d' }],
-};
+});
 
 // 물체 전시 — 모든 물체 종류를 표 순서대로 한 번씩 늘어놓은 방. 그림 자르기·막는 칸을 눈으로 확인하는 곳 (결정 2026-10-16: 물체 종류 늘리기).
-// 종류가 늘면 저절로 따라오도록 표에서 만든다 — 선반처럼 왼쪽부터 채우고, 줄이 차면 그 줄의 가장 큰 높이 아래로 내려간다
+// 종류가 늘면 저절로 따라오도록 표에서 만든다 — 선반처럼 왼쪽부터 채우고, 줄이 차면 그 줄의 가장 큰 높이 아래로 내려간다.
+// 바닥 조각(floor-열-줄)은 선반 아래에 시트 모양 그대로 붙여 놓는다 — 가장자리 세트가 어떻게 이어지는지 보이게.
+// 맵 옷은 입히지 않는다 — 바탕이 없어 그림의 투명한 곳이 그대로 보인다
 const GALLERY_W = 84; // 칸 — 벽 두 칸씩 포함
 const GALLERY_GAP = 2; // 칸 — 물체 사이, 지나다닐 길
 
@@ -161,7 +211,9 @@ function galleryRoom(): RoomData {
   let x = 2 + GALLERY_GAP;
   let top = 6; // 지금 선반의 윗줄 — 문(2·3줄) 아래에 문 앞 자리를 비운다
   let shelfH = 0;
+  const floorTiles = new Set<string>(FLOOR_TILES.map((t) => t.kind));
   for (const kind of Object.keys(OBJECT_SHAPES).filter(isObjectKind)) {
+    if (floorTiles.has(kind)) continue;
     const { w, h } = OBJECT_SHAPES[kind];
     if (x + w > GALLERY_W - 2 - GALLERY_GAP) {
       x = 2 + GALLERY_GAP;
@@ -172,7 +224,14 @@ function galleryRoom(): RoomData {
     x += w + GALLERY_GAP;
     shelfH = Math.max(shelfH, h);
   }
-  const height = top + shelfH + GALLERY_GAP + 5; // 마지막 선반 아래 길 + 시작점 줄 + 아래 벽
+  // 바닥 조각 — 시트 한 칸이 2×2 칸
+  top += shelfH + GALLERY_GAP + 1;
+  let sheetRows = 0;
+  for (const t of FLOOR_TILES) {
+    objects.push({ id: t.kind, kind: t.kind, x: 2 + GALLERY_GAP + t.col * 2, y: top + t.row * 2 + 1 });
+    sheetRows = Math.max(sheetRows, t.row + 1);
+  }
+  const height = top + sheetRows * 2 + GALLERY_GAP + 5; // 시트 아래 길 + 시작점 줄 + 아래 벽
 
   const wall = '#'.repeat(GALLERY_W);
   const floor = `##${'.'.repeat(GALLERY_W - 4)}##`;
