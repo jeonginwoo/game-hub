@@ -62,7 +62,8 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   placement, door → game id) is not lobby data: it lives in `server/src/room-templates.ts` and
   is checked by `buildRoom`; the lobby adds only art (`OBJECT_ART` by kind), shown names and groups (`OBJECT_INFO` by kind) and game URLs (`GAMES`).
   The lobby draws `DEFAULT_ROOM` from the start (behind the first screen, and alone when the
-  server is unreachable). Behind the first screen the player is hidden and the camera drifts on its own
+  server is unreachable); the map ◀ ▶ of 「로비 만들기」 switches the backdrop to the picked template
+  (`switchRoom` with a respawn, so the hidden player stands on that map's start). Behind the first screen the player is hidden and the camera drifts on its own
   (`driftCenter` in `view.ts`) at a larger zoom (`BACKDROP_ZOOM`, so a big window still has room to move);
   entering the lobby shows the player and switches to `VIEW_ZOOM` and following. On entering it draws the room's template (picked on 「로비 만들기」 or
   remembered per room in `sessionStorage`, `mapKey`). When the room in `welcome` differs from what

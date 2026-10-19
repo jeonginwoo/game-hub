@@ -58,9 +58,15 @@ export function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: str
 
 /**
  * 시작 화면(start) 또는 이름 화면(name)을 띄우고, 들어가면 닫고 방·이름을 돌려준다.
- * name 화면은 초대 링크로 온 경우라 room 이 정해져 있다
+ * name 화면은 초대 링크로 온 경우라 room 이 정해져 있다.
+ * onMap 은 「로비 만들기」의 맵 ◀ ▶ 로 고른 템플릿 id 를 받는다 — 뒤 배경 미리보기
  */
-export function showEntryScreen(screen: Exclude<Screen, 'lobby'>, room: string | null, savedName: string | null): Promise<Entered> {
+export function showEntryScreen(
+  screen: Exclude<Screen, 'lobby'>,
+  room: string | null,
+  savedName: string | null,
+  onMap?: (id: string) => void,
+): Promise<Entered> {
   return new Promise((resolve) => {
     const overlay = el('div', 'hub-overlay');
     const card = el('form', 'hub-card');
@@ -101,6 +107,8 @@ export function showEntryScreen(screen: Exclude<Screen, 'lobby'>, room: string |
       b.addEventListener('click', () => {
         mapIndex = cycleIndex(mapIndex, delta, ROOM_TEMPLATES.length);
         showMap();
+        const id = ROOM_TEMPLATES[mapIndex]?.id;
+        if (id !== undefined) onMap?.(id);
       });
       return b;
     };

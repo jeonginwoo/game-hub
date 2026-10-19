@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isRoomCode } from '../../../server/src/protocol';
+import { DEFAULT_ROOM, ROOM_TEMPLATES } from '../../../server/src/room-templates';
 import { cycleIndex, homeUrl, inviteUrl, mapKey, nameFromInput, newRoomCode, renameFromInput, roomFromInput, roomFromSearch, screenFor, withRoom } from '../../src/room/room';
 
 describe('cycleIndex', () => {
@@ -7,6 +8,13 @@ describe('cycleIndex', () => {
     expect(cycleIndex(0, 1, 3)).toBe(1);
     expect(cycleIndex(2, 1, 3)).toBe(0);
     expect(cycleIndex(0, -1, 3)).toBe(2);
+  });
+});
+
+describe('맵 고르기의 첫 값', () => {
+  // 첫 화면 뒤 배경은 DEFAULT_ROOM 으로 시작하고, ◀ ▶ 를 누르기 전 맵 이름표는 ROOM_TEMPLATES[0] — 둘이 어긋나면 안 된다
+  it('맨 앞 템플릿이 처음 그리는 기본 방이다', () => {
+    expect(ROOM_TEMPLATES[0]?.room).toBe(DEFAULT_ROOM);
   });
 });
 

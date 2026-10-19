@@ -784,7 +784,10 @@ const screen = screenFor(urlRoom, savedName);
 if (screen === 'lobby' && urlRoom !== null && savedName !== null) {
   enterLobby({ room: urlRoom, name: savedName });
 } else if (screen !== 'lobby') {
-  void showEntryScreen(screen, urlRoom, savedName).then(enterLobby);
+  // 맵을 고르면 뒤 배경도 그 맵 — 숨은 내 자리도 그 맵 시작점으로 옮겨 둔다. 같은 맵으로 들어가면
+  // enterLobby 의 switchRoom 이 아무것도 하지 않아, 앞 맵의 자리가 그대로 남기 때문이다
+  const preview = (id: string): void => void switchRoom(templateFor(id).room, '');
+  void showEntryScreen(screen, urlRoom, savedName, preview).then(enterLobby);
 }
 
 // --- 입력 ---------------------------------------------------------------------
