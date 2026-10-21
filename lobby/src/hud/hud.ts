@@ -29,16 +29,26 @@ export function peopleCount(status: NetStatus, others: Others): number | null {
   return status === 'open' ? others.players.size + 1 : null;
 }
 
-/** 위쪽 가운데 알림 — 연결 알림이 먼저, 열려 있으면 편집 중(tool) 도구 안내, 둘 다 아니면 null */
-export function noticeText(status: NetStatus, tool: EditTool | null = null): string | null {
+/** 편집 중 알림에 필요한 것 — 도구와, 초안에 저장 안 한 바뀐 것이 있는지 */
+export interface EditNotice {
+  readonly tool: EditTool;
+  readonly dirty: boolean;
+}
+
+/**
+ * 위쪽 가운데 알림 — 연결 알림이 먼저, 열려 있으면 편집 중(edit) 도구 안내, 둘 다 아니면 null.
+ * 바뀐 것이 있으면 Esc 로 끝나지 않는다 — 저장·취소로 (결정 2026-10-21: 저장식 편집)
+ */
+export function noticeText(status: NetStatus, edit: EditNotice | null = null): string | null {
   if (status === 'connecting') return '연결 중…';
   if (status === 'closed') return '연결 끊김 — 새로고침';
-  return tool === null ? null : EDIT_NOTICE[tool];
+  if (edit === null) return null;
+  return `편집 중 — ${EDIT_NOTICE[edit.tool]} ${edit.dirty ? '(저장해야 모두에게 · 저장·취소로 끝)' : '(Esc 끝)'}`;
 }
 
 const EDIT_NOTICE: Readonly<Record<EditTool, string>> = {
-  door: '편집 중 — 문을 눌러 게임 고르기 (Esc 끝)',
-  place: '편집 중 — 고른 물체를 맵에 놓기 (Esc 끝)',
-  remove: '편집 중 — 누른 물체 치우기 (Esc 끝)',
-  paint: '편집 중 — 누르거나 끌어서 칸 칠하기 (Esc 끝)',
+  door: '문을 눌러 게임 고르기',
+  place: '고른 물체를 맵에 놓기',
+  remove: '누른 물체 치우기',
+  paint: '누르거나 끌어서 칸 칠하기',
 };

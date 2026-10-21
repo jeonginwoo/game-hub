@@ -2,7 +2,7 @@
 // 위치는 클라이언트 권위(결정 2026-10-09): 서버는 형식만 검사하고 명단 관리·중계만 한다. 좌표는 칸 단위(로비 타일의 1/2).
 // 방 데이터(맵·물체·문 배정)는 서버가 들고 welcome 에 실어 보낸다 (결정 2026-10-16: 방이 상태를 갖는다).
 // 방은 그 방을 만드는 hello 의 map(템플릿 id)으로 생긴다 — 이미 있는 방에 들어오는 hello 의 map 은 무시 (결정 2026-10-16: 맵 템플릿 + 맵 선택).
-import { isGameId, isObjectKind, isTileChar, parseRoomData, type ObjectKind, type RoomData, type TileChar } from './room-map.ts';
+import { parseRoomData, type RoomData } from './room-map.ts';
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
 
@@ -41,14 +41,9 @@ export type ClientMsg =
   | { readonly t: 'chat'; readonly text: string } // 같은 방 모두에게 — 보낸 사람에게도 돌아온다
   | { readonly t: 'rename'; readonly name: string } // 로비 안 닉네임 변경 — 보낸 사람은 이미 바꿨으므로 돌려받지 않는다
   | { readonly t: 'look'; readonly look: Look } // 외형 바꾸기 — rename 처럼 보낸 사람은 돌려받지 않는다
-  // 문에 게임 배정 — (x, y) 는 그 문의 아무 칸, game null 은 배정 해제. 방장만 (결정 2026-10-16: 방장이 문마다 게임 고르기)
-  | { readonly t: 'door'; readonly x: number; readonly y: number; readonly game: string | null }
-  // 물체 놓기 — (x, y) 는 왼쪽 아래 칸, id 는 서버가 붙인다. 치우기는 물체 id 로 — 그림이 겹친 칸에서 무엇을 치울지는 화면을 보는 로비 몫.
-  // 방장만 (결정 2026-10-16: 물체 배치 편집)
-  | { readonly t: 'place'; readonly kind: ObjectKind; readonly x: number; readonly y: number }
-  | { readonly t: 'remove'; readonly id: string }
-  // 칸 하나의 맵 글자 바꾸기 — 방장만. 배정이 떨어져 나간 문은 서버가 정리한다 (결정 2026-10-17: 타일 편집)
-  | { readonly t: 'paint'; readonly x: number; readonly y: number; readonly ch: TileChar };
+  // 편집한 방 데이터 통째 — 방장만. 문 배정·물체·맵 글자를 로비가 초안으로 고치다가 「저장」 때 한 번에 보낸다.
+  // 맞는 방인지는 명단이 buildRoom 으로 (결정 2026-10-21: 저장식 편집 — door·place·remove·paint 를 대체)
+  | { readonly t: 'save'; readonly room: RoomData };
 
 export type ServerMsg =
   // players 에 본인 포함, owner 는 방장 id, room 은 이 방의 데이터 — 로비는 buildRoom 으로 다시 검사한다.
@@ -64,14 +59,13 @@ export type ServerMsg =
   | { readonly t: 'rename'; readonly id: string; readonly name: string }
   | { readonly t: 'look'; readonly id: string; readonly look: Look }
   | { readonly t: 'owner'; readonly id: string } // 방장이 바뀜 — 방장이 나가 승계될 때 (결정 2026-10-16: 서버가 정한 방장)
-  // 방 데이터가 바뀜(문 배정·물체 놓기/치우기·칠하기) — 보낸 방장에게도 간다. 로비는 welcome 처럼 buildRoom 으로 다시 검사한다
+  // 방 데이터가 바뀜(방장의 저장) — 보낸 방장에게도 간다. 로비는 welcome 처럼 buildRoom 으로 다시 검사한다
   | { readonly t: 'room'; readonly room: RoomData };
 
 export const NAME_MAX = 16; // 글자
 export const COORD_MAX = 1000; // 칸 — 서버는 위치를 맵과 대조하지 않으므로 넉넉한 상한만 둔다
 export const DEFAULT_NAME = '손님';
 export const CHAT_MAX = 200; // 글자
-export const OBJECT_ID_MAX = 64; // 글자 — remove 의 id. 있는 물체인지는 명단 몫
 
 // 방 코드 — 접속 주소 `/ws?room=<코드>`. 로비가 만들고 서버는 형식만 본다 (결정 2026-10-14: 로그인 없이 방 + 초대 링크).
 // 헷갈리는 글자(0·o, 1·l·i)는 뺀다 — 사람이 보고 옮겨 적는 값이라
@@ -183,28 +177,10 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       const look = parseLook(v.look);
       return look ? { t: 'look', look } : null;
     }
-    case 'door': {
-      // 문 칸인지는 방 데이터를 아는 명단 몫(assignDoor) — 여기서는 모양만
-      const { x, y, game } = v;
-      if (!isCoord(x) || !isCoord(y) || (game !== null && !isGameId(game))) return null;
-      return { t: 'door', x, y, game };
-    }
-    case 'place': {
-      // 놓일 수 있는 자리인지는 방 데이터를 아는 명단 몫(placeObject) — 여기서는 모양만
-      const { kind, x, y } = v;
-      if (!isObjectKind(kind) || !isCoord(x) || !isCoord(y)) return null;
-      return { t: 'place', kind, x, y };
-    }
-    case 'remove': {
-      const { id } = v;
-      if (typeof id !== 'string' || id.length === 0 || id.length > OBJECT_ID_MAX) return null;
-      return { t: 'remove', id };
-    }
-    case 'paint': {
-      // 맵 안인지·칠해도 되는지는 방 데이터를 아는 명단 몫(paintTile) — 여기서는 모양만
-      const { x, y, ch } = v;
-      if (!isCoord(x) || !isCoord(y) || !isTileChar(ch)) return null;
-      return { t: 'paint', x, y, ch };
+    case 'save': {
+      // 크기 상한·모양은 parseRoomData, 맞는 방인지(buildRoom)는 명단 몫
+      const room = parseRoomData(v.room);
+      return room ? { t: 'save', room } : null;
     }
     default:
       return null;

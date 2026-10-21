@@ -33,10 +33,13 @@
   someone is in it (`Rooms` in `roster.ts`) — no create call, no persistence. Each room's
   `Roster` holds its template (`RoomTemplate` from `room-templates.ts`: id + `RoomData`) and the room's current `RoomData` in memory and
   sends both in `welcome`; it goes away with the room. The current data starts as the template's and
-  changes only through the owner's `door`, `place`, `remove` and `paint` (`assignDoor`, `placeObject` — the server
-  picks the new object's id —, `removeObject`, `paintTile` — door assignments follow the painted map — in `room-map.ts`; one path, `editRoom` in `roster.ts`), relayed to
-  everyone, sender included, as `room{room}`; one from anyone else, or one that throws (fails `buildRoom`, unknown
-  object id, `MAX_OBJECTS` reached, cell outside the map or already that character), is dropped. The template is the `map` of the `hello`
+  changes only through the owner's `save{room}` — the whole edited room data at once (`save` in `roster.ts`), relayed to
+  everyone, sender included, as `room{room}`; one from anyone else, one equal to the current room (`sameRoomData`),
+  or one that fails `buildRoom` is dropped. Its shape and size caps (`MAP_ROWS_MAX`, `MAP_COLS_MAX`, `MAX_OBJECTS`,
+  `DOOR_GAMES_MAX`, `ID_MAX`) are `parseRoomData`'s; `MAX_PAYLOAD` in `ws.ts` is sized so a room at those caps fits.
+  The edit functions (`assignDoor`, `placeObject`, `removeObject`, `paintTile` in `room-map.ts`) are used by the
+  lobby on its draft, not by the server. The server never looks at positions — a player left on a blocked cell moves
+  themselves. The template is the `map` of the `hello`
   that creates the room (`templateFor` — unknown or missing id = default); a `hello` joining an
   existing room cannot change it.
 - JSON over WebSocket, one object per message, discriminated by `t`.

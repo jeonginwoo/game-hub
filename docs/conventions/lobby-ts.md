@@ -29,7 +29,7 @@ Files are grouped by feature, not by layer: a feature's pure module and its wiri
 | `room/` | `room.ts` · `entry-screen.ts` | room code / name → first screen |
 | `chat/` | `chat.ts` · `chat-box.ts` | chat rules → chat box |
 | `hud/` | `hud.ts` · `hud-bar.ts` | roster / notice text → top-right buttons |
-| `edit/` | `edit.ts` `place.ts` `paint.ts` · `door-picker.ts` `edit-tools.ts` | owner's edit mode: who may edit, door marks, game choices, where an object goes / whether it may / which one is under the pointer, whether a cell may be painted / which cells a drag crosses → door game list, tool bar (with paint brushes) and object list |
+| `edit/` | `edit.ts` `place.ts` `paint.ts` `draft.ts` · `door-picker.ts` `edit-tools.ts` | owner's edit mode: who may edit, door marks, game choices, where an object goes / whether it may / which one is under the pointer, whether a cell may be painted / which cells a drag crosses, whether the draft has changes → door game list, tool bar (with paint brushes and save / cancel) and object list |
 
 A new module joins the folder of the feature it serves; a new folder is made when a feature
 has no home yet. `games/` is not used as a folder name (it is the repo-root games folder).
@@ -69,26 +69,35 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   remembered per room in `sessionStorage`, `mapKey`). When the room in `welcome` differs from what
   is drawn, `switchRoom` in `main.ts` throws the world away (`disposeWorld`), builds it again
   (`buildWorld`) and respawns; a room that fails `buildRoom` is logged and the current one kept.
-  A `room` message (the owner changed a door's game) goes through the same `switchRoom` without
-  respawning — it does not change the map rows, so the current cell stays valid.
+  A `room` message (the owner saved an edit) goes through the same `switchRoom` without
+  respawning — the player stays put unless the new walk map blocks the cell (`unstick`, below).
 - **Edit mode** (owner only, `canEdit`) is a state in `main.ts`: while on, the lobby does not walk, shows only the
   map (the render loop hides every avatar; `setEditing` puts `hub-editing` on `body` so CSS hides head tags and the
   chat box, and Enter does not open chat), and the tool bar (`edit-tools.ts`, bottom centre — the top row of the map holds doors) picks one of four
   tools. A pointer on the map goes screen → cell (`screenToCell` in `view.ts`), then by tool:
   door — the door marks (part of the world, rebuilt with it) are visible, a door opens `door-picker.ts`,
-  picking sends `door`; place — the chosen kind's preview follows the pointer (`placeAt`: the pointer is the
-  object's bottom centre), a red fill under it when `canPlace` (the server's `placeObject`) says no, a click sends
-  `place`; remove — a red fill on `topObjectAt` (the frontmost picture over the cell), a click sends `remove`;
+  picking assigns the game (`assignDoor`); place — the chosen kind's preview follows the pointer (`placeAt`: the pointer is the
+  object's bottom centre), a red fill under it when `canPlace` (`placeObject`) says no, a click places it
+  (`placeObject`); remove — a red fill on `topObjectAt` (the frontmost picture over the cell), a click removes it (`removeObject`);
   paint — the bar shows four brushes (floor, wall, door, start = map characters), the world's cell marks show every
   cell (a translucent fill — walls and starts in their own colour — and a 1px grid), a white frame on the cell with a
-  red fill when `paintCheck` (the server's `paintTile`) says `no` (`same` — already that character — is neither red
-  nor sent); pressing starts a stroke and every cell it crosses (`cellsBetween` joins pointer moves, side by side,
-  never diagonally) is sent once as `paint` when `ok`; pointer up or leaving the canvas ends the stroke.
-  The preview, the frame and the red fill are on the edit layer and are re-evaluated only when the pointer enters another
-  cell, the tool changes or the room is rebuilt. Every change shows only when the server's `room` comes back.
-  Edit mode turns off when ownership moves or the connection closes. Esc steps back one level — door game
-  list → door tool → edit mode off; an Esc that closed a button-bar panel is `preventDefault`ed so it does not
-  also step back.
+  red fill when `paintCheck` (`paintTile`) says `no` (`same` — already that character — is not red); pressing starts a
+  stroke and every cell it crosses (`cellsBetween` joins pointer moves, side by side, never diagonally) is painted
+  (`paintTile`); pointer up or leaving the canvas ends the stroke.
+  **Tools edit a draft, not the server** (`draft` in `main.ts`, copied from the drawn room when edit mode turns on):
+  each change runs the same `room-map.ts` function the server would, a throw leaves the draft as it was, and the
+  render loop rebuilds the world from the draft at most once per frame (`flushDraft`), so a long paint stroke is one
+  rebuild per frame. 「저장」 (enabled only when the draft differs) sends `save{room}` and turns edit mode off keeping the
+  draft on screen — the matching `room` that comes back is then a no-op; 「취소」 drops the draft and redraws the room
+  from before editing. A `room` arriving mid-edit becomes that "before" room, and also the draft when the draft had no changes (`rebaseDraft` in `edit/draft.ts`). Edit mode turns off — dropping the
+  draft — when ownership moves or the connection closes. While the draft differs, Esc and the edit button do not end
+  edit mode (the notice says to save or cancel). The preview, the frame and the red fill are on the edit layer and are
+  re-evaluated only when the pointer enters another cell, the tool changes or the world is rebuilt.
+  Esc steps back one level — door game list → door tool → edit mode off; an Esc that closed a button-bar panel is
+  `preventDefault`ed so it does not also step back.
+- **A received room may wall a player in.** When the world changes without a respawn (`room`, edit mode turning off),
+  `unstick` moves my avatar off a cell the new walk map blocks, to `nearestFloor` (fewest steps, never a door cell),
+  else a start; the loop then sends `move`. Positions are client-authoritative, so each lobby fixes only itself.
 
 ## 2. Tests
 

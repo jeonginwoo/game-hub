@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignDoor, buildRoom, checkObjects, MAX_OBJECTS, OBJECT_SHAPES, objectRect, parseMap, parseRoomData, paintTile, placeObject, removeObject, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
+import { assignDoor, buildRoom, checkObjects, DOOR_GAMES_MAX, ID_MAX, MAP_COLS_MAX, MAP_ROWS_MAX, MAX_OBJECTS, OBJECT_SHAPES, objectRect, parseMap, parseRoomData, paintTile, placeObject, removeObject, sameRoomData, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
 import { DEFAULT_ROOM, DEFAULT_TEMPLATE, ROOM_TEMPLATES, templateFor } from '../src/room-templates.ts';
 
 const tree: PlacedShape = { id: 'tree', x: 4, y: 5, w: 2, h: 3 };
@@ -314,8 +314,50 @@ describe('parseRoomData', () => {
     expect(parseRoomData({ ...data, doors: [{ x: 3, y: 0 }] })).toBeNull();
   });
 
+  it('크기 상한을 넘으면 null — 줄 수·줄 길이·물체 수·문 배정 수·id 길이', () => {
+    const tree = (i: number) => ({ id: `t${i}`, kind: 'tree', x: 1, y: 0 });
+    const door = { x: 3, y: 0, game: 'g' };
+    expect(parseRoomData({ ...data, rows: Array.from({ length: MAP_ROWS_MAX }, () => '#') })).not.toBeNull();
+    expect(parseRoomData({ ...data, rows: Array.from({ length: MAP_ROWS_MAX + 1 }, () => '#') })).toBeNull();
+    expect(parseRoomData({ ...data, rows: ['#'.repeat(MAP_COLS_MAX)] })).not.toBeNull();
+    expect(parseRoomData({ ...data, rows: ['#'.repeat(MAP_COLS_MAX + 1)] })).toBeNull();
+    expect(parseRoomData({ ...data, objects: Array.from({ length: MAX_OBJECTS }, (_, i) => tree(i)) })).not.toBeNull();
+    expect(parseRoomData({ ...data, objects: Array.from({ length: MAX_OBJECTS + 1 }, (_, i) => tree(i)) })).toBeNull();
+    expect(parseRoomData({ ...data, doors: Array.from({ length: DOOR_GAMES_MAX }, () => door) })).not.toBeNull();
+    expect(parseRoomData({ ...data, doors: Array.from({ length: DOOR_GAMES_MAX + 1 }, () => door) })).toBeNull();
+    expect(parseRoomData({ ...data, objects: [{ ...tree(0), id: 'a'.repeat(ID_MAX + 1) }] })).toBeNull();
+    expect(parseRoomData({ ...data, doors: [{ ...door, game: 'a'.repeat(ID_MAX + 1) }] })).toBeNull();
+  });
+
+  it('템플릿은 모두 상한 안이다 — 저장으로 그대로 돌려보낼 수 있게', () => {
+    for (const t of ROOM_TEMPLATES) expect(parseRoomData(JSON.parse(JSON.stringify(t.room))), t.id).toEqual(t.room);
+  });
+
   it('맵·배치가 맞는지는 보지 않는다 — buildRoom 몫', () => {
     expect(parseRoomData({ rows: ['#'], objects: [], doors: [{ x: 0, y: 0, game: 'g' }] })).not.toBeNull();
+  });
+});
+
+describe('sameRoomData', () => {
+  const data: RoomData = {
+    rows: ['#S.D#'],
+    objects: [{ id: 't', kind: 'tree', x: 1, y: 0 }],
+    doors: [{ x: 3, y: 0, game: 'g' }],
+  };
+
+  it('내용이 같으면 같다 — 다른 객체여도, 필드 순서가 달라도', () => {
+    expect(sameRoomData(data, JSON.parse(JSON.stringify(data)))).toBe(true);
+    expect(sameRoomData(data, { doors: [{ game: 'g', y: 0, x: 3 }], objects: [{ y: 0, x: 1, kind: 'tree', id: 't' }], rows: ['#S.D#'] })).toBe(true);
+    expect(sameRoomData(DEFAULT_ROOM, JSON.parse(JSON.stringify(DEFAULT_ROOM)))).toBe(true);
+  });
+
+  it('맵 줄·물체·문 배정 중 하나라도 다르면 다르다', () => {
+    expect(sameRoomData(data, { ...data, rows: ['#SD.#'] })).toBe(false);
+    expect(sameRoomData(data, { ...data, rows: [...data.rows, '#####'] })).toBe(false);
+    expect(sameRoomData(data, { ...data, objects: [{ id: 't', kind: 'torii', x: 1, y: 0 }] })).toBe(false);
+    expect(sameRoomData(data, { ...data, objects: [] })).toBe(false);
+    expect(sameRoomData(data, { ...data, doors: [{ x: 3, y: 0, game: 'h' }] })).toBe(false);
+    expect(sameRoomData(DEFAULT_ROOM, data)).toBe(false);
   });
 });
 

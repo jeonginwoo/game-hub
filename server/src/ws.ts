@@ -8,7 +8,9 @@ import { Rooms } from './roster.ts';
 
 export const WS_PATH = '/ws';
 const HEARTBEAT_MS = 30_000; // 응답 없는 연결(창 닫힘·망 끊김)을 이 간격으로 정리
-const MAX_PAYLOAD = 4 * 1024; // 바이트 — 로비 메시지는 위치·이름·채팅 한 줄(CHAT_MAX 글자)뿐
+// 바이트 — 가장 큰 것은 방장의 save(방 데이터 통째, 템플릿이 20~60 KB). parseRoomData 상한(줄·칸·물체·문 배정 수, id 길이)을
+// 꽉 채운 방도 들어가게 넉넉히 — 넘치면 연결이 끊긴다
+export const MAX_PAYLOAD = 512 * 1024;
 
 /** 업그레이드 이벤트를 내는 HTTP 서버 — node:http 서버와 Vite 개발·미리보기 서버가 모두 해당 */
 export interface UpgradeSource {

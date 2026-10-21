@@ -212,25 +212,37 @@ export function isObjectKind(v: unknown): v is ObjectKind {
   return typeof v === 'string' && Object.hasOwn(OBJECT_SHAPES, v);
 }
 
+// 방 데이터 크기 상한 — 방장이 저장으로 방 데이터를 통째 보내므로(결정 2026-10-21: 저장식 편집) 끝없이 커지지 않게.
+// 템플릿 중 가장 큰 「물체 전시」가 247칸 폭이다
+export const MAP_ROWS_MAX = 256; // 줄
+export const MAP_COLS_MAX = 256; // 칸
+export const DOOR_GAMES_MAX = 256; // 개
+export const ID_MAX = 64; // 글자 — 물체 id·게임 id
+
+function isShortString(v: unknown): v is string {
+  return typeof v === 'string' && v.length <= ID_MAX;
+}
+
 function parseRoomObject(v: unknown): RoomObject | null {
-  if (!isRecord(v) || typeof v.id !== 'string' || !isObjectKind(v.kind) || !isInt(v.x) || !isInt(v.y)) return null;
+  if (!isRecord(v) || !isShortString(v.id) || !isObjectKind(v.kind) || !isInt(v.x) || !isInt(v.y)) return null;
   return { id: v.id, kind: v.kind, x: v.x, y: v.y };
 }
 
 function parseDoorGame(v: unknown): DoorGame | null {
-  if (!isRecord(v) || !isInt(v.x) || !isInt(v.y) || typeof v.game !== 'string') return null;
+  if (!isRecord(v) || !isInt(v.x) || !isInt(v.y) || !isShortString(v.game)) return null;
   return { x: v.x, y: v.y, game: v.game };
 }
 
 /**
- * 받은 JSON 이 방 데이터 모양인지만 본다 — 하나라도 틀리면 null, 모르는 필드는 버린다.
- * 맵·물체·문 배정이 맞는지(겹침·문 칸 등)는 buildRoom 몫
+ * 받은 JSON 이 방 데이터 모양인지만 본다 — 하나라도 틀리거나 크기 상한(줄·칸·물체·문 배정 수, id 길이)을 넘으면 null,
+ * 모르는 필드는 버린다. 맵·물체·문 배정이 맞는지(겹침·문 칸 등)는 buildRoom 몫
  */
 export function parseRoomData(v: unknown): RoomData | null {
   if (!isRecord(v) || !Array.isArray(v.rows) || !Array.isArray(v.objects) || !Array.isArray(v.doors)) return null;
+  if (v.rows.length > MAP_ROWS_MAX || v.objects.length > MAX_OBJECTS || v.doors.length > DOOR_GAMES_MAX) return null;
   const rows: string[] = [];
   for (const r of v.rows) {
-    if (typeof r !== 'string') return null;
+    if (typeof r !== 'string' || r.length > MAP_COLS_MAX) return null;
     rows.push(r);
   }
   const objects: RoomObject[] = [];
@@ -246,6 +258,21 @@ export function parseRoomData(v: unknown): RoomData | null {
     doors.push(door);
   }
   return { rows, objects, doors };
+}
+
+/** 두 방 데이터가 같은가 — 맵 줄·물체·문 배정을 순서까지 비교한다 (로비: 받은 방이 지금 그린 방인지 · 서버: 저장이 바뀐 것이 있는지) */
+export function sameRoomData(a: RoomData, b: RoomData): boolean {
+  return a.rows.length === b.rows.length && a.rows.every((r, i) => r === b.rows[i])
+    && a.objects.length === b.objects.length
+    && a.objects.every((o, i) => {
+      const p = b.objects[i];
+      return p !== undefined && o.id === p.id && o.kind === p.kind && o.x === p.x && o.y === p.y;
+    })
+    && a.doors.length === b.doors.length
+    && a.doors.every((d, i) => {
+      const e = b.doors[i];
+      return e !== undefined && d.x === e.x && d.y === e.y && d.game === e.game;
+    });
 }
 
 /** 방 데이터를 해석하고 검사한다 — 맵·물체·문 배정 중 하나라도 틀리면 throw */

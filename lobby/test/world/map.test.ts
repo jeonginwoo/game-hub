@@ -1,30 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RoomData } from '../../../server/src/room-map';
-import { DEFAULT_ROOM } from '../../../server/src/room-templates';
-import { parseMap, sameRoomData, withShutDoors } from '../../src/world/map';
-
-describe('sameRoomData', () => {
-  const data: RoomData = {
-    rows: ['#S.D#'],
-    objects: [{ id: 't', kind: 'tree', x: 1, y: 0 }],
-    doors: [{ x: 3, y: 0, game: 'g' }],
-  };
-
-  it('내용이 같으면 같다 — 다른 객체여도, 필드 순서가 달라도', () => {
-    expect(sameRoomData(data, JSON.parse(JSON.stringify(data)))).toBe(true);
-    expect(sameRoomData(data, { doors: [{ game: 'g', y: 0, x: 3 }], objects: [{ y: 0, x: 1, kind: 'tree', id: 't' }], rows: ['#S.D#'] })).toBe(true);
-    expect(sameRoomData(DEFAULT_ROOM, JSON.parse(JSON.stringify(DEFAULT_ROOM)))).toBe(true);
-  });
-
-  it('맵 줄·물체·문 배정 중 하나라도 다르면 다르다', () => {
-    expect(sameRoomData(data, { ...data, rows: ['#SD.#'] })).toBe(false);
-    expect(sameRoomData(data, { ...data, rows: [...data.rows, '#####'] })).toBe(false);
-    expect(sameRoomData(data, { ...data, objects: [{ id: 't', kind: 'torii', x: 1, y: 0 }] })).toBe(false);
-    expect(sameRoomData(data, { ...data, objects: [] })).toBe(false);
-    expect(sameRoomData(data, { ...data, doors: [{ x: 3, y: 0, game: 'h' }] })).toBe(false);
-    expect(sameRoomData(DEFAULT_ROOM, data)).toBe(false);
-  });
-});
+import { nearestFloor, parseMap, withShutDoors } from '../../src/world/map';
 
 describe('withShutDoors', () => {
   // 문 0 = (1~2, 0), 문 1 = (5~6, 0)
@@ -47,5 +22,30 @@ describe('withShutDoors', () => {
   it('문 번호·자리는 원래 맵 그대로 — 닫힌 문도 문으로 셈한다', () => {
     expect(walk.doors).toEqual(map.doors);
     expect(walk.doorAt({ x: 5, y: 0 })).toBe(1);
+  });
+});
+
+describe('nearestFloor', () => {
+  const map = parseMap([
+    '#####',
+    '#S#.#',
+    '#####',
+    '#.D.#',
+    '#####',
+  ]);
+
+  it('가장 가까운 바닥 칸 — 같은 거리면 위→아래, 왼→오른 순 첫 칸', () => {
+    expect(nearestFloor(map, { x: 2, y: 1 })).toEqual({ x: 1, y: 1 });
+    expect(nearestFloor(map, { x: 2, y: 2 })).toEqual({ x: 1, y: 1 });
+    expect(nearestFloor(map, { x: 4, y: 4 })).toEqual({ x: 3, y: 3 });
+  });
+
+  it('바닥 칸 위면 그 칸, 문 칸은 고르지 않는다', () => {
+    expect(nearestFloor(map, { x: 3, y: 1 })).toEqual({ x: 3, y: 1 });
+    expect(nearestFloor(map, { x: 2, y: 4 })).toEqual({ x: 1, y: 3 });
+  });
+
+  it('바닥이 없으면 undefined', () => {
+    expect(nearestFloor({ ...map, tileAt: () => 'wall' }, { x: 2, y: 2 })).toBeUndefined();
   });
 });

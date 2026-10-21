@@ -1,10 +1,10 @@
 // 로비 명단 — 방 하나의 접속자 목록과 중계, 그리고 방 코드별 묶음. 전송(ws)과 분리한 순수 모듈이라 소켓 없이 단위 테스트한다.
 // 위치는 클라이언트 권위(결정 2026-10-09): 받은 위치를 그대로 기록하고 다른 사람에게 전한다.
 // 방장은 서버가 정한다(결정 2026-10-16): 처음 들어온 사람, 나가면 남은 사람 중 가장 먼저 들어온 사람.
-// 방 데이터는 메모리에만 — 방이 생길 때 템플릿에서 받아 welcome 에 싣고, 방장의 문 배정(door)·물체 놓기/치우기(place·remove)·칠하기(paint)로
-// 바뀌며, 마지막 사람이 나가면 방과 함께 사라진다 (결정 2026-10-16: 방이 상태를 갖는다 · 방장이 문마다 게임 고르기 · 물체 배치 편집 · 2026-10-17 타일 편집).
+// 방 데이터는 메모리에만 — 방이 생길 때 템플릿에서 받아 welcome 에 싣고, 방장의 저장(save)으로 통째 바뀌며,
+// 마지막 사람이 나가면 방과 함께 사라진다 (결정 2026-10-16: 방이 상태를 갖는다 · 2026-10-21: 저장식 편집).
 import type { ClientMsg, Look, Player, ServerMsg } from './protocol.ts';
-import { assignDoor, buildRoom, paintTile, placeObject, removeObject, type RoomData } from './room-map.ts';
+import { buildRoom, sameRoomData, type RoomData } from './room-map.ts';
 import { DEFAULT_TEMPLATE, templateFor, type RoomTemplate } from './room-templates.ts';
 
 export interface Peer {
@@ -30,7 +30,7 @@ export class Roster {
   private readonly now: Clock;
   /** 이 방이 시작한 템플릿 — welcome 의 map(템플릿 id)은 이것을 알린다 */
   readonly template: RoomTemplate;
-  /** 지금 방 데이터 — 템플릿에서 시작해 방장의 door·place·remove 로 바뀐다. 서버는 들고 보낼 뿐, 위치를 이것과 대조하지 않는다 */
+  /** 지금 방 데이터 — 템플릿에서 시작해 방장의 save 로 바뀐다. 서버는 들고 보낼 뿐, 위치를 이것과 대조하지 않는다 */
   private room: RoomData;
 
   constructor(now: Clock = Date.now, template: RoomTemplate = DEFAULT_TEMPLATE) {
@@ -105,44 +105,27 @@ export class Roster {
         me.info = { ...me.info, look: msg.look };
         this.broadcast({ t: 'look', id, look: msg.look }, id);
         return;
-      case 'door':
-        this.handleDoor(id, msg);
-        return;
-      case 'place':
-        this.editRoom(id, (room) => placeObject(room, msg.kind, msg));
-        return;
-      case 'remove':
-        this.editRoom(id, (room) => removeObject(room, msg.id));
-        return;
-      case 'paint':
-        this.editRoom(id, (room) => paintTile(room, msg, msg.ch));
+      case 'save':
+        this.save(id, msg.room);
         return;
       case 'hello':
         return;
     }
   }
 
-  /** 문 칸이 아니거나 이미 그 게임이면 조용히 버린다 */
-  private handleDoor(id: string, msg: Extract<ClientMsg, { t: 'door' }>): void {
-    if (id !== this.ownerId) return; // 방장이 아니면 방을 해석할 것도 없다 — editRoom 도 다시 본다
-    const before = buildRoom(this.room);
-    const door = before.map.doorAt(msg);
-    if (door === undefined || (before.doorGames[door] ?? null) === msg.game) return;
-    this.editRoom(id, (room) => assignDoor(room, msg, msg.game));
-  }
-
   /**
-   * 방장의 방 데이터 바꾸기 — 방장이 아니거나 change 가 던지면(검사 실패·없는 물체) 조용히 버리고 지금 방 그대로.
-   * 바뀌면 보낸 방장 포함 모두에게 room
+   * 방장의 저장 — 방장이 아니거나, buildRoom 이 던지거나(검사 실패), 지금 방과 같으면 조용히 버린다.
+   * 바뀌면 보낸 방장 포함 모두에게 room. 사람 자리는 보지 않는다 — 막힌 칸에 선 사람은 받은 쪽이 스스로 옮긴다
    */
-  private editRoom(id: string, change: (room: RoomData) => RoomData): void {
-    if (id !== this.ownerId) return;
+  private save(id: string, room: RoomData): void {
+    if (id !== this.ownerId || sameRoomData(room, this.room)) return;
     try {
-      this.room = change(this.room);
+      buildRoom(room);
     } catch {
       return;
     }
-    this.broadcast({ t: 'room', room: this.room });
+    this.room = room;
+    this.broadcast({ t: 'room', room });
   }
 
   private broadcast(msg: ServerMsg, except?: string): void {

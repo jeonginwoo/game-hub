@@ -210,71 +210,19 @@ describe('Roster', () => {
   });
 });
 
-describe('Roster — 문 배정', () => {
-  // 문 0 = 윗줄 (1~2, 0) 붙은 두 칸, 처음엔 배정 없음
-  const small: RoomTemplate = { id: 'small', name: '작은 방', room: { rows: ['#DD#', '#S.#', '####'], objects: [], doors: [] } };
-  const hello = (name: string): Extract<ClientMsg, { t: 'hello' }> => ({ t: 'hello', name, at: spot(1, 1), look: DEFAULT_LOOK });
-
-  function twoPeople(): { roster: Roster; a: ReturnType<typeof peer>; b: ReturnType<typeof peer>; ida: string; idb: string } {
-    const roster = new Roster(Date.now, small);
-    const [a, b] = [peer(), peer()];
-    const ida = roster.join(a, hello('A'));
-    const idb = roster.join(b, hello('B'));
-    return { roster, a, b, ida, idb };
-  }
-
-  it('방장이 문에 게임을 배정하면 보낸 방장 포함 모두에게 room', () => {
-    const { roster, a, b, ida } = twoPeople();
-    roster.handle(ida, { t: 'door', x: 2, y: 0, game: 'a-1' });
-    const room = { ...small.room, doors: [{ x: 2, y: 0, game: 'a-1' }] };
-    expect(a.got.at(-1)).toEqual({ t: 'room', room });
-    expect(b.got.at(-1)).toEqual({ t: 'room', room });
-  });
-
-  it('바뀐 방은 나중에 들어온 사람의 welcome 에 실린다 — map 은 템플릿 id 그대로', () => {
-    const { roster, ida } = twoPeople();
-    roster.handle(ida, { t: 'door', x: 1, y: 0, game: 'a-1' });
-    const c = peer();
-    roster.join(c, hello('C'));
-    expect(c.got[0]).toMatchObject({ t: 'welcome', map: 'small', room: { doors: [{ x: 1, y: 0, game: 'a-1' }] } });
-  });
-
-  it('null 이면 배정을 지운다', () => {
-    const { roster, a, ida } = twoPeople();
-    roster.handle(ida, { t: 'door', x: 1, y: 0, game: 'a-1' });
-    roster.handle(ida, { t: 'door', x: 2, y: 0, game: null });
-    expect(a.got.at(-1)).toEqual({ t: 'room', room: small.room });
-  });
-
-  it('방장이 아니면 버린다 — 승계 뒤에는 새 방장만', () => {
-    const { roster, a, b, ida, idb } = twoPeople();
-    roster.handle(idb, { t: 'door', x: 1, y: 0, game: 'a-1' });
-    expect(a.got.at(-1)?.t).not.toBe('room');
-    roster.leave(ida);
-    roster.handle(idb, { t: 'door', x: 1, y: 0, game: 'a-1' });
-    expect(b.got.at(-1)).toMatchObject({ t: 'room' });
-  });
-
-  it('문 칸이 아니거나 이미 그 게임이면 아무것도 보내지 않는다', () => {
-    const { roster, a, ida } = twoPeople();
-    const count = a.got.length;
-    roster.handle(ida, { t: 'door', x: 1, y: 1, game: 'a-1' });
-    roster.handle(ida, { t: 'door', x: 1, y: 0, game: null });
-    expect(a.got.length).toBe(count);
-    roster.handle(ida, { t: 'door', x: 1, y: 0, game: 'a-1' });
-    roster.handle(ida, { t: 'door', x: 2, y: 0, game: 'a-1' });
-    expect(a.got.length).toBe(count + 1);
-  });
-});
-
-describe('Roster — 물체 놓기·치우기', () => {
-  // 시작점 (1, 4). 나무 4×4 는 맨 아랫줄 가운데 두 칸을 막는다
+describe('Roster — 저장', () => {
+  // 문 (3~4, 0), 시작점 (1, 4). 나무 4×4 는 맨 아랫줄 가운데 두 칸을 막는다
   const small: RoomTemplate = {
     id: 'small',
     name: '작은 방',
     room: { rows: ['###DD###', '#......#', '#......#', '#......#', '#S.....#', '########'], objects: [], doors: [] },
   };
   const hello = (name: string): Extract<ClientMsg, { t: 'hello' }> => ({ t: 'hello', name, at: spot(1, 4), look: DEFAULT_LOOK });
+  const edited = {
+    rows: ['###DD###', '#......#', '#..#...#', '#......#', '#S.....#', '########'],
+    objects: [{ id: 'p1', kind: 'tree' as const, x: 2, y: 3 }],
+    doors: [{ x: 4, y: 0, game: 'a-1' }],
+  };
 
   function twoPeople(): { roster: Roster; a: ReturnType<typeof peer>; b: ReturnType<typeof peer>; ida: string; idb: string } {
     const roster = new Roster(Date.now, small);
@@ -284,75 +232,39 @@ describe('Roster — 물체 놓기·치우기', () => {
     return { roster, a, b, ida, idb };
   }
 
-  it('방장이 놓으면 서버가 id 를 붙여 보낸 방장 포함 모두에게 room', () => {
+  it('방장이 저장하면 맵·물체·문 배정을 한 번에 바꾸고 보낸 방장 포함 모두에게 room', () => {
     const { roster, a, b, ida } = twoPeople();
-    roster.handle(ida, { t: 'place', kind: 'tree', x: 2, y: 3 });
-    const room = { ...small.room, objects: [{ id: 'p1', kind: 'tree', x: 2, y: 3 }] };
-    expect(a.got.at(-1)).toEqual({ t: 'room', room });
-    expect(b.got.at(-1)).toEqual({ t: 'room', room });
+    roster.handle(ida, { t: 'save', room: edited });
+    expect(a.got.at(-1)).toEqual({ t: 'room', room: edited });
+    expect(b.got.at(-1)).toEqual({ t: 'room', room: edited });
   });
 
-  it('치우면 room, 바뀐 방은 나중에 들어온 사람의 welcome 에 실린다', () => {
-    const { roster, a, ida } = twoPeople();
-    roster.handle(ida, { t: 'place', kind: 'tree', x: 2, y: 3 });
-    roster.handle(ida, { t: 'place', kind: 'yard', x: 1, y: 5 });
-    roster.handle(ida, { t: 'remove', id: 'p1' });
-    expect(a.got.at(-1)).toEqual({ t: 'room', room: { ...small.room, objects: [{ id: 'p2', kind: 'yard', x: 1, y: 5 }] } });
+  it('바뀐 방은 나중에 들어온 사람의 welcome 에 실린다 — map 은 템플릿 id 그대로', () => {
+    const { roster, ida } = twoPeople();
+    roster.handle(ida, { t: 'save', room: edited });
     const c = peer();
     roster.join(c, hello('C'));
-    expect(c.got[0]).toMatchObject({ t: 'welcome', room: { objects: [{ id: 'p2' }] } });
+    expect(c.got[0]).toMatchObject({ t: 'welcome', map: 'small', room: edited });
   });
 
-  it('방장이 아니면 버린다', () => {
-    const { roster, a, b, idb } = twoPeople();
-    const count = [a.got.length, b.got.length];
-    roster.handle(idb, { t: 'place', kind: 'tree', x: 2, y: 3 });
-    roster.handle(idb, { t: 'remove', id: 'p1' });
-    expect([a.got.length, b.got.length]).toEqual(count);
-  });
-
-  it('놓을 수 없는 자리·없는 id 면 아무것도 보내지 않는다', () => {
-    const { roster, a, ida } = twoPeople();
-    roster.handle(ida, { t: 'place', kind: 'tree', x: 2, y: 3 });
+  it('방장이 아니면 버린다 — 승계 뒤에는 새 방장만', () => {
+    const { roster, a, b, ida, idb } = twoPeople();
     const count = a.got.length;
-    roster.handle(ida, { t: 'place', kind: 'tree', x: 3, y: 3 }); // 밑둥이 겹친다
-    roster.handle(ida, { t: 'place', kind: 'tree', x: 0, y: 4 }); // 시작점을 막는다
-    roster.handle(ida, { t: 'remove', id: 'nope' });
+    roster.handle(idb, { t: 'save', room: edited });
     expect(a.got.length).toBe(count);
-  });
-});
-
-describe('Roster — 칠하기', () => {
-  // 문 (3~4, 0) 에 a-1, 시작점 (1, 4)
-  const small: RoomTemplate = {
-    id: 'small',
-    name: '작은 방',
-    room: { rows: ['###DD###', '#......#', '#......#', '#......#', '#S.....#', '########'], objects: [], doors: [{ x: 3, y: 0, game: 'a-1' }] },
-  };
-  const hello = (name: string): Extract<ClientMsg, { t: 'hello' }> => ({ t: 'hello', name, at: spot(1, 4), look: DEFAULT_LOOK });
-
-  it('방장이 칠하면 보낸 방장 포함 모두에게 room — 문 배정은 남은 문 칸으로 옮겨진다', () => {
-    const roster = new Roster(Date.now, small);
-    const [a, b] = [peer(), peer()];
-    const ida = roster.join(a, hello('A'));
-    roster.join(b, hello('B'));
-    roster.handle(ida, { t: 'paint', x: 3, y: 0, ch: '#' });
-    const room = { ...small.room, rows: ['####D###', ...small.room.rows.slice(1)], doors: [{ x: 4, y: 0, game: 'a-1' }] };
-    expect(a.got.at(-1)).toEqual({ t: 'room', room });
-    expect(b.got.at(-1)).toEqual({ t: 'room', room });
+    roster.leave(ida);
+    roster.handle(idb, { t: 'save', room: edited });
+    expect(b.got.at(-1)).toEqual({ t: 'room', room: edited });
   });
 
-  it('방장이 아니거나 칠할 수 없으면 아무것도 보내지 않는다', () => {
-    const roster = new Roster(Date.now, small);
-    const [a, b] = [peer(), peer()];
-    const ida = roster.join(a, hello('A'));
-    const idb = roster.join(b, hello('B'));
-    const count = [a.got.length, b.got.length];
-    roster.handle(idb, { t: 'paint', x: 2, y: 2, ch: '#' });
-    roster.handle(ida, { t: 'paint', x: 0, y: 0, ch: '#' }); // 이미 벽
-    roster.handle(ida, { t: 'paint', x: 1, y: 4, ch: '.' }); // 마지막 시작점
-    roster.handle(ida, { t: 'paint', x: 20, y: 2, ch: '#' }); // 맵 밖
-    expect([a.got.length, b.got.length]).toEqual(count);
+  it('검사를 통과하지 못하거나 지금 방과 같으면 아무것도 보내지 않는다', () => {
+    const { roster, a, ida } = twoPeople();
+    const count = a.got.length;
+    roster.handle(ida, { t: 'save', room: { ...edited, objects: [{ id: 'p1', kind: 'tree', x: 0, y: 4 }] } }); // 시작점을 막는다
+    roster.handle(ida, { t: 'save', room: { ...edited, doors: [{ x: 1, y: 1, game: 'a-1' }] } }); // 문 칸이 아니다
+    roster.handle(ida, { t: 'save', room: { ...edited, rows: ['########'] } }); // 시작점이 없다
+    roster.handle(ida, { t: 'save', room: { ...small.room } });
+    expect(a.got.length).toBe(count);
   });
 });
 

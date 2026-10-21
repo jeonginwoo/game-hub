@@ -6,7 +6,7 @@ import { WebSocket } from 'ws';
 import type { ServerMsg } from '../src/protocol.ts';
 import { templateFor } from '../src/room-templates.ts';
 import { Rooms } from '../src/roster.ts';
-import { attachLobby } from '../src/ws.ts';
+import { attachLobby, MAX_PAYLOAD } from '../src/ws.ts';
 
 let server: Server | null = null;
 const sockets: WebSocket[] = [];
@@ -80,12 +80,22 @@ describe('attachLobby', () => {
     await a.next();
     const big = await connect(port);
     const closed = new Promise<void>((done) => big.ws.once('close', () => done()));
-    big.ws.send('x'.repeat(5 * 1024));
+    big.ws.send('x'.repeat(MAX_PAYLOAD + 1));
     await closed;
     // 서버가 살아 있으면 새 접속자가 명단을 받는다
     const c = await connect(port);
     c.ws.send(JSON.stringify({ t: 'hello', name: 'C', at: { x: 2, y: 2, dir: 'down' } }));
     expect(await c.next()).toMatchObject({ t: 'welcome', players: [{ name: 'A' }, { name: 'C' }] });
+  });
+
+  it('가장 큰 템플릿(「물체 전시」)도 저장으로 보낼 수 있다', async () => {
+    const port = await start();
+    const a = await connect(port);
+    a.ws.send(JSON.stringify({ t: 'hello', name: 'A', at: { x: 1, y: 1, dir: 'down' } }));
+    await a.next();
+    const room = templateFor('gallery').room;
+    a.ws.send(JSON.stringify({ t: 'save', room }));
+    expect(await a.next()).toEqual({ t: 'room', room: JSON.parse(JSON.stringify(room)) });
   });
 
   it('방이 다르면 서로 보이지 않고, 빈 방은 사라진다', async () => {

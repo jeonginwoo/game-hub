@@ -3,7 +3,7 @@
 // 칸은 타일(그림 32px)의 1/2 — 걷기·충돌만 잘게, 그림 크기는 그대로 (결정 2026-10-16: 칸 2배 밀도).
 import * as THREE from 'three';
 import type { Look, Spot } from '../../server/src/protocol';
-import { buildRoom, OBJECT_SHAPES, type ObjectKind, type Room, type RoomData } from '../../server/src/room-map';
+import { assignDoor, buildRoom, OBJECT_SHAPES, paintTile, placeObject, removeObject, type ObjectKind, type Room, type RoomData } from '../../server/src/room-map';
 import { DEFAULT_ROOM, templateFor } from '../../server/src/room-templates';
 import { avatarCanvas } from './avatar/avatar-art';
 import { bubbleText, chatLine, say, type Bubble } from './chat/chat';
@@ -16,7 +16,7 @@ import { loadLook, showHud, type Hud } from './hud/hud-bar';
 import { AVATAR_PX, CELL_PX, drawZ } from './world/layers';
 import { OBJECT_ART } from './data/object-art';
 import { lookKey } from './avatar/look';
-import { sameRoomData, TILE_CELLS, withShutDoors, type Pos, type TileMap } from './world/map';
+import { nearestFloor, sameRoomData, TILE_CELLS, withShutDoors, type Pos, type TileMap } from './world/map';
 import { facingOf, reversesWalk, stepHeld, type Dir } from './world/movement';
 import { connect, type Connection, type NetStatus } from './net/net';
 import { objectRect, objectZ, withSolidObjects, type MapObject } from './world/objects';
@@ -26,6 +26,7 @@ import { fillCell, SHEET_PX, type Sheet } from './world/tiles';
 import { clampAxis, driftCenter, screenToCell } from './world/view';
 import { canEdit, doorChoices, doorMarks } from './edit/edit';
 import { createDoorPicker } from './edit/door-picker';
+import { draftDirty, rebaseDraft } from './edit/draft';
 import { createEditTools } from './edit/edit-tools';
 import { canPlace, placeAt, topObjectAt } from './edit/place';
 import { cellsBetween, paintCheck } from './edit/paint';
@@ -277,6 +278,11 @@ function disposeWorld(w: World): void {
 let loadedSheets: Sheets | null = null;
 // 방장의 편집 모드 — 걷지 않고 맵의 문을 눌러 게임을 고른다 (결정 2026-10-16: 문 배정은 편집 모드에서 문을 눌러서)
 let editing = false;
+// 편집 초안 — 편집을 켤 때의 방에서 시작해 도구가 고치고, 「저장」 때 save 로 한 번에 보낸다. 편집 중이 아니면 null
+// (결정 2026-10-21: 저장식 편집)
+let draft: RoomData | null = null;
+let editBase: RoomData = DEFAULT_ROOM; // 편집을 켤 때의 방 — 취소하면 이 방으로. 편집 중 room 이 오면 그 방으로 바꾼다
+let draftShown = true; // 월드가 지금 초안을 그렸는지 — 칠하기 끌기가 칸마다 월드를 다시 만들지 않게 루프가 한 프레임에 한 번
 
 // 서버 없이·welcome 전에도 그릴 수 있게 기본 방으로 시작한다. 로비에 들어가면 고른·기억해 둔 맵, welcome 이 오면 그 방으로 바꾼다
 let world: World = buildWorld(DEFAULT_ROOM);
@@ -479,7 +485,7 @@ function refreshStatus(): void {
   hud.update({
     count: peopleCount(netStatus, others),
     rows: rosterRows(others, entered.name, myLook),
-    notice: noticeText(netStatus, editing ? editTools.tool() : null),
+    notice: noticeText(netStatus, editing ? { tool: editTools.tool(), dirty: isDirty() } : null),
     owner: canEdit(others),
     editing,
   });
@@ -529,13 +535,27 @@ function switchRoom(data: RoomData, search: string | null): boolean {
   disposeWorld(world);
   world = next;
   updateEditView(); // 문 테두리 보이기·미리보기의 놓을 수 있는지가 새 방 기준으로
-  if (search === null) return true;
+  if (search === null) {
+    if (!editing) unstick(); // 편집 중엔 캐릭터가 숨어 있다 — 편집을 끌 때 본다
+    return true;
+  }
   const s = spawnFromSearch(world.room.map, search);
   pos = from = s.pos;
   facing = s.facing;
   t = 1;
   tapped = null;
   return true;
+}
+
+/**
+ * 내 칸이 지금 걷기 판정에서 막혔으면 가장 가까운 바닥 칸(없으면 시작점)으로 — 바뀐 자리는 루프의 sendIfMoved 가 move 로.
+ * 위치는 클라이언트 권위라 저장된 방을 받은 쪽이 제 자리만 고친다 (결정 2026-10-21: 저장식 편집 — 막힌 칸에 선 사람만)
+ */
+function unstick(): void {
+  if (world.walkMap.tileAt(pos) !== 'wall') return;
+  pos = from = nearestFloor(world.walkMap, pos) ?? spawnFromSearch(world.room.map, '').pos;
+  t = 1;
+  tapped = null;
 }
 
 function startNet(e: Entered): void {
@@ -569,9 +589,17 @@ function startNet(e: Entered): void {
         }
         arrivalSearch = null;
       }
-      // 방장이 문 배정·물체를 바꿈 — 배경(열린 문·닫힌 문)·물체·걷기 판정을 다시 만든다 (결정 2026-10-16: 방장이 문마다 게임 고르기)
+      // 방장이 저장함 — 배경·물체·걷기 판정을 다시 만들고, 막힌 칸에 섰으면 옮긴다 (결정 2026-10-21: 저장식 편집)
       if (msg.t === 'room') {
-        void switchRoom(msg.room, null);
+        if (editing) {
+          // 고친 초안은 그대로, 바뀐 것 없는 초안은 받은 방으로 — 취소하면 이 방으로
+          draft = rebaseDraft(draft ?? msg.room, editBase, msg.room);
+          editBase = msg.room;
+          draftShown = false;
+          editTools.setDirty(isDirty());
+        } else {
+          void switchRoom(msg.room, null);
+        }
         doorPicker.close(); // 열린 목록의 「지금 것」 표시가 옛 배정이다
       }
       others = applyMsg(others, msg);
@@ -603,18 +631,19 @@ window.addEventListener('pagehide', () => {
 });
 
 // --- 편집 모드 (edit.ts · place.ts) ----------------------------------------------
-// 방장만. 켜면 걷기를 멈추고 아래쪽 가운데에 도구 줄(문·놓기·치우기). 문: 맵의 문을 누르면 옆에 게임 목록 → 고르면 door.
-// 놓기: 고른 물체의 반투명 미리보기가 포인터를 따라가고(놓을 수 없으면 밑에 빨간 칠) 누르면 place. 치우기: 포인터 아래 맨 앞 물체에 빨간 칠, 누르면 remove.
-// 칠하기: 맵 전체에 칸 격자, 포인터 칸에 흰 테두리(칠할 수 없으면 빨간 칠), 누르거나 누른 채 끌면 지나간 칸마다 paint.
+// 방장만. 켜면 걷기를 멈추고 아래쪽 가운데에 도구 줄(문·놓기·치우기·칠하기 + 저장·취소). 문: 맵의 문을 누르면 옆에 게임 목록 → 고르면 배정.
+// 놓기: 고른 물체의 반투명 미리보기가 포인터를 따라가고(놓을 수 없으면 밑에 빨간 칠) 누르면 놓기. 치우기: 포인터 아래 맨 앞 물체에 빨간 칠, 누르면 치우기.
+// 칠하기: 맵 전체에 칸 격자, 포인터 칸에 흰 테두리(칠할 수 없으면 빨간 칠), 누르거나 누른 채 끌면 지나간 칸마다 칠하기.
 // 편집 중엔 캐릭터·머리 위 글·채팅창을 숨겨 맵만 보인다.
-// 무엇이 바뀌든 서버의 room 이 돌아와야 월드가 다시 만들어진다 (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집)
+// 도구는 초안만 고친다(판정은 서버와 같은 room-map.ts 함수) — 「저장」 때 save 로 한 번에 보내고, 「취소」·연결 끊김·방장 넘어감이면 버린다.
+// 바뀐 것이 있으면 Esc·편집 버튼으로는 끝나지 않는다 (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집 · 2026-10-21: 저장식 편집)
 
 const doorPicker = createDoorPicker();
 const editTools = createEditTools(() => {
   doorPicker.close();
   updateEditView();
   refreshStatus();
-});
+}, { onSave: saveEdit, onCancel: () => setEditing(false) });
 
 const RED_MARK_COLOR = 0xbf616a; // 놓을 수 없는 자리 · 치울 물체 — 그림에 색을 곱하면 초록 잎이 어두워지기만 해서 칠을 깐다
 
@@ -635,8 +664,8 @@ const cellFrame = new THREE.LineLoop(
 preview.renderOrder = cellFrame.renderOrder = 1; // 같은 편집 층 — 빨간 칠 위에 그림
 preview.visible = redMark.visible = cellFrame.visible = false;
 scene.add(preview, redMark, cellFrame);
-/** 칠하기로 누른 채 끄는 중 — 마지막 칸(다음 칸까지 cellsBetween 으로 잇는다)과 이번 끌기에서 이미 보낸 칸 */
-let stroke: { last: Pos; readonly sent: Set<string> } | null = null;
+/** 칠하기로 누른 채 끄는 중 — 마지막 칸(다음 칸까지 cellsBetween 으로 잇는다) */
+let stroke: { last: Pos } | null = null;
 let previewKind: ObjectKind | null = null; // 미리보기에 칠해 둔 종류 — 시트가 오기 전이면 null 로 남아 다시 칠한다
 /** 편집 중 포인터가 든 칸 — 맵 밖으로 나가면 null */
 let hoverCell: Pos | null = null;
@@ -650,6 +679,18 @@ function setEditing(on: boolean): void {
   }
   if (next === editing) return;
   editing = next;
+  if (next) {
+    editBase = draft = world.data;
+    draftShown = true;
+  } else {
+    if (draft !== null) {
+      // 저장하지 않고 끝 — 초안을 버리고 편집 전 방(편집 중 room 이 왔으면 그 방)으로
+      draft = null;
+      void switchRoom(editBase, null);
+    }
+    unstick(); // 편집 중 받은 방·저장한 방에서 내 칸이 막혔을 수 있다
+  }
+  editTools.setDirty(false);
   // 맵에만 집중하게 — 캐릭터는 루프가, 머리 위 글·채팅창은 CSS(.hub-editing)가 숨긴다
   document.body.classList.toggle('hub-editing', next);
   if (next && document.activeElement instanceof HTMLElement) document.activeElement.blur(); // 채팅 입력 칸에서 빠져나온다
@@ -658,6 +699,46 @@ function setEditing(on: boolean): void {
   held.length = 0; // 켜는 순간 누르고 있던 방향키로 계속 걷지 않게
   tapped = null;
   refreshStatus();
+}
+
+/** 초안에 저장 안 한 바뀐 것이 있는지 */
+function isDirty(): boolean {
+  return draftDirty(draft, editBase);
+}
+
+/** 도구가 판정할 방 — 편집 중이면 초안(월드는 한 프레임 늦게 따라온다) */
+function editData(): RoomData {
+  return draft ?? world.data;
+}
+
+/** 초안 고치기 — change 가 던지면(놓을 수 없는 자리·이미 그 글자 등) 그대로. 월드는 루프의 flushDraft 가 다시 만든다 */
+function editDraft(change: (data: RoomData) => RoomData): void {
+  if (!draft) return;
+  try {
+    draft = change(draft);
+  } catch {
+    return;
+  }
+  draftShown = false;
+  editTools.setDirty(isDirty());
+  refreshStatus();
+}
+
+/** 초안이 월드보다 앞서 있으면 월드를 초안으로 — 프레임마다 한 번 */
+function flushDraft(): void {
+  if (!draft || draftShown) return;
+  draftShown = true;
+  void switchRoom(draft, null);
+}
+
+/** 「저장」 — 바뀐 것이 있으면 save. 화면은 저장한 초안 그대로 두고 편집을 끈다 — 같은 방이 room 으로 돌아오면 다시 그리지 않는다 */
+function saveEdit(): void {
+  if (!draft) return;
+  if (isDirty()) conn?.send({ t: 'save', room: draft });
+  flushDraft();
+  editBase = draft;
+  draft = null;
+  setEditing(false);
 }
 
 /** 고른 종류의 그림을 미리보기 텍스처에 — 종류가 같고 이미 칠했으면 그대로 */
@@ -692,7 +773,7 @@ function updateEditView(): void {
     const shape = OBJECT_SHAPES[kind];
     placeScaled(preview, at.x - 0.5, at.y + 0.5, shape.w, shape.h);
     preview.visible = true;
-    if (!canPlace(world.data, kind, at)) {
+    if (!canPlace(editData(), kind, at)) {
       placeScaled(redMark, at.x - 0.5, at.y + 0.5, shape.w, shape.h);
       redMark.visible = true;
     }
@@ -705,24 +786,18 @@ function updateEditView(): void {
   } else if (tool === 'paint') {
     placeScaled(cellFrame, hoverCell.x - 0.5, hoverCell.y + 0.5, 1, 1);
     cellFrame.visible = true;
-    if (paintCheck(world.data, hoverCell, editTools.brush()) === 'no') {
+    if (paintCheck(editData(), hoverCell, editTools.brush()) === 'no') {
       placeScaled(redMark, hoverCell.x - 0.5, hoverCell.y + 0.5, 1, 1);
       redMark.visible = true;
     }
   }
 }
 
-/** 칠하기 끌기가 cell 에 닿았다 — 마지막 칸부터 이어 지나간 칸마다, 이번 끌기에서 처음이고 칠할 수 있으면 paint */
+/** 칠하기 끌기가 cell 에 닿았다 — 마지막 칸부터 이어 지나간 칸마다 초안을 칠한다(이미 그 글자·칠할 수 없는 칸은 그대로) */
 function paintTo(cell: Pos): void {
   if (!stroke) return;
   const ch = editTools.brush();
-  for (const c of cellsBetween(stroke.last, cell)) {
-    const key = `${c.x},${c.y}`;
-    // 판정은 room 이 돌아오기 전 방 데이터 — 이번 끌기에서 보낸 칸은 다시 보내지 않는다
-    if (stroke.sent.has(key) || paintCheck(world.data, c, ch) !== 'ok') continue;
-    stroke.sent.add(key);
-    conn?.send({ t: 'paint', x: c.x, y: c.y, ch });
-  }
+  for (const c of cellsBetween(stroke.last, cell)) editDraft((d) => paintTile(d, c, ch));
   stroke.last = cell;
 }
 
@@ -754,17 +829,16 @@ function editAt(cell: Pos): void {
     const kind = editTools.kind();
     if (!kind) return;
     const at = placeAt(kind, cell);
-    // 빨간 자리는 보내지 않는다 — 서버도 같은 검사로 버린다
-    if (canPlace(world.data, kind, at)) conn?.send({ t: 'place', kind, x: at.x, y: at.y });
+    editDraft((d) => placeObject(d, kind, at)); // 빨간 자리면 던져 그대로
     return;
   }
   if (tool === 'paint') {
-    stroke = { last: cell, sent: new Set() };
+    stroke = { last: cell };
     paintTo(cell);
     return;
   }
   const o = topObjectAt(world.objects, cell);
-  if (o) conn?.send({ t: 'remove', id: o.id });
+  if (o) editDraft((d) => removeObject(d, o.id));
 }
 
 /** 문 도구로 맵을 눌렀다 — 문이면 그 문 오른쪽 위에 게임 목록, 아니면 목록을 닫는다 */
@@ -778,8 +852,8 @@ function pickDoorAt(cell: Pos): void {
   }
   const anchor = toScreen(rect.x + rect.w - 0.5, -(rect.y - 0.5));
   doorPicker.open(anchor.sx, anchor.sy, doorChoices(door, GAMES, world.room.doorGames), (game) => {
-    // 문의 아무 칸이나 — 서버 assignDoor 가 문 하나로 묶는다
-    conn?.send({ t: 'door', x: cell.x, y: cell.y, game });
+    // 문의 아무 칸이나 — assignDoor 가 문 하나로 묶는다
+    editDraft((d) => assignDoor(d, cell, game));
   });
 }
 
@@ -800,7 +874,11 @@ function enterLobby(e: Entered): void {
   history.replaceState(history.state, '', withRoom(location.href, e.room));
   hud = showHud({ room: e.room, name: e.name, look: myLook, lobbyHref: location.href, onRename: rename, onLook: changeLook,
     onLeave: leaveLobby,
-    onEdit: () => setEditing(!editing),
+    // 바뀐 것이 있으면 끄지 않는다 — 알림이 저장·취소를 가리킨다
+    onEdit: () => {
+      if (!editing) setEditing(true);
+      else if (!isDirty()) setEditing(false);
+    },
     onOpen: () => {
       held.length = 0;
       tapped = null;
@@ -869,9 +947,9 @@ window.addEventListener('keydown', (e) => {
   if (entered === null || isTyping(e.target) || hud?.isOpen()) return;
   // 버튼 줄 창을 닫은 Esc 는 넘긴다(defaultPrevented). 목록이 열려 있으면 목록만, 아니면 편집 모드를 끝낸다
   if (e.key === 'Escape' && editing && !e.defaultPrevented) {
-    // 한 단계씩 — 게임 목록 → 문 도구로 → 편집 끝
+    // 한 단계씩 — 게임 목록 → 문 도구로 → 편집 끝. 바뀐 것이 있으면 끝내지 않는다 — 알림이 저장·취소를 가리킨다
     if (doorPicker.isOpen()) doorPicker.close();
-    else if (!editTools.back()) setEditing(false);
+    else if (!editTools.back() && !isDirty()) setEditing(false);
     return;
   }
   if (e.key === 'Enter' && !leaving && !editing) { // 편집 중엔 채팅창이 숨어 있다
@@ -946,6 +1024,7 @@ let last = performance.now();
 renderer.setAnimationLoop((now) => {
   const dt = Math.min(now - last, 100); // 탭 전환 뒤 한 번에 여러 칸 건너뛰지 않게
   last = now;
+  flushDraft();
 
   // 한 칸을 끝내고 남은 시간은 다음 칸으로 넘긴다 — 버리면 프레임률에 따라 걷는 속도가 달라진다
   let carry = 0;

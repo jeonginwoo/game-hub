@@ -1,5 +1,5 @@
-// 편집 중 아래쪽 가운데의 도구 줄(문·놓기·치우기·칠하기 + 칠하기 붓)과 놓기 때 왼쪽에 뜨는 물체 목록 — DOM 연결만, 목록은 object-names.ts 의 kindsByGroup.
-// (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집). 화면 글자는 textContent 로 넣는다.
+// 편집 중 아래쪽 가운데의 도구 줄(문·놓기·치우기·칠하기 + 칠하기 붓 + 저장·취소)과 놓기 때 왼쪽에 뜨는 물체 목록 — DOM 연결만, 목록은 object-names.ts 의 kindsByGroup.
+// (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집 · 2026-10-21: 저장식 편집). 화면 글자는 textContent 로 넣는다.
 import type { ObjectKind, TileChar } from '../../../server/src/room-map';
 import { kindsByGroup, OBJECT_INFO } from '../data/object-names';
 import { el } from '../room/entry-screen';
@@ -15,6 +15,13 @@ export interface EditTools {
   brush(): TileChar;
   /** 문이 아닌 도구면 문으로 돌린다(Esc 한 단계) — 돌렸으면 true */
   back(): boolean;
+  /** 초안에 저장 안 한 바뀐 것이 있는지 — 없으면 「저장」을 끈다 */
+  setDirty(dirty: boolean): void;
+}
+
+export interface EditCommit {
+  readonly onSave: () => void;
+  readonly onCancel: () => void;
 }
 
 const TOOLS: readonly { readonly tool: EditTool; readonly name: string }[] = [
@@ -31,8 +38,8 @@ const BRUSHES: readonly { readonly ch: TileChar; readonly name: string }[] = [
   { ch: 'S', name: '시작점' },
 ];
 
-/** onChange — 도구나 고른 물체가 바뀌었다 (알림 글·미리보기를 다시) */
-export function createEditTools(onChange: () => void): EditTools {
+/** onChange — 도구나 고른 물체가 바뀌었다 (알림 글·미리보기를 다시). commit — 「저장」·「취소」를 눌렀다 */
+export function createEditTools(onChange: () => void, commit: EditCommit): EditTools {
   let tool: EditTool = 'door';
   let kind: ObjectKind | null = null;
   let brush: TileChar = '.';
@@ -66,6 +73,21 @@ export function createEditTools(onChange: () => void): EditTools {
     brushRow.append(b);
     return b;
   });
+
+  // 오른쪽 끝에 저장·취소 — 편집은 초안만 고치고, 저장해야 모두에게 간다
+  const commitRow = el('div', 'hub-edit-commit');
+  bar.append(commitRow);
+  const saveButton = el('button', 'hub-btn hub-small hub-primary', '저장');
+  const cancelButton = el('button', 'hub-btn hub-small', '취소');
+  for (const [b, act] of [[saveButton, commit.onSave], [cancelButton, commit.onCancel]] as const) {
+    b.type = 'button';
+    b.addEventListener('click', () => {
+      b.blur();
+      act();
+    });
+    commitRow.append(b);
+  }
+  saveButton.disabled = true;
 
   const panel = el('div', 'hub-panel hub-object-panel');
   panel.hidden = true;
@@ -127,6 +149,9 @@ export function createEditTools(onChange: () => void): EditTools {
       if (tool === 'door') return false;
       setTool('door');
       return true;
+    },
+    setDirty(dirty) {
+      saveButton.disabled = !dirty;
     },
   };
 }

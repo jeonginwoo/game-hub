@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_LOOK, type Look, type Spot } from '../../../server/src/protocol';
 import { DEFAULT_ROOM } from '../../../server/src/room-templates';
 import { noticeText, peopleCount, rosterRows } from '../../src/hud/hud';
+import type { EditTool } from '../../src/edit/place';
 import { bodyColor } from '../../src/avatar/look';
 import { applyMsg, NO_OTHERS, type Others } from '../../src/net/others';
 
@@ -75,10 +76,15 @@ describe('noticeText', () => {
 
 describe('noticeText 편집 중', () => {
   it('편집 중이면 도구별 안내, 연결 알림이 있으면 그쪽이 먼저', () => {
-    expect(noticeText('open', 'door')).toBe('편집 중 — 문을 눌러 게임 고르기 (Esc 끝)');
-    expect(noticeText('open', 'place')).toBe('편집 중 — 고른 물체를 맵에 놓기 (Esc 끝)');
-    expect(noticeText('open', 'remove')).toBe('편집 중 — 누른 물체 치우기 (Esc 끝)');
-    expect(noticeText('open', 'paint')).toBe('편집 중 — 누르거나 끌어서 칸 칠하기 (Esc 끝)');
-    expect(noticeText('closed', 'place')).toBe('연결 끊김 — 새로고침');
+    const clean = (tool: EditTool) => ({ tool, dirty: false });
+    expect(noticeText('open', clean('door'))).toBe('편집 중 — 문을 눌러 게임 고르기 (Esc 끝)');
+    expect(noticeText('open', clean('place'))).toBe('편집 중 — 고른 물체를 맵에 놓기 (Esc 끝)');
+    expect(noticeText('open', clean('remove'))).toBe('편집 중 — 누른 물체 치우기 (Esc 끝)');
+    expect(noticeText('open', clean('paint'))).toBe('편집 중 — 누르거나 끌어서 칸 칠하기 (Esc 끝)');
+    expect(noticeText('closed', clean('place'))).toBe('연결 끊김 — 새로고침');
+  });
+
+  it('저장 안 한 바뀐 것이 있으면 Esc 대신 저장·취소로 끝난다고', () => {
+    expect(noticeText('open', { tool: 'paint', dirty: true })).toBe('편집 중 — 누르거나 끌어서 칸 칠하기 (저장해야 모두에게 · 저장·취소로 끝)');
   });
 });
