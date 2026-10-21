@@ -1,6 +1,6 @@
 // 타일맵 — 문자 맵 해석은 로비·서버 공용 순수 모듈(server/src/room-map.ts)에 있고, 로비 world/ 는 여기서 받아 쓴다.
 // 문자 한 글자 = 칸 하나(16px). 그림(32px 타일)은 크기 그대로 칸 TILE_CELLS × TILE_CELLS 에 걸쳐 그린다 (tiles.ts).
-import type { RoomData } from '../../../server/src/room-map';
+import type { RoomData, TileMap } from '../../../server/src/room-map';
 
 export { parseMap, type Door, type Pos, type Tile, type TileMap } from '../../../server/src/room-map';
 
@@ -20,4 +20,18 @@ export function sameRoomData(a: RoomData, b: RoomData): boolean {
       const e = b.doors[i];
       return e !== undefined && d.x === e.x && d.y === e.y && d.game === e.game;
     });
+}
+
+/**
+ * 걷기 판정용 맵 — 닫힌 문(isOpenDoor 가 false)의 칸을 벽으로 본다. 열린 문은 그대로 문(밟으면 입장).
+ * 문 번호·자리(doors·doorAt)는 원래 맵 그대로 (결정 2026-10-21: 문도 투명 — 닫힘은 벽, 열림은 바닥)
+ */
+export function withShutDoors(map: TileMap, isOpenDoor: (door: number) => boolean): TileMap {
+  return {
+    ...map,
+    tileAt: (p) => {
+      const door = map.doorAt(p);
+      return door !== undefined && !isOpenDoor(door) ? 'wall' : map.tileAt(p);
+    },
+  };
 }

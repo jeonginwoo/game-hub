@@ -189,7 +189,7 @@ export interface RoomData {
 export interface Room {
   readonly map: TileMap;
   readonly objects: readonly (RoomObject & PlacedShape)[];
-  /** 문 번호 → 게임 id. 배정 없는 문은 그냥 바닥이다 */
+  /** 문 번호 → 게임 id. 배정 없는(닫힌) 문은 로비가 벽으로 걷는다 (결정 2026-10-21) */
   readonly doorGames: Readonly<Record<number, string>>;
 }
 

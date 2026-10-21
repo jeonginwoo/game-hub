@@ -134,12 +134,12 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   foreground → edit marks (only while editing). Every mesh gets its z from `drawZ` / `objectZ` — no hand-picked z values.
 - Everything is in **cells** (`CELL_PX` 16): one map character, positions, walking,
   collision, objects, the network and world units. Art keeps its size — a sheet cell is a
-  **tile** (`TILE_PX` 32) spanning `TILE_CELLS` (2) × 2 cells, so `tileLook` picks the piece
-  (`part`) of the art each cell shows. `AVATAR_PX` is 48×64 (3×4 cells, feet at the cell's
+  **tile** (`TILE_PX` 32) spanning `TILE_CELLS` (2) × 2 cells. `AVATAR_PX` is 48×64 (3×4 cells, feet at the cell's
   bottom centre).
   Pixel textures use nearest filtering, no mipmaps, sRGB (`pixelTexture` in `main.ts`).
-- Drawing never blocks movement by itself: what is impassable is the character map's `#`
-  plus each object's `solid` cells (`withSolidObjects`), fitted to the art cell by cell.
+- Drawing never blocks movement by itself: what is impassable is the character map's `#`,
+  closed doors (no registered game — `withShutDoors`), and each object's `solid` cells
+  (`withSolidObjects`), fitted to the art cell by cell.
 - The map (terrain: `#` `.` `D` `S`) and objects are separate layers. An object may sit on any
   cell, `#` included; `checkObjects` only rejects `solid` cells that block a door or start, or that
   overlap another object's `solid` cells. Pictures may overlap freely.

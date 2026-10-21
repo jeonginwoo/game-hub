@@ -16,13 +16,13 @@ import { loadLook, showHud, type Hud } from './hud/hud-bar';
 import { AVATAR_PX, CELL_PX, drawZ } from './world/layers';
 import { OBJECT_ART } from './data/object-art';
 import { lookKey } from './avatar/look';
-import { sameRoomData, TILE_CELLS, type Pos, type TileMap } from './world/map';
+import { sameRoomData, TILE_CELLS, withShutDoors, type Pos, type TileMap } from './world/map';
 import { facingOf, reversesWalk, stepHeld, type Dir } from './world/movement';
 import { connect, type Connection, type NetStatus } from './net/net';
 import { objectRect, objectZ, withSolidObjects, type MapObject } from './world/objects';
 import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from './net/others';
 import { homeUrl, roomFromSearch, screenFor, withRoom } from './room/room';
-import { fillCell, SHEET_PX, tileLook, type Sheet } from './world/tiles';
+import { fillCell, SHEET_PX, type Sheet } from './world/tiles';
 import { clampAxis, driftCenter, screenToCell } from './world/view';
 import { canEdit, doorChoices, doorMarks } from './edit/edit';
 import { createDoorPicker } from './edit/door-picker';
@@ -86,10 +86,10 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 type Sheets = Readonly<Record<Sheet, HTMLImageElement>>;
 
 /**
- * 배경 한 장 — 바닥 층 물체를 방 데이터 순서대로(나중 것이 위) 찍고, 문자 맵에서는 문만 그린다. 그 밖은 투명 — 장면 바탕색이 보인다
- * (결정 2026-10-19: 문자 맵은 투명, 바닥은 물체). 바닥 물체를 메시 하나씩 두지 않고 한 장에 굽는다 — 채움으로 넓게 깔아도 메시가 늘지 않게
+ * 배경 한 장 — 바닥 층 물체를 방 데이터 순서대로(나중 것이 위) 찍는다. 문자 맵은 문까지 그리지 않아 그 밖은 투명 — 장면 바탕색이 보인다
+ * (결정 2026-10-19: 문자 맵은 투명, 바닥은 물체 · 2026-10-21: 문도 투명). 바닥 물체를 메시 하나씩 두지 않고 한 장에 굽는다 — 채움으로 넓게 깔아도 메시가 늘지 않게
  */
-function paintBackground(c: HTMLCanvasElement, room: Room, floorObjects: readonly MapObject[], sheets: Sheets): void {
+function paintBackground(c: HTMLCanvasElement, floorObjects: readonly MapObject[], sheets: Sheets): void {
   const g = c.getContext('2d');
   if (!g) throw new Error('2d 캔버스를 만들 수 없다');
   g.imageSmoothingEnabled = false;
@@ -113,21 +113,6 @@ function paintBackground(c: HTMLCanvasElement, room: Room, floorObjects: readonl
     const s = o.sprite;
     const cellSrc = SHEET_PX / TILE_CELLS;
     g.drawImage(sheets[s.sheet], s.col * SHEET_PX, s.row * SHEET_PX, o.w * cellSrc, o.h * cellSrc, left * CELL_PX, top * CELL_PX, o.w * CELL_PX, o.h * CELL_PX);
-  }
-  const map = room.map;
-  // 열린 문(게임 배정)과 닫힌 문을 다르게 그린다
-  const isOpenDoor = (door: number): boolean => gameAtDoor(door, GAMES, room.doorGames) !== undefined;
-  const src = SHEET_PX / TILE_CELLS; // 칸 하나가 시트에서 차지하는 px — 그림 크기는 그대로, 칸마다 한 조각
-  for (const d of map.doors) {
-    for (let y = d.y; y < d.y + d.h; y++) {
-      for (let x = d.x; x < d.x + d.w; x++) {
-        const look = tileLook(map, { x, y }, isOpenDoor);
-        if (!look) continue;
-        const { base, part } = look;
-        g.drawImage(sheets[base.sheet], base.col * SHEET_PX + part.x * src, base.row * SHEET_PX + part.y * src, src, src,
-          x * CELL_PX, y * CELL_PX, CELL_PX, CELL_PX);
-      }
-    }
   }
 }
 
@@ -174,7 +159,7 @@ function buildWorld(data: RoomData): World {
   const map = room.map;
   const objects: readonly MapObject[] = room.objects.map((o) => ({ ...o, ...OBJECT_ART[o.kind] }));
 
-  // 배경 한 장 — 바닥 층 물체와 문을 Ninja Adventure 시트에서 잘라 찍은 맵 크기 캔버스. 그림은 32px 로 키운 크기 그대로.
+  // 배경 한 장 — 바닥 층 물체를 Ninja Adventure 시트에서 잘라 찍은 맵 크기 캔버스. 그림은 32px 로 키운 크기 그대로.
   // 캐릭터와 픽셀 밀도는 맞추지 않는다. 시트 세 장이 다 오기 전에는 비어 있다. 아무것도 없는 칸은 투명
   const floorObjects = objects.filter((o) => o.layer === 'floor');
   const backgroundArt = blankTexture(map.width, map.height);
@@ -203,7 +188,7 @@ function buildWorld(data: RoomData): World {
   scene.add(marks);
 
   const paint = (sheets: Sheets): void => {
-    paintBackground(backgroundArt.canvas, room, floorObjects, sheets);
+    paintBackground(backgroundArt.canvas, floorObjects, sheets);
     backgroundArt.tex.needsUpdate = true;
     for (const a of objectArt) {
       paintObject(a.canvas, a.o, sheets);
@@ -211,12 +196,16 @@ function buildWorld(data: RoomData): World {
     }
   };
   if (loadedSheets) paint(loadedSheets);
-  return { data, room, walkMap: withSolidObjects(map, objects), objects, meshes, marks, cellMarks, paint };
+  // 닫힌 문(게임 없음)은 벽, 열린 문은 바닥 + 입장 (결정 2026-10-21: 문도 투명)
+  const isOpenDoor = (door: number): boolean => gameAtDoor(door, GAMES, room.doorGames) !== undefined;
+  const walkMap = withSolidObjects(withShutDoors(map, isOpenDoor), objects);
+  return { data, room, walkMap, objects, meshes, marks, cellMarks, paint };
 }
 
 const CELL_MARK = 'rgba(236, 239, 244, 0.12)'; // 그 밖의 칸 — 투명한 문자 맵의 칸이 보이게
 const WALL_MARK = 'rgba(191, 97, 106, 0.45)'; // 벽 '#'
 const START_MARK = 'rgba(94, 129, 172, 0.6)'; // 시작점 'S'
+const DOOR_MARK = 'rgba(235, 203, 139, 0.55)'; // 문 'D' — 문도 그림이 없어 칠하기에서만 보인다
 const GRID_LINE = 'rgba(236, 239, 244, 0.35)'; // 칸 테두리
 
 /** 칸마다 반투명 바탕(벽·시작점은 제 색) + 칸 테두리 격자를 그린 맵 크기 한 장 — 편집 표시 층 */
@@ -227,7 +216,8 @@ function buildCellMarks(map: TileMap): THREE.Mesh<THREE.PlaneGeometry, THREE.Mes
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
       const start = map.starts.some((p) => p.x === x && p.y === y);
-      g.fillStyle = start ? START_MARK : map.tileAt({ x, y }) === 'wall' ? WALL_MARK : CELL_MARK;
+      const tile = map.tileAt({ x, y });
+      g.fillStyle = start ? START_MARK : tile === 'wall' ? WALL_MARK : tile === 'door' ? DOOR_MARK : CELL_MARK;
       g.fillRect(x * CELL_PX, y * CELL_PX, CELL_PX, CELL_PX);
     }
   }
