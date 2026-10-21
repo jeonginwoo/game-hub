@@ -162,7 +162,7 @@ interface World {
   readonly meshes: readonly THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
   /** 편집 중에만 보이는 문 테두리 — 배정된 문·빈 문 다른 색 */
   readonly marks: THREE.Group;
-  /** 칠하기 도구일 때만 보이는 벽·시작점 칠 — 문자 맵은 그림이 없어 평소엔 보이지 않는다 */
+  /** 칠하기 도구일 때만 보이는 칸 격자 + 벽·시작점 칠 — 문자 맵은 그림이 없어 평소엔 보이지 않는다 */
   readonly cellMarks: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   /** 시트가 오면(이미 와 있으면 바로) 배경·물체 캔버스를 칠한다 */
   readonly paint: (sheets: Sheets) => void;
@@ -214,10 +214,12 @@ function buildWorld(data: RoomData): World {
   return { data, room, walkMap: withSolidObjects(map, objects), objects, meshes, marks, cellMarks, paint };
 }
 
+const CELL_MARK = 'rgba(236, 239, 244, 0.12)'; // 그 밖의 칸 — 투명한 문자 맵의 칸이 보이게
 const WALL_MARK = 'rgba(191, 97, 106, 0.45)'; // 벽 '#'
 const START_MARK = 'rgba(94, 129, 172, 0.6)'; // 시작점 'S'
+const GRID_LINE = 'rgba(236, 239, 244, 0.35)'; // 칸 테두리
 
-/** 벽·시작점 칸을 반투명으로 칠한 맵 크기 한 장 — 편집 표시 층 */
+/** 칸마다 반투명 바탕(벽·시작점은 제 색) + 칸 테두리 격자를 그린 맵 크기 한 장 — 편집 표시 층 */
 function buildCellMarks(map: TileMap): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> {
   const art = blankTexture(map.width, map.height);
   const g = art.canvas.getContext('2d');
@@ -225,11 +227,16 @@ function buildCellMarks(map: TileMap): THREE.Mesh<THREE.PlaneGeometry, THREE.Mes
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
       const start = map.starts.some((p) => p.x === x && p.y === y);
-      if (!start && map.tileAt({ x, y }) !== 'wall') continue;
-      g.fillStyle = start ? START_MARK : WALL_MARK;
+      g.fillStyle = start ? START_MARK : map.tileAt({ x, y }) === 'wall' ? WALL_MARK : CELL_MARK;
       g.fillRect(x * CELL_PX, y * CELL_PX, CELL_PX, CELL_PX);
     }
   }
+  // 칸마다 위·왼쪽 1px 선 + 맵 오른쪽·아래 끝 선 — 이웃 칸과 겹쳐 두꺼워지지 않게
+  g.fillStyle = GRID_LINE;
+  const w = map.width * CELL_PX;
+  const h = map.height * CELL_PX;
+  for (let x = 0; x <= map.width; x++) g.fillRect(Math.min(x * CELL_PX, w - 1), 0, 1, h);
+  for (let y = 0; y <= map.height; y++) g.fillRect(0, Math.min(y * CELL_PX, h - 1), w, 1);
   art.tex.needsUpdate = true;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(map.width, map.height), new THREE.MeshBasicMaterial({ map: art.tex, transparent: true }));
   placeRect(mesh, -0.5, map.height - 0.5, map.width, map.height, drawZ('edit'));
@@ -608,7 +615,8 @@ window.addEventListener('pagehide', () => {
 // --- 편집 모드 (edit.ts · place.ts) ----------------------------------------------
 // 방장만. 켜면 걷기를 멈추고 아래쪽 가운데에 도구 줄(문·놓기·치우기). 문: 맵의 문을 누르면 옆에 게임 목록 → 고르면 door.
 // 놓기: 고른 물체의 반투명 미리보기가 포인터를 따라가고(놓을 수 없으면 밑에 빨간 칠) 누르면 place. 치우기: 포인터 아래 맨 앞 물체에 빨간 칠, 누르면 remove.
-// 칠하기: 포인터 칸에 흰 테두리(칠할 수 없으면 빨간 칠), 누르거나 누른 채 끌면 지나간 칸마다 paint.
+// 칠하기: 맵 전체에 칸 격자, 포인터 칸에 흰 테두리(칠할 수 없으면 빨간 칠), 누르거나 누른 채 끌면 지나간 칸마다 paint.
+// 편집 중엔 캐릭터·머리 위 글·채팅창을 숨겨 맵만 보인다.
 // 무엇이 바뀌든 서버의 room 이 돌아와야 월드가 다시 만들어진다 (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집)
 
 const doorPicker = createDoorPicker();
@@ -652,6 +660,9 @@ function setEditing(on: boolean): void {
   }
   if (next === editing) return;
   editing = next;
+  // 맵에만 집중하게 — 캐릭터는 루프가, 머리 위 글·채팅창은 CSS(.hub-editing)가 숨긴다
+  document.body.classList.toggle('hub-editing', next);
+  if (next && document.activeElement instanceof HTMLElement) document.activeElement.blur(); // 채팅 입력 칸에서 빠져나온다
   editTools.show(next);
   updateEditView();
   held.length = 0; // 켜는 순간 누르고 있던 방향키로 계속 걷지 않게
@@ -791,7 +802,6 @@ let myHead: Head | null = null;
 function enterLobby(e: Entered): void {
   entered = e;
   // 첫 화면 뒤 배경이 끝났다 — 내 캐릭터가 나타나고 카메라는 로비 배율로 캐릭터를 따라간다
-  player.visible = true;
   resize();
   // 방을 만들며 고른 맵, 아니면 이 탭이 기억해 둔 이 방의 맵으로 먼저 그린다 — welcome 이 다른 방을 보내면 그때 다시
   roomMap = e.map ?? loadRoomMap(e.room) ?? undefined;
@@ -874,7 +884,7 @@ window.addEventListener('keydown', (e) => {
     else if (!editTools.back()) setEditing(false);
     return;
   }
-  if (e.key === 'Enter' && !leaving) {
+  if (e.key === 'Enter' && !leaving && !editing) { // 편집 중엔 채팅창이 숨어 있다
     e.preventDefault();
     chatBox?.focus();
     return;
@@ -976,6 +986,7 @@ renderer.setAnimationLoop((now) => {
   const y = from.y + (pos.y - from.y) * t;
   placeAvatar(player, x, y);
   playerMat.map = avatarTextures(myLook)[facing];
+  player.visible = entered !== null && !editing; // 첫 화면 뒤 배경·편집 중엔 캐릭터 없이
 
   others = advance(others, dt, STEP_MS);
   for (const [id, r] of others.players) {
@@ -984,6 +995,7 @@ renderer.setAnimationLoop((now) => {
     const p = remotePos(r);
     placeAvatar(v.mesh, p.x, p.y);
     v.mat.map = v.tex[r.at.dir];
+    v.mesh.visible = !editing;
   }
 
   const viewX = camera.right - camera.left;

@@ -65,20 +65,22 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   server is unreachable); the map ◀ ▶ of 「로비 만들기」 switches the backdrop to the picked template
   (`switchRoom` with a respawn, so the hidden player stands on that map's start). Behind the first screen the player is hidden and the camera drifts on its own
   (`driftCenter` in `view.ts`) at a larger zoom (`BACKDROP_ZOOM`, so a big window still has room to move);
-  entering the lobby shows the player and switches to `VIEW_ZOOM` and following. On entering it draws the room's template (picked on 「로비 만들기」 or
+  entering the lobby shows the player (the render loop sets its visibility each frame) and switches to `VIEW_ZOOM` and following. On entering it draws the room's template (picked on 「로비 만들기」 or
   remembered per room in `sessionStorage`, `mapKey`). When the room in `welcome` differs from what
   is drawn, `switchRoom` in `main.ts` throws the world away (`disposeWorld`), builds it again
   (`buildWorld`) and respawns; a room that fails `buildRoom` is logged and the current one kept.
   A `room` message (the owner changed a door's game) goes through the same `switchRoom` without
   respawning — it does not change the map rows, so the current cell stays valid.
-- **Edit mode** (owner only, `canEdit`) is a state in `main.ts`: while on, the lobby does not walk and
-  the tool bar (`edit-tools.ts`, bottom centre — the top row of the map holds doors) picks one of four
+- **Edit mode** (owner only, `canEdit`) is a state in `main.ts`: while on, the lobby does not walk, shows only the
+  map (the render loop hides every avatar; `setEditing` puts `hub-editing` on `body` so CSS hides head tags and the
+  chat box, and Enter does not open chat), and the tool bar (`edit-tools.ts`, bottom centre — the top row of the map holds doors) picks one of four
   tools. A pointer on the map goes screen → cell (`screenToCell` in `view.ts`), then by tool:
   door — the door marks (part of the world, rebuilt with it) are visible, a door opens `door-picker.ts`,
   picking sends `door`; place — the chosen kind's preview follows the pointer (`placeAt`: the pointer is the
   object's bottom centre), a red fill under it when `canPlace` (the server's `placeObject`) says no, a click sends
   `place`; remove — a red fill on `topObjectAt` (the frontmost picture over the cell), a click sends `remove`;
-  paint — the bar shows four brushes (floor, wall, door, start = map characters), a white frame on the cell with a
+  paint — the bar shows four brushes (floor, wall, door, start = map characters), the world's cell marks show every
+  cell (a translucent fill — walls and starts in their own colour — and a 1px grid), a white frame on the cell with a
   red fill when `paintCheck` (the server's `paintTile`) says `no` (`same` — already that character — is neither red
   nor sent); pressing starts a stroke and every cell it crosses (`cellsBetween` joins pointer moves, side by side,
   never diagonally) is sent once as `paint` when `ok`; pointer up or leaving the canvas ends the stroke.
