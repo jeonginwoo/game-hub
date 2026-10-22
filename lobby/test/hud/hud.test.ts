@@ -75,16 +75,20 @@ describe('noticeText', () => {
 });
 
 describe('noticeText 편집 중', () => {
-  it('편집 중이면 도구별 안내, 연결 알림이 있으면 그쪽이 먼저', () => {
-    const clean = (tool: EditTool) => ({ tool, dirty: false });
-    expect(noticeText('open', clean('door'))).toBe('편집 중 — 문을 눌러 게임 고르기 (Esc 끝)');
-    expect(noticeText('open', clean('place'))).toBe('편집 중 — 고른 물체를 맵에 놓기 (Esc 끝)');
-    expect(noticeText('open', clean('remove'))).toBe('편집 중 — 누른 물체 치우기 (Esc 끝)');
-    expect(noticeText('open', clean('paint'))).toBe('편집 중 — 누르거나 끌어서 칸 칠하기 (Esc 끝)');
+  it('편집 중이면 도구별 안내 — 창 밖의 Esc 는 놓기 창으로, 연결 알림이 있으면 그쪽이 먼저', () => {
+    const clean = (tool: EditTool) => ({ tool, window: false, dirty: false });
+    expect(noticeText('open', clean('door'))).toBe('편집 중 — 문을 눌러 게임 고르기 (Esc 물체 고르기)');
+    expect(noticeText('open', clean('place'))).toBe('편집 중 — 누르면 놓기 · 오른쪽 클릭 치우기 (Esc 물체 고르기)');
+    expect(noticeText('open', clean('paint'))).toBe('편집 중 — 누르거나 끌어서 칸 칠하기 (Esc 물체 고르기)');
     expect(noticeText('closed', clean('place'))).toBe('연결 끊김 — 새로고침');
   });
 
+  it('놓기 창이 열려 있으면 고르기 안내, Esc 는 편집 끝', () => {
+    expect(noticeText('open', { tool: 'place', window: true, dirty: false })).toBe('편집 중 — 놓을 물체 고르기 (Esc 끝)');
+  });
+
   it('저장 안 한 바뀐 것이 있으면 Esc 대신 저장·취소로 끝난다고', () => {
-    expect(noticeText('open', { tool: 'paint', dirty: true })).toBe('편집 중 — 누르거나 끌어서 칸 칠하기 (저장해야 모두에게 · 저장·취소로 끝)');
+    expect(noticeText('open', { tool: 'paint', window: false, dirty: true })).toBe('편집 중 — 누르거나 끌어서 칸 칠하기 (저장해야 모두에게 · 저장·취소로 끝)');
+    expect(noticeText('open', { tool: 'place', window: true, dirty: true })).toBe('편집 중 — 놓을 물체 고르기 (저장해야 모두에게 · 저장·취소로 끝)');
   });
 });

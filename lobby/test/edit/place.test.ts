@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildRoom, type RoomObject } from '../../../server/src/room-map';
 import { DEFAULT_ROOM } from '../../../server/src/room-templates';
 import { OBJECT_ART } from '../../src/data/object-art';
-import { canPlace, placeAt, topObjectAt } from '../../src/edit/place';
+import { canPlace, escStep, placeAt, thumbScale, topObjectAt } from '../../src/edit/place';
 import type { MapObject } from '../../src/world/objects';
 
 /** 방 데이터 물체 → 로비가 그리는 물체 (main.ts buildWorld 와 같은 합치기) */
@@ -61,5 +61,36 @@ describe('topObjectAt', () => {
     const yard2: RoomObject = { id: 'yard2', kind: 'yard', x: 20, y: 9 };
     expect(topObjectAt(drawn([yard, yard2]), { x: 21, y: 6 })?.id).toBe('yard2');
     expect(topObjectAt(drawn([yard2, yard]), { x: 21, y: 6 })?.id).toBe('yard');
+  });
+});
+
+describe('thumbScale', () => {
+  it('들어가면 가장 큰 정수배 — 점이 고르게 커지게', () => {
+    expect(thumbScale(32, 32, 64)).toBe(2);
+    expect(thumbScale(32, 48, 64)).toBe(1); // 48 이 두 배면 넘친다
+    expect(thumbScale(16, 16, 56)).toBe(3);
+  });
+
+  it('1배로도 넘치면 긴 변을 칸에 맞춰 줄인다', () => {
+    expect(thumbScale(128, 64, 64)).toBe(0.5);
+    expect(thumbScale(64, 96, 64)).toBeCloseTo(2 / 3);
+  });
+});
+
+describe('escStep', () => {
+  const s = { doorList: false, window: false, dirty: false };
+
+  it('게임 목록이 열려 있으면 그것부터 닫는다', () => {
+    expect(escStep({ ...s, doorList: true })).toBe('close-door-list');
+  });
+
+  it('창 밖(놓는 중·문·칠하기)이면 놓기 창을 다시 연다', () => {
+    expect(escStep(s)).toBe('open-window');
+    expect(escStep({ ...s, dirty: true })).toBe('open-window');
+  });
+
+  it('창에서면 편집 끝 — 바뀐 것이 있으면 그대로', () => {
+    expect(escStep({ ...s, window: true })).toBe('end');
+    expect(escStep({ ...s, window: true, dirty: true })).toBe('stay');
   });
 });

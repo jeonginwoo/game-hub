@@ -105,11 +105,26 @@
       /* 저장·취소 — 도구 줄 오른쪽 끝, 붓 줄과 같은 구분선 (결정 2026-10-21: 저장식 편집) */
       .hub-edit-commit { display: flex; gap: 4px; padding-left: 8px; margin-left: 4px; border-left: 1px solid rgb(216 222 233 / 0.3); }
       .hub-btn:disabled { opacity: 0.45; cursor: default; background: #4c566a; }
-      .hub-object-panel { position: fixed; top: 12px; left: 12px; z-index: 20; max-height: 55vh; }
+      /* 놓기 창 — 맵을 덮는 어두운 바탕 가운데. 바탕은 도구 줄(20) 아래라 줄의 저장·취소는 그대로 눌린다 (결정 2026-10-21: 편집 개편 B) */
+      .hub-place-backdrop {
+        position: fixed; inset: 0; z-index: 19; display: flex; align-items: center; justify-content: center;
+        padding: 16px 16px 64px; background: rgb(0 0 0 / 0.35);
+      }
+      .hub-place-backdrop[hidden] { display: none; }
+      .hub-place-window { width: min(640px, 100%); max-height: 100%; }
       .hub-object-groups { display: flex; flex-wrap: wrap; gap: 4px; }
       .hub-object-groups .hub-btn { padding: 4px 8px; font-size: 12px; }
-      .hub-object-kinds { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-y: auto; }
-      .hub-object-kinds .hub-btn { text-align: left; }
+      .hub-object-thumbs {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 4px; min-height: 0; overflow-y: auto;
+      }
+      .hub-thumb {
+        display: flex; align-items: center; justify-content: center; height: 64px; padding: 0; border: 2px solid transparent;
+        border-radius: 8px; background: rgb(76 86 106 / 0.6); cursor: pointer;
+      }
+      .hub-thumb:hover { border-color: rgb(216 222 233 / 0.5); }
+      .hub-thumb.hub-on { border-color: #88c0d0; }
+      .hub-thumb canvas { image-rendering: pixelated; }
+      .hub-object-caption { min-height: 1.4em; color: #d8dee9; font-size: 13px; text-align: center; }
       /* 캐릭터 머리 위 — 말풍선(있을 때만) + 이름표. main.ts 가 매 프레임 자리를 옮긴다.
          z-index 층: 머리 위 10 < 버튼 줄·창·알림·채팅 20 < 첫 화면 30 — 사람이 들어올 때마다 body 끝에 붙어 창을 덮던 것 */
       .hub-head {
