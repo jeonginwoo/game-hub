@@ -111,6 +111,58 @@ describe('checkObjects', () => {
   });
 });
 
+describe('checkObjects — 상태 꼬리표', () => {
+  // 문 0 = (1~2, 0) 붙은 두 칸 · 문 1 = (4, 0). 시작점 (1, 1)
+  const map = parseMap(['#DD#D#', '#S...#', '######']);
+  const block = (id: string, x: number, y: number, state?: 'open' | 'shut'): PlacedShape =>
+    ({ ...tree, id, x, y, w: 1, h: 1, solid: [{ x: 0, y: 0 }], ...(state && { state }) });
+
+  it('발 칸이 문 칸이 아니면 거부한다', () => {
+    expect(() => checkObjects(map, [{ ...block('a', 3, 1, 'open'), solid: undefined }])).toThrow(/발 칸/);
+    expect(() => checkObjects(map, [{ ...block('a', 3, 0, 'shut'), solid: undefined }])).toThrow(/발 칸/);
+    expect(() => checkObjects(map, [{ ...block('a', 2, 0, 'open'), solid: undefined }])).not.toThrow();
+  });
+
+  it('닫힘 물체의 solid 는 제 문의 칸을 막아도 된다 — 열림·꼬리표 없는 물체는 안 된다', () => {
+    expect(() => checkObjects(map, [block('a', 1, 0, 'shut')])).not.toThrow();
+    expect(() => checkObjects(map, [{ ...block('a', 1, 0, 'shut'), w: 2, solid: [{ x: 0, y: 0 }, { x: 1, y: 0 }] }])).not.toThrow();
+    expect(() => checkObjects(map, [block('a', 1, 0, 'open')])).toThrow(/문·시작점/);
+    expect(() => checkObjects(map, [block('a', 1, 0)])).toThrow(/문·시작점/);
+  });
+
+  it('닫힘 물체도 다른 문의 칸은 못 막는다 — 그 문이 열리면 입구가 막힌다', () => {
+    const wide = { ...block('a', 2, 0, 'shut'), w: 3, solid: [{ x: 2, y: 0 }] };
+    expect(() => checkObjects(map, [wide])).toThrow(/\(4, 0\) 의 문·시작점/);
+  });
+
+  it('같은 문의 열림·닫힘 물체끼리만 solid 가 겹쳐도 된다', () => {
+    // 둘 다 문 0 의 (2, 0) 을 발로 두고 옆 벽 칸 (3, 0) 을 막는다
+    const shut = { ...block('s', 2, 0, 'shut'), w: 2, solid: [{ x: 1, y: 0 }] };
+    const open = { ...block('o', 2, 0, 'open'), w: 2, solid: [{ x: 1, y: 0 }] };
+    expect(() => checkObjects(map, [shut, open])).not.toThrow();
+    expect(() => checkObjects(map, [shut, { ...shut, id: 's2' }])).toThrow(/'s' 와 겹친다/);
+    expect(() => checkObjects(map, [open, { ...open, id: 'o2' }])).toThrow(/'o' 와 겹친다/);
+    expect(() => checkObjects(map, [shut, open, block('n', 3, 0)])).toThrow(/'s' 와 겹친다/);
+  });
+});
+
+describe('checkObjects — 상태 꼬리표, 문 둘 · 시작점', () => {
+  // 문 0 = (1, 1) · 문 1 = (2, 2) (대각선이라 따로) · 시작점 (1, 0). (2, 1) 은 두 문 사이의 벽
+  const map = parseMap(['#S###', '#D#.#', '#.D.#', '#####']);
+  const fromDoor0 = (state: 'open' | 'shut'): PlacedShape => ({ ...tree, id: 'a', x: 1, y: 1, w: 2, h: 1, solid: [{ x: 1, y: 0 }], state });
+  const fromDoor1 = (state: 'open' | 'shut'): PlacedShape => ({ ...tree, id: 'b', x: 2, y: 2, w: 1, h: 2, solid: [{ x: 0, y: 1 }], state });
+
+  it('다른 문의 꼬리표 물체끼리는 상태가 달라도 겹치면 거부한다 — 두 문이 따로 열리고 닫힌다', () => {
+    expect(() => checkObjects(map, [fromDoor0('open'), fromDoor1('shut')])).toThrow(/'a' 와 겹친다/);
+    expect(() => checkObjects(map, [fromDoor0('shut'), fromDoor1('shut')])).toThrow(/'a' 와 겹친다/);
+  });
+
+  it('시작점은 닫힘 물체도 못 막는다', () => {
+    const tall: PlacedShape = { ...tree, id: 'a', x: 1, y: 1, w: 1, h: 2, solid: [{ x: 0, y: 1 }], state: 'shut' };
+    expect(() => checkObjects(map, [tall])).toThrow(/\(1, 0\) 의 문·시작점/);
+  });
+});
+
 describe('solidCells', () => {
   const post: PlacedShape = { ...tree, x: 2, y: 2, w: 2, h: 2, solid: [{ x: 0, y: 0 }, { x: 1, y: 0 }] };
 
@@ -270,6 +322,14 @@ describe('paintTile', () => {
     expect(() => paintTile(data, { x: 2, y: 4 }, 'S')).toThrow(/막는다/);
     expect(() => paintTile(data, { x: 3, y: 4 }, 'D')).toThrow(/막는다/);
   });
+
+  it('상태 꼬리표 물체의 발 밑 문 칸은 지울 수 없다', () => {
+    // 문 = (1~2, 2) 두 칸, 풀(2×2) 의 발 칸 (1, 2)
+    const tagged: RoomData = { rows: ['#####', '#...#', '#DD.#', '#S..#', '#####'], objects: [{ id: 'g', kind: 'grass-1', x: 1, y: 2, state: 'shut' }], doors: [] };
+    expect(() => buildRoom(tagged)).not.toThrow();
+    expect(() => paintTile(tagged, { x: 1, y: 2 }, '#')).toThrow(/발 칸/);
+    expect(() => paintTile(tagged, { x: 2, y: 2 }, '#')).not.toThrow(); // 문의 다른 칸은 괜찮다
+  });
 });
 
 describe('removeObject', () => {
@@ -312,6 +372,14 @@ describe('parseRoomData', () => {
     expect(parseRoomData({ ...data, objects: [{ id: 't', kind: 'toString', x: 1, y: 0 }] })).toBeNull();
     expect(parseRoomData({ ...data, objects: [{ id: 't', kind: 'tree', x: 1.5, y: 0 }] })).toBeNull();
     expect(parseRoomData({ ...data, doors: [{ x: 3, y: 0 }] })).toBeNull();
+    expect(parseRoomData({ ...data, objects: [{ ...data.objects[0], state: 'ajar' }] })).toBeNull();
+    expect(parseRoomData({ ...data, objects: [{ ...data.objects[0], state: null }] })).toBeNull();
+  });
+
+  it('상태 꼬리표는 있을 때만 담는다', () => {
+    const tagged = { ...data, objects: [{ id: 'g', kind: 'tree', x: 3, y: 0, state: 'shut' }] };
+    expect(parseRoomData(tagged)).toEqual(tagged);
+    expect(parseRoomData(data)?.objects[0]).not.toHaveProperty('state');
   });
 
   it('크기 상한을 넘으면 null — 줄 수·줄 길이·물체 수·문 배정 수·id 길이', () => {
@@ -356,6 +424,7 @@ describe('sameRoomData', () => {
     expect(sameRoomData(data, { ...data, rows: [...data.rows, '#####'] })).toBe(false);
     expect(sameRoomData(data, { ...data, objects: [{ id: 't', kind: 'torii', x: 1, y: 0 }] })).toBe(false);
     expect(sameRoomData(data, { ...data, objects: [] })).toBe(false);
+    expect(sameRoomData(data, { ...data, objects: [{ id: 't', kind: 'tree', x: 1, y: 0, state: 'open' }] })).toBe(false);
     expect(sameRoomData(data, { ...data, doors: [{ x: 3, y: 0, game: 'h' }] })).toBe(false);
     expect(sameRoomData(DEFAULT_ROOM, data)).toBe(false);
   });

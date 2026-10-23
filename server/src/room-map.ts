@@ -102,13 +102,18 @@ export function parseMap(rows: readonly string[]): TileMap {
 // 종류별 크기·막는 칸 표는 object-shapes.ts — 종류가 많아 따로 둔다
 export { OBJECT_SHAPES, type ObjectKind, type ObjectShape };
 
-/** 방 데이터 속 물체 하나 — 종류와 왼쪽 아래 칸만 */
+/** 문 상태 꼬리표 — 물체가 발 칸의 문의 어느 상태에 딸리는지. 그 상태일 때만 보이고 막는 것은 로비 몫(편집 개편 D2) (결정 2026-10-21: 편집 개편 D) */
+export type ObjectState = 'open' | 'shut';
+
+/** 방 데이터 속 물체 하나 — 종류와 왼쪽 아래 칸, 그리고 문 칸 위라면 상태 꼬리표 */
 export interface RoomObject {
   readonly id: string;
   readonly kind: ObjectKind;
   /** 왼쪽 아래 칸 — 물체는 여기서 오른쪽(w)·위쪽(h)으로 뻗는다. 발은 이 칸의 아래 선 */
   readonly x: number;
   readonly y: number;
+  /** 없으면 늘 보인다. 있으면 발 칸 (x, y) 이 문 칸이어야 하고 그 문을 따른다 */
+  readonly state?: ObjectState;
 }
 
 /** 자리와 모양이 정해진 물체 — 검사·충돌은 이것만 본다 */
@@ -116,6 +121,7 @@ export interface PlacedShape extends ObjectShape {
   readonly id: string;
   readonly x: number;
   readonly y: number;
+  readonly state?: ObjectState;
 }
 
 /** 칸 좌표의 가장자리 — 칸 중심이 정수라 칸 x 의 왼쪽 선은 x - 0.5 */
@@ -137,13 +143,27 @@ export function solidCells(o: PlacedShape): Pos[] {
   return (o.solid ?? []).map((c) => ({ x: o.x + c.x, y: o.y - c.y }));
 }
 
+/** solid 한 칸을 차지한 물체 — 겹침 판정용 */
+interface SolidClaim {
+  readonly id: string;
+  readonly door: number | undefined;
+  readonly state: ObjectState | undefined;
+}
+
+/** 같은 문의 열림·닫힘 물체는 함께 보이지 않으므로 solid 가 겹쳐도 된다. 그 밖의 겹침은 모두 충돌 */
+function claimsClash(a: SolidClaim, b: SolidClaim): boolean {
+  return !(a.state !== undefined && b.state !== undefined && a.door === b.door && a.state !== b.state);
+}
+
 /**
  * 물체 목록 검사 — id 중복, 크기 0 이하, 맵 밖으로 나간 물체, 물체를 벗어나거나 문·시작점을 막는 solid,
- * 다른 물체의 solid 와 겹치는 solid 를 거부한다. 그림끼리 겹치거나 solid 가 맵의 '#' 위에 놓이는 것은 괜찮다
+ * 다른 물체의 solid 와 겹치는 solid 를 거부한다. 그림끼리 겹치거나 solid 가 맵의 '#' 위에 놓이는 것은 괜찮다.
+ * 상태 꼬리표 물체는 발 칸이 문 칸이어야 하고, 닫힘 물체의 solid 는 제 문의 칸을 막아도 되며(닫힌 문은 어차피 벽),
+ * 같은 문의 열림·닫힘 물체끼리는 solid 가 겹쳐도 된다 (결정 2026-10-23: 상태 꼬리표 검사)
  */
 export function checkObjects(map: TileMap, objects: readonly PlacedShape[]): void {
   const seen = new Set<string>();
-  const solidOwner = new Map<string, string>();
+  const solidClaims = new Map<string, SolidClaim[]>();
   for (const o of objects) {
     if (seen.has(o.id)) throw new Error(`물체 id '${o.id}' 가 겹친다`);
     seen.add(o.id);
@@ -157,13 +177,20 @@ export function checkObjects(map: TileMap, objects: readonly PlacedShape[]): voi
         throw new Error(`물체 '${o.id}' 의 solid 칸 (${c.x}, ${c.y}) — 물체 ${o.w}×${o.h} 안이어야 한다`);
       }
     }
+    const door = o.state === undefined ? undefined : map.doorAt(o);
+    if (o.state !== undefined && door === undefined) {
+      throw new Error(`물체 '${o.id}' 의 상태 '${o.state}' — 발 칸 (${o.x}, ${o.y}) 이 문 칸이어야 한다`);
+    }
+    const claim: SolidClaim = { id: o.id, door, state: o.state };
     for (const p of solidCells(o)) {
       const isStart = map.starts.some((s) => s.x === p.x && s.y === p.y);
-      if (map.tileAt(p) === 'door' || isStart) throw new Error(`물체 '${o.id}' 가 (${p.x}, ${p.y}) 의 문·시작점을 막는다`);
+      const blocksDoor = map.tileAt(p) === 'door' && !(o.state === 'shut' && map.doorAt(p) === door);
+      if (blocksDoor || isStart) throw new Error(`물체 '${o.id}' 가 (${p.x}, ${p.y}) 의 문·시작점을 막는다`);
       const key = `${p.x},${p.y}`;
-      const other = solidOwner.get(key);
-      if (other !== undefined) throw new Error(`물체 '${o.id}' 의 solid 가 (${p.x}, ${p.y}) 에서 '${other}' 와 겹친다`);
-      solidOwner.set(key, o.id);
+      const claims = solidClaims.get(key) ?? [];
+      const other = claims.find((q) => claimsClash(claim, q));
+      if (other !== undefined) throw new Error(`물체 '${o.id}' 의 solid 가 (${p.x}, ${p.y}) 에서 '${other.id}' 와 겹친다`);
+      solidClaims.set(key, [...claims, claim]);
     }
   }
 }
@@ -223,9 +250,15 @@ function isShortString(v: unknown): v is string {
   return typeof v === 'string' && v.length <= ID_MAX;
 }
 
+function isObjectState(v: unknown): v is ObjectState {
+  return v === 'open' || v === 'shut';
+}
+
 function parseRoomObject(v: unknown): RoomObject | null {
   if (!isRecord(v) || !isShortString(v.id) || !isObjectKind(v.kind) || !isInt(v.x) || !isInt(v.y)) return null;
-  return { id: v.id, kind: v.kind, x: v.x, y: v.y };
+  const object = { id: v.id, kind: v.kind, x: v.x, y: v.y };
+  if (v.state === undefined) return object;
+  return isObjectState(v.state) ? { ...object, state: v.state } : null;
 }
 
 function parseDoorGame(v: unknown): DoorGame | null {
@@ -260,13 +293,13 @@ export function parseRoomData(v: unknown): RoomData | null {
   return { rows, objects, doors };
 }
 
-/** 두 방 데이터가 같은가 — 맵 줄·물체·문 배정을 순서까지 비교한다 (로비: 받은 방이 지금 그린 방인지 · 서버: 저장이 바뀐 것이 있는지) */
+/** 두 방 데이터가 같은가 — 맵 줄·물체(상태 꼬리표 포함)·문 배정을 순서까지 비교한다 (로비: 받은 방이 지금 그린 방인지 · 서버: 저장이 바뀐 것이 있는지) */
 export function sameRoomData(a: RoomData, b: RoomData): boolean {
   return a.rows.length === b.rows.length && a.rows.every((r, i) => r === b.rows[i])
     && a.objects.length === b.objects.length
     && a.objects.every((o, i) => {
       const p = b.objects[i];
-      return p !== undefined && o.id === p.id && o.kind === p.kind && o.x === p.x && o.y === p.y;
+      return p !== undefined && o.id === p.id && o.kind === p.kind && o.x === p.x && o.y === p.y && o.state === p.state;
     })
     && a.doors.length === b.doors.length
     && a.doors.every((d, i) => {

@@ -37,6 +37,9 @@
   everyone, sender included, as `room{room}`; one from anyone else, one equal to the current room (`sameRoomData`),
   or one that fails `buildRoom` is dropped. Its shape and size caps (`MAP_ROWS_MAX`, `MAP_COLS_MAX`, `MAX_OBJECTS`,
   `DOOR_GAMES_MAX`, `ID_MAX`) are `parseRoomData`'s; `MAX_PAYLOAD` in `ws.ts` is sized so a room at those caps fits.
+  An object may carry a door-state tag `state: 'open' | 'shut'` (only when its bottom-left cell is a door cell — it
+  follows that door); `checkObjects` lets a `shut` object's solid cover its own door's cells and lets the `open` and
+  `shut` objects of the same door overlap, nothing else.
   The edit functions (`assignDoor`, `placeObject`, `removeObject`, `paintTile` in `room-map.ts`) are used by the
   lobby on its draft, not by the server. The server never looks at positions — a player left on a blocked cell moves
   themselves. The template is the `map` of the `hello`
