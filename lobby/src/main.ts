@@ -22,7 +22,7 @@ import { connect, type Connection, type NetStatus } from './net/net';
 import { objectRect, objectZ, withSolidObjects, type MapObject } from './world/objects';
 import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from './net/others';
 import { homeUrl, roomFromSearch, screenFor, withRoom } from './room/room';
-import { fillCell, SHEET_PX, type Sheet } from './world/tiles';
+import { fillCell, SHEET_PX, type Cell, type Sheet } from './world/tiles';
 import { clampAxis, driftCenter, panCenter, screenToCell } from './world/view';
 import { canEdit, doorChoices, doorMarks } from './edit/edit';
 import { createDoorPicker } from './edit/door-picker';
@@ -95,20 +95,11 @@ function paintBackground(c: HTMLCanvasElement, floorObjects: readonly MapObject[
   if (!g) throw new Error('2d 캔버스를 만들 수 없다');
   g.imageSmoothingEnabled = false;
   g.clearRect(0, 0, c.width, c.height);
-  const tilePx = CELL_PX * TILE_CELLS;
   for (const o of floorObjects) {
     const left = o.x;
     const top = o.y - o.h + 1;
     if (o.fill) {
-      // 채움 — 타일 하나씩, 자리마다 무늬를 고른다
-      for (let ty = 0; ty < o.h / TILE_CELLS; ty++) {
-        for (let tx = 0; tx < o.w / TILE_CELLS; tx++) {
-          const x = left + tx * TILE_CELLS;
-          const y = top + ty * TILE_CELLS;
-          const cell = fillCell(o.fill, Math.floor(x / TILE_CELLS), Math.floor(y / TILE_CELLS));
-          if (cell) g.drawImage(sheets[cell.sheet], cell.col * SHEET_PX, cell.row * SHEET_PX, SHEET_PX, SHEET_PX, x * CELL_PX, y * CELL_PX, tilePx, tilePx);
-        }
-      }
+      paintFill(g, o, o.fill, sheets, 0, 0);
       continue;
     }
     const s = o.sprite;
@@ -117,11 +108,35 @@ function paintBackground(c: HTMLCanvasElement, floorObjects: readonly MapObject[
   }
 }
 
-/** 물체 그림 — 시트에서 sprite 칸부터 w×h 칸 넓이(시트 한 칸 = 타일 하나)를 잘라 타일 32px 로 키워 찍는다 */
+/**
+ * 채움 — 물체 넓이를 타일 하나씩, 자리(맵 타일 좌표)마다 무늬를 고른다. 캔버스의 (originX, originY) 칸이 그림 (0, 0)
+ */
+function paintFill(g: CanvasRenderingContext2D, o: MapObject, fill: readonly Cell[], sheets: Sheets, originX: number, originY: number): void {
+  const tilePx = CELL_PX * TILE_CELLS;
+  const left = o.x;
+  const top = o.y - o.h + 1;
+  for (let ty = 0; ty < o.h / TILE_CELLS; ty++) {
+    for (let tx = 0; tx < o.w / TILE_CELLS; tx++) {
+      const x = left + tx * TILE_CELLS;
+      const y = top + ty * TILE_CELLS;
+      const cell = fillCell(fill, Math.floor(x / TILE_CELLS), Math.floor(y / TILE_CELLS));
+      if (cell) g.drawImage(sheets[cell.sheet], cell.col * SHEET_PX, cell.row * SHEET_PX, SHEET_PX, SHEET_PX, (x - originX) * CELL_PX, (y - originY) * CELL_PX, tilePx, tilePx);
+    }
+  }
+}
+
+/**
+ * 물체 그림 — 시트에서 sprite 칸부터 w×h 칸 넓이(시트 한 칸 = 타일 하나)를 잘라 타일 32px 로 키워 찍는다.
+ * 채움은 배경처럼 타일을 되풀이한다 — 놓기 창 썸네일·놓기 미리보기에 시트의 옆 그림이 섞이지 않게(섞는 무늬 자리는 놓은 자리에 따라 다르다)
+ */
 function paintObject(c: HTMLCanvasElement, o: MapObject, sheets: Sheets): void {
   const g = c.getContext('2d');
   if (!g) throw new Error('2d 캔버스를 만들 수 없다');
   g.imageSmoothingEnabled = false;
+  if (o.fill) {
+    paintFill(g, o, o.fill, sheets, o.x, o.y - o.h + 1);
+    return;
+  }
   const s = o.sprite;
   const cellSrc = SHEET_PX / TILE_CELLS; // 칸 하나가 시트에서 차지하는 px
   g.drawImage(sheets[s.sheet], s.col * SHEET_PX, s.row * SHEET_PX, o.w * cellSrc, o.h * cellSrc, 0, 0, c.width, c.height);
