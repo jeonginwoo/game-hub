@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampAxis, DRIFT_X_PER_S, DRIFT_Y_PER_S, driftCenter, screenToCell } from '../../src/world/view';
+import { clampAxis, DRIFT_X_PER_S, DRIFT_Y_PER_S, driftCenter, panCenter, screenToCell } from '../../src/world/view';
 
 describe('clampAxis', () => {
   // 맵 20칸, 화면 10칸 → 타일 0 의 왼쪽 끝(-0.5)이 화면 왼쪽 끝이 되는 중심은 4.5
@@ -38,6 +38,25 @@ describe('screenToCell', () => {
   // 카메라가 맵 가운데에 고정된 작은 맵이면 중심이 반 칸 자리일 수 있다
   it('중심이 반 칸이어도 칸으로 내림 없이 가장 가까운 칸', () => {
     expect(screenToCell(205, 150, { ...view, center: { x: 2.5, y: 5 } })).toEqual({ x: 3, y: 5 });
+  });
+});
+
+describe('panCenter', () => {
+  const map = { w: 40, h: 30 };
+  const view = { w: 10, h: 8 };
+
+  it('포인터를 오른쪽·아래로 끌면 맵이 따라와 중심은 왼쪽·위로 — px 를 칸으로', () => {
+    // 한 칸 32px, 64px·32px 끌면 2칸·1칸
+    expect(panCenter({ x: 20, y: 15 }, 64, 32, 32, map, view)).toEqual({ x: 18, y: 14 });
+  });
+
+  it('맵 밖이 보이지 않게 가장자리에서 멈춘다', () => {
+    expect(panCenter({ x: 6, y: 5 }, 1000, 1000, 32, map, view)).toEqual({ x: 4.5, y: 3.5 });
+    expect(panCenter({ x: 30, y: 20 }, -1000, -1000, 32, map, view)).toEqual({ x: 34.5, y: 25.5 });
+  });
+
+  it('맵이 화면보다 작은 축은 가운데 고정 — 0 만큼 끌면 범위 안으로 맞추기만', () => {
+    expect(panCenter({ x: 0, y: 15 }, 0, 0, 32, { w: 8, h: 30 }, view)).toEqual({ x: 3.5, y: 15 });
   });
 });
 

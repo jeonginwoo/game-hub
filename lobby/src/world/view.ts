@@ -1,4 +1,5 @@
 // 카메라 중심 계산 — 캐릭터를 따라가되 맵 밖이 보이지 않게 가장자리에서 멈춘다. 첫 화면 뒤에선 저절로 흐른다(driftCenter).
+// 편집 중엔 캐릭터와 따로 손으로 끌어 옮긴다(panCenter — 결정 2026-10-21: 편집 개편 C 도구 상자).
 // 맵이 화면보다 작은 축은 맵 가운데에 고정한다. 단위는 칸(칸 중심이 정수 좌표).
 
 export function clampAxis(target: number, mapSize: number, viewSize: number): number {
@@ -21,6 +22,24 @@ export function screenToCell(sx: number, sy: number, view: ScreenView): { readon
   const x = view.center.x + (sx - view.w / 2) / view.cellPx;
   const y = view.center.y + (sy - view.h / 2) / view.cellPx;
   return { x: Math.floor(x + 0.5), y: Math.floor(y + 0.5) };
+}
+
+/**
+ * 손으로 끈 만큼 옮긴 카메라 중심(칸) — 포인터가 (dxPx, dyPx) 화면 px 움직이면 맵이 포인터를 따라오게 중심은 반대로.
+ * 맵 밖이 보이지 않게 clampAxis 로 자른다. 0 만큼 끌면 지금 중심을 범위 안으로 맞추기만 한다(창 크기·방이 바뀐 뒤)
+ */
+export function panCenter(
+  center: { readonly x: number; readonly y: number },
+  dxPx: number,
+  dyPx: number,
+  cellPx: number,
+  map: { readonly w: number; readonly h: number },
+  view: { readonly w: number; readonly h: number },
+): { readonly x: number; readonly y: number } {
+  return {
+    x: clampAxis(center.x - dxPx / cellPx, map.w, view.w),
+    y: clampAxis(center.y - dyPx / cellPx, map.h, view.h),
+  };
 }
 
 export const DRIFT_X_PER_S = 0.5; // 칸/초

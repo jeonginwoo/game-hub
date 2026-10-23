@@ -1,6 +1,6 @@
-// 편집 중 아래쪽 가운데의 도구 줄(놓기·문·칠하기 + 칠하기 붓 + 저장·취소)과 가운데 놓기 창(묶음 탭 + 썸네일 격자) — DOM 연결만,
+// 편집 중 아래쪽 가운데의 도구 줄(놓기·수정·지우개·손·칠하기 + 칠하기 붓 + 저장·취소)과 가운데 놓기 창(묶음 탭 + 썸네일 격자) — DOM 연결만,
 // 목록은 object-names.ts 의 kindsByGroup, 썸네일 배율은 place.ts 의 thumbScale.
-// (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집 · 2026-10-21: 저장식 편집 · 편집 개편 B 놓기 창). 화면 글자는 textContent 로 넣는다.
+// (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집 · 2026-10-21: 저장식 편집 · 편집 개편 B 놓기 창 · C 도구 상자). 화면 글자는 textContent 로 넣는다.
 import { OBJECT_SHAPES, type ObjectKind, type TileChar } from '../../../server/src/room-map';
 import { kindsByGroup, OBJECT_INFO } from '../data/object-names';
 import { el } from '../room/entry-screen';
@@ -32,7 +32,9 @@ export interface EditCommit {
 
 const TOOLS: readonly { readonly tool: EditTool; readonly name: string }[] = [
   { tool: 'place', name: '놓기' },
-  { tool: 'door', name: '문' },
+  { tool: 'select', name: '수정' },
+  { tool: 'erase', name: '지우개' },
+  { tool: 'hand', name: '손' },
   { tool: 'paint', name: '칠하기' },
 ];
 

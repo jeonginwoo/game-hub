@@ -1,10 +1,10 @@
 // 편집 도구 — 물체 놓기 자리·놓을 수 있는지·치울 물체 고르기·놓기 창 썸네일 배율·Esc 한 단계. Three.js·DOM 과 무관한 순수 함수.
-// (결정 2026-10-16: 물체 배치 편집 — 놓기 판정은 서버와 같은 placeObject · 2026-10-21: 편집 개편 B 놓기 창)
+// (결정 2026-10-16: 물체 배치 편집 — 놓기 판정은 서버와 같은 placeObject · 2026-10-21: 편집 개편 B 놓기 창 · C 도구 상자)
 import { OBJECT_SHAPES, placeObject, type ObjectKind, type Pos, type RoomData } from '../../../server/src/room-map';
 import { objectRect, objectZ, type MapObject } from '../world/objects';
 
-/** 편집 도구 줄 — 물체 놓기(오른쪽 클릭은 치우기) · 문 배정 · 타일 칠하기 */
-export type EditTool = 'place' | 'door' | 'paint';
+/** 편집 도구 상자 — 물체 놓기(오른쪽 클릭은 치우기) · 수정(문을 눌러 게임 배정) · 지우개(물체) · 손(맵 끌기) · 타일 칠하기 */
+export type EditTool = 'place' | 'select' | 'erase' | 'hand' | 'paint';
 
 /** 포인터가 든 칸을 물체 아래쪽 가운데로 보고, 방 데이터의 왼쪽 아래 칸으로 — 폭이 짝수면 가운데 두 칸 중 오른쪽이 포인터 */
 export function placeAt(kind: ObjectKind, cell: Pos): Pos {
@@ -21,7 +21,7 @@ export function canPlace(data: RoomData, kind: ObjectKind, at: Pos): boolean {
   }
 }
 
-/** 칸을 그림 영역으로 덮는 물체 가운데 맨 앞에 그려진 것 — z 가 같으면 목록 뒤쪽(나중에 그려짐). 없으면 undefined */
+/** 칸을 그림 영역으로 덮는 물체 가운데 맨 앞에 그려진 것(오른쪽 클릭·지우개가 지울 것) — z 가 같으면 목록 뒤쪽(나중에 그려짐). 없으면 undefined */
 export function topObjectAt(objects: readonly MapObject[], cell: Pos): MapObject | undefined {
   let top: MapObject | undefined;
   let topZ = -Infinity;

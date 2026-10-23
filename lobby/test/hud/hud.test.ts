@@ -77,7 +77,9 @@ describe('noticeText', () => {
 describe('noticeText 편집 중', () => {
   it('편집 중이면 도구별 안내 — 창 밖의 Esc 는 놓기 창으로, 연결 알림이 있으면 그쪽이 먼저', () => {
     const clean = (tool: EditTool) => ({ tool, window: false, dirty: false });
-    expect(noticeText('open', clean('door'))).toBe('편집 중 — 문을 눌러 게임 고르기 (Esc 물체 고르기)');
+    expect(noticeText('open', clean('select'))).toBe('편집 중 — 문을 눌러 게임 고르기 (Esc 물체 고르기)');
+    expect(noticeText('open', clean('erase'))).toBe('편집 중 — 누르거나 끌어서 물체 지우기 (Esc 물체 고르기)');
+    expect(noticeText('open', clean('hand'))).toBe('편집 중 — 끌어서 맵 옮기기 (Esc 물체 고르기)');
     expect(noticeText('open', clean('place'))).toBe('편집 중 — 누르면 놓기 · 오른쪽 클릭 치우기 (Esc 물체 고르기)');
     expect(noticeText('open', clean('paint'))).toBe('편집 중 — 누르거나 끌어서 칸 칠하기 (Esc 물체 고르기)');
     expect(noticeText('closed', clean('place'))).toBe('연결 끊김 — 새로고침');

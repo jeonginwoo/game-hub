@@ -52,6 +52,8 @@ export function noticeText(status: NetStatus, edit: EditNotice | null = null): s
 
 const EDIT_NOTICE: Readonly<Record<EditTool, string>> = {
   place: '누르면 놓기 · 오른쪽 클릭 치우기',
-  door: '문을 눌러 게임 고르기',
+  select: '문을 눌러 게임 고르기',
+  erase: '누르거나 끌어서 물체 지우기',
+  hand: '끌어서 맵 옮기기',
   paint: '누르거나 끌어서 칸 칠하기',
 };

@@ -23,12 +23,12 @@ import { objectRect, objectZ, withSolidObjects, type MapObject } from './world/o
 import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from './net/others';
 import { homeUrl, roomFromSearch, screenFor, withRoom } from './room/room';
 import { fillCell, SHEET_PX, type Sheet } from './world/tiles';
-import { clampAxis, driftCenter, screenToCell } from './world/view';
+import { clampAxis, driftCenter, panCenter, screenToCell } from './world/view';
 import { canEdit, doorChoices, doorMarks } from './edit/edit';
 import { createDoorPicker } from './edit/door-picker';
 import { draftDirty, rebaseDraft } from './edit/draft';
 import { createEditTools } from './edit/edit-tools';
-import { canPlace, escStep, placeAt, topObjectAt } from './edit/place';
+import { canPlace, escStep, placeAt, topObjectAt, type EditTool } from './edit/place';
 import { cellsBetween, paintCheck } from './edit/paint';
 
 // 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 칸 = CELL_PX × VIEW_ZOOM). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
@@ -486,7 +486,7 @@ function refreshStatus(): void {
   hud.update({
     count: peopleCount(netStatus, others),
     rows: rosterRows(others, entered.name, myLook),
-    notice: noticeText(netStatus, editing ? { tool: editTools.tool(), window: editTools.windowOpen(), dirty: isDirty() } : null),
+    notice: noticeText(netStatus, editing ? { tool: activeTool(), window: editTools.windowOpen(), dirty: isDirty() } : null),
     owner: canEdit(others),
     editing,
   });
@@ -632,14 +632,15 @@ window.addEventListener('pagehide', () => {
 });
 
 // --- 편집 모드 (edit.ts · place.ts) ----------------------------------------------
-// 방장만. 켜면 걷기를 멈추고 가운데에 놓기 창(묶음 탭 + 썸네일), 아래쪽 가운데에 도구 줄(놓기·문·칠하기 + 저장·취소).
+// 방장만. 켜면 걷기를 멈추고 가운데에 놓기 창(묶음 탭 + 썸네일), 아래쪽 가운데에 도구 줄(놓기·수정·지우개·손·칠하기 + 저장·취소).
 // 놓기: 창에서 고르면 창이 닫히고, 고른 물체의 반투명 미리보기가 포인터를 따라가며(놓을 수 없으면 밑에 빨간 칠) 누를 때마다 놓기.
-// 오른쪽 클릭은 포인터 아래 맨 앞 물체 치우기. Esc 는 창을 다시, 창에서 Esc 면 편집 끝. 문: 맵의 문을 누르면 옆에 게임 목록 → 고르면 배정.
+// 오른쪽 클릭은 포인터 아래 맨 앞 물체 치우기. Esc 는 창을 다시, 창에서 Esc 면 편집 끝. 수정: 맵의 문을 누르면 옆에 게임 목록 → 고르면 배정.
+// 지우개: 포인터 아래 맨 앞 물체에 빨간 칠, 누르거나 누른 채 끌면 지나간 물체마다 지우기. 손: 끌어서 맵 옮기기(Space 를 누르는 동안은 어느 도구든 손).
 // 칠하기: 맵 전체에 칸 격자, 포인터 칸에 흰 테두리(칠할 수 없으면 빨간 칠), 누르거나 누른 채 끌면 지나간 칸마다 칠하기.
-// 편집 중엔 캐릭터·머리 위 글·채팅창을 숨겨 맵만 보인다.
+// 편집 중엔 캐릭터·머리 위 글·채팅창을 숨겨 맵만 보이고, 카메라는 캐릭터를 따라가지 않고 손으로만 움직인다 — 끄면 다시 캐릭터로.
 // 도구는 초안만 고친다(판정은 서버와 같은 room-map.ts 함수) — 「저장」 때 save 로 한 번에 보내고, 「취소」·연결 끊김·방장 넘어감이면 버린다.
 // 바뀐 것이 있으면 Esc·편집 버튼으로는 끝나지 않는다
-// (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집 · 2026-10-21: 저장식 편집 · 편집 개편 B 놓기 창)
+// (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집 · 2026-10-21: 저장식 편집 · 편집 개편 B 놓기 창 · C 도구 상자)
 
 const doorPicker = createDoorPicker();
 const editTools = createEditTools(() => {
@@ -674,8 +675,14 @@ const cellFrame = new THREE.LineLoop(
 preview.renderOrder = cellFrame.renderOrder = 1; // 같은 편집 층 — 빨간 칠 위에 그림
 preview.visible = redMark.visible = cellFrame.visible = false;
 scene.add(preview, redMark, cellFrame);
-/** 칠하기로 누른 채 끄는 중 — 마지막 칸(다음 칸까지 cellsBetween 으로 잇는다) */
+/** 칠하기·지우개로 누른 채 끄는 중 — 마지막 칸(다음 칸까지 cellsBetween 으로 잇는다) */
 let stroke: { last: Pos } | null = null;
+/** 편집 중 카메라 중심(칸, y 는 아래로) — 켤 때의 화면에서 시작해 손으로만 움직인다. 편집 중이 아니면 null */
+let editCenter: { x: number; y: number } | null = null;
+/** 손으로 끄는 중 — 마지막 포인터 화면 점(CSS px) */
+let pan: { sx: number; sy: number } | null = null;
+/** Space 를 누르고 있다 — 그동안은 어느 도구든 손 */
+let spaceHand = false;
 let previewKind: ObjectKind | null = null; // 미리보기에 칠해 둔 종류 — 시트가 오기 전이면 null 로 남아 다시 칠한다
 /** 편집 중 포인터가 든 칸 — 맵 밖으로 나가면 null */
 let hoverCell: Pos | null = null;
@@ -686,13 +693,17 @@ function setEditing(on: boolean): void {
     doorPicker.close();
     hoverCell = null; // 다시 켤 때 옛 칸에 미리보기가 뜨지 않게
     stroke = null;
+    setPan(null);
+    spaceHand = false;
   }
   if (next === editing) return;
   editing = next;
   if (next) {
     editBase = draft = world.data;
     draftShown = true;
+    editCenter = { x: camera.position.x, y: -camera.position.y }; // 보던 화면 그대로 시작
   } else {
+    editCenter = null; // 루프가 다시 캐릭터를 따라간다
     if (draft !== null) {
       // 저장하지 않고 끝 — 초안을 버리고 편집 전 방(편집 중 room 이 왔으면 그 방)으로
       draft = null;
@@ -769,10 +780,22 @@ function placeScaled(mesh: THREE.Object3D, left: number, bottom: number, w: numb
   placeRect(mesh, left, bottom, w, h, drawZ('edit'));
 }
 
-/** 도구·포인터 칸·방이 바뀌면 — 문 테두리(문 도구일 때만), 놓기 미리보기, 칠할 칸 테두리. 놓기 창이 떠 있으면 맵 표시는 없다 */
+/** 지금 쓰는 도구 — Space 를 누르고 있으면 손 */
+function activeTool(): EditTool {
+  return spaceHand ? 'hand' : editTools.tool();
+}
+
+/** 손으로 끌기 시작·끝 — 커서도 (CSS: 손 도구면 grab, 끄는 중이면 grabbing) */
+function setPan(p: { sx: number; sy: number } | null): void {
+  pan = p;
+  renderer.domElement.classList.toggle('hub-grabbing', p !== null);
+}
+
+/** 도구·포인터 칸·방이 바뀌면 — 문 테두리(수정 도구일 때만), 놓기 미리보기, 지울 물체 빨간 칠, 칠할 칸 테두리. 놓기 창이 떠 있으면 맵 표시는 없다 */
 function updateEditView(): void {
-  const tool = editTools.tool();
-  world.marks.visible = editing && tool === 'door';
+  const tool = activeTool();
+  renderer.domElement.classList.toggle('hub-grab', editing && tool === 'hand');
+  world.marks.visible = editing && tool === 'select';
   world.cellMarks.visible = editing && tool === 'paint';
   preview.visible = redMark.visible = cellFrame.visible = false;
   if (!editing || !hoverCell || editTools.windowOpen()) return;
@@ -785,6 +808,13 @@ function updateEditView(): void {
     preview.visible = true;
     if (!canPlace(editData(), kind, at)) {
       placeScaled(redMark, at.x - 0.5, at.y + 0.5, shape.w, shape.h);
+      redMark.visible = true;
+    }
+  } else if (tool === 'erase') {
+    const o = topObjectAt(world.objects, hoverCell);
+    if (o) {
+      const r = objectRect(o);
+      placeScaled(redMark, r.left - 0.5, r.bottom + 0.5, r.right - r.left + 1, r.bottom - r.top + 1);
       redMark.visible = true;
     }
   } else if (tool === 'paint') {
@@ -805,6 +835,29 @@ function paintTo(cell: Pos): void {
   stroke.last = cell;
 }
 
+/**
+ * 지우개 끌기가 cell 에 닿았다 — 마지막 칸부터 이어 지나간 칸마다 맨 앞 물체를 지운다. 월드는 한 프레임 늦게 따라오므로
+ * 이미 지운 물체를 다시 고르면 removeObject 가 던져 그대로 — 겹친 물체는 한 프레임에 하나씩
+ */
+function eraseTo(cell: Pos): void {
+  if (!stroke) return;
+  for (const c of cellsBetween(stroke.last, cell)) {
+    const o = topObjectAt(world.objects, c);
+    if (o) editDraft((d) => removeObject(d, o.id));
+  }
+  stroke.last = cell;
+}
+
+/** 손 끌기 — 포인터가 움직인 만큼 편집 카메라를 옮긴다 */
+function panTo(sx: number, sy: number): void {
+  if (!pan || !editCenter) return;
+  editCenter = panCenter(editCenter, sx - pan.sx, sy - pan.sy, cellScreenPx(),
+    { w: world.room.map.width, h: world.room.map.height },
+    { w: camera.right - camera.left, h: camera.top - camera.bottom });
+  pan.sx = sx;
+  pan.sy = sy;
+}
+
 /** 화면 점(CSS px) → 칸 */
 function cellAt(sx: number, sy: number): Pos {
   return screenToCell(sx, sy, {
@@ -822,11 +875,11 @@ function hoverAt(cell: Pos | null): void {
   updateEditView();
 }
 
-/** 편집 중 맵을 눌렀다 — 도구대로 */
+/** 편집 중 맵을 눌렀다 — 도구대로 (손은 pointerdown 에서) */
 function editAt(cell: Pos): void {
   if (editTools.windowOpen()) return; // 창 바탕이 맵을 덮지만 혹시 새어 들어와도
-  const tool = editTools.tool();
-  if (tool === 'door') {
+  const tool = activeTool();
+  if (tool === 'select') {
     pickDoorAt(cell);
     return;
   }
@@ -835,6 +888,11 @@ function editAt(cell: Pos): void {
     if (!kind) return;
     const at = placeAt(kind, cell);
     editDraft((d) => placeObject(d, kind, at)); // 빨간 자리면 던져 그대로
+    return;
+  }
+  if (tool === 'erase') {
+    stroke = { last: cell };
+    eraseTo(cell);
     return;
   }
   if (tool === 'paint') {
@@ -850,7 +908,7 @@ function removeAt(cell: Pos): void {
   if (o) editDraft((d) => removeObject(d, o.id));
 }
 
-/** 문 도구로 맵을 눌렀다 — 문이면 그 문 오른쪽 위에 게임 목록, 아니면 목록을 닫는다 */
+/** 수정 도구로 맵을 눌렀다 — 문이면 그 문 오른쪽 위에 게임 목록, 아니면 목록을 닫는다 */
 function pickDoorAt(cell: Pos): void {
   const map = world.room.map;
   const door = map.doorAt(cell);
@@ -963,6 +1021,12 @@ window.addEventListener('keydown', (e) => {
     else if (step === 'end') setEditing(false);
     return;
   }
+  // 편집 중 Space 를 누르는 동안 손 — 페이지 스크롤·포커스된 버튼 누르기로 새지 않게 막는다
+  if (e.code === 'Space' && editing) {
+    e.preventDefault();
+    if (!spaceHand) setSpaceHand(true);
+    return;
+  }
   if (e.key === 'Enter' && !leaving && !editing) { // 편집 중엔 채팅창이 숨어 있다
     e.preventDefault();
     chatBox?.focus();
@@ -983,18 +1047,34 @@ window.addEventListener('keydown', (e) => {
     t = 1 - t;
   }
 });
+/** Space 손 켜고 끄기 — 끄면 끌던 것도 끝(도구가 바뀌었다) */
+function setSpaceHand(on: boolean): void {
+  spaceHand = on;
+  if (!on) setPan(null);
+  stroke = null; // 칠하기·지우개 끌기 중에 손으로 바뀌면 그 끌기는 끝
+  updateEditView();
+  refreshStatus();
+}
 window.addEventListener('keyup', (e) => {
+  if (e.code === 'Space' && spaceHand) setSpaceHand(false);
   const dir = KEY_DIR[e.code];
   if (!dir) return;
   const i = held.indexOf(dir);
   if (i >= 0) held.splice(i, 1);
 });
-window.addEventListener('blur', () => { held.length = 0; tapped = null; }); // 포커스를 잃으면 키가 눌린 채로 남지 않게
+window.addEventListener('blur', () => {
+  held.length = 0;
+  tapped = null;
+  if (spaceHand) setSpaceHand(false); // 창을 떠난 사이 뗀 Space 는 keyup 이 오지 않는다
+}); // 포커스를 잃으면 키가 눌린 채로 남지 않게
 // 맵을 누르면 입력 칸에서 빠져나온다 — 채팅 칸에 포커스가 남아 방향키가 먹지 않는 일이 없게
 canvas.addEventListener('pointerdown', (e) => {
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   if (!editing) return;
-  if (e.button === 0) editAt(cellAt(e.clientX, e.clientY));
+  if (e.button === 0 && activeTool() === 'hand' && !editTools.windowOpen()) {
+    canvas.setPointerCapture(e.pointerId); // 도구 줄 위로 끌고 나가도 계속 옮긴다
+    setPan({ sx: e.clientX, sy: e.clientY });
+  } else if (e.button === 0) editAt(cellAt(e.clientX, e.clientY));
   else if (e.button === 2) removeAt(cellAt(e.clientX, e.clientY));
 });
 // 편집 중 오른쪽 클릭은 치우기 — 브라우저 메뉴를 띄우지 않는다
@@ -1003,15 +1083,25 @@ canvas.addEventListener('contextmenu', (e) => {
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!editing) return;
+  if (pan) panTo(e.clientX, e.clientY);
+  // 끄는 동안에도 포인터 칸을 따라 — 맵이 움직였으니 Space 를 떼면 미리보기가 옛 칸에 남지 않게
   const cell = cellAt(e.clientX, e.clientY);
   hoverAt(cell);
-  if (stroke && editTools.tool() === 'paint') paintTo(cell);
+  if (pan) return;
+  const tool = activeTool();
+  if (stroke && tool === 'paint') paintTo(cell);
+  else if (stroke && tool === 'erase') eraseTo(cell);
 });
 canvas.addEventListener('pointerleave', () => {
   hoverAt(null);
   stroke = null; // 도구 줄·창 위로 끌고 나가면 끌기 끝 — 돌아와도 그 사이 칸을 잇지 않는다
 });
-for (const ev of ['pointerup', 'pointercancel', 'blur'] as const) window.addEventListener(ev, () => { stroke = null; });
+for (const ev of ['pointerup', 'pointercancel', 'blur'] as const) {
+  window.addEventListener(ev, () => {
+    stroke = null;
+    if (pan) setPan(null);
+  });
+}
 
 // --- 카메라 -------------------------------------------------------------------
 
@@ -1086,9 +1176,12 @@ renderer.setAnimationLoop((now) => {
 
   const viewX = camera.right - camera.left;
   const viewY = camera.top - camera.bottom;
-  const center = entered
-    ? { x: clampAxis(x, world.room.map.width, viewX), y: clampAxis(y, world.room.map.height, viewY) }
-    : driftCenter(now, { w: world.room.map.width, h: world.room.map.height }, { w: viewX, h: viewY });
+  const mapSize = { w: world.room.map.width, h: world.room.map.height };
+  // 편집 중엔 손으로 옮긴 자리 — 창 크기·방이 바뀌었을 수 있어 매 프레임 범위 안으로 맞춘다
+  if (editCenter) editCenter = panCenter(editCenter, 0, 0, cellScreenPx(), mapSize, { w: viewX, h: viewY });
+  const center = editCenter ?? (entered
+    ? { x: clampAxis(x, mapSize.w, viewX), y: clampAxis(y, mapSize.h, viewY) }
+    : driftCenter(now, mapSize, { w: viewX, h: viewY }));
   camera.position.x = center.x;
   camera.position.y = -center.y;
 

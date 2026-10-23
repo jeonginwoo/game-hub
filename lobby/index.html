@@ -102,6 +102,9 @@
       .hub-edit-tools[hidden] { display: none; }
       .hub-edit-brushes { display: flex; gap: 4px; padding-left: 8px; margin-left: 4px; border-left: 1px solid rgb(216 222 233 / 0.3); }
       .hub-edit-brushes[hidden] { display: none; }
+      /* 편집 손 도구(Space 를 누르는 동안도) — 끄는 중이면 쥔 손 (src/main.ts setPan · updateEditView) */
+      #app.hub-grab { cursor: grab; }
+      #app.hub-grabbing { cursor: grabbing; }
       /* 저장·취소 — 도구 줄 오른쪽 끝, 붓 줄과 같은 구분선 (결정 2026-10-21: 저장식 편집) */
       .hub-edit-commit { display: flex; gap: 4px; padding-left: 8px; margin-left: 4px; border-left: 1px solid rgb(216 222 233 / 0.3); }
       .hub-btn:disabled { opacity: 0.45; cursor: default; background: #4c566a; }

@@ -21,7 +21,7 @@ Files are grouped by feature, not by layer: a feature's pure module and its wiri
 | Folder | Files | What |
 |--------|-------|------|
 | (root) | `main.ts` | wiring: scene, input, loop |
-| `world/` | `map.ts` `tiles.ts` `layers.ts` `objects.ts` `movement.ts` `view.ts` | map, draw order, movement, camera (following, first-screen drift) — all pure |
+| `world/` | `map.ts` `tiles.ts` `layers.ts` `objects.ts` `movement.ts` `view.ts` | map, draw order, movement, camera (following, first-screen drift, edit-mode pan) — all pure |
 | `data/` | `object-art.ts` `object-names.ts` `games.ts` | what the lobby is configured with (art per object kind, group and shown name per object kind, game table) |
 | `launch/` | `entry.ts` | game entry contract (`docs/game-entry-contract.md`) |
 | `avatar/` | `look.ts` · `avatar-art.ts` | character look → drawing |
@@ -73,8 +73,12 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   respawning — the player stays put unless the new walk map blocks the cell (`unstick`, below).
 - **Edit mode** (owner only, `canEdit`) is a state in `main.ts`: while on, the lobby does not walk, shows only the
   map (the render loop hides every avatar; `setEditing` puts `hub-editing` on `body` so CSS hides head tags and the
-  chat box, and Enter does not open chat), and the tool bar (`edit-tools.ts`, bottom centre — the top row of the map holds doors) picks one of three
-  tools: place, door, paint. Turning edit mode on opens the **place window** (`edit-tools.ts`, centre, over a dimmed backdrop that keeps
+  chat box, and Enter does not open chat), and the tool bar (`edit-tools.ts`, bottom centre — the top row of the map holds doors) picks one of five
+  tools: place, select, erase, hand, paint. Holding Space makes any tool the hand while held (`activeTool` in `main.ts`; the keydown is
+  `preventDefault`ed so it neither scrolls nor presses a focused button). The camera does not follow the avatar while editing: it starts where
+  the view was (`editCenter`) and moves only by the hand — dragging moves the map with the pointer (`panCenter` in `view.ts`, clamped like
+  following, re-clamped every frame; the pointer is captured so a drag over the tool bar keeps panning; canvas cursor `grab` / `grabbing`).
+  Turning edit mode off goes back to following the avatar. Turning edit mode on opens the **place window** (`edit-tools.ts`, centre, over a dimmed backdrop that keeps
   pointers off the map but stays under the tool bar): group tabs and a grid of thumbnails — each kind painted by the same `paintObject`
   as the map (`drawThumb` from `main.ts`, cached per kind, only the open tab is built), sized by `thumbScale` (whole-number zoom, or
   shrunk to fit), the hovered kind's name in a caption line. Picking a kind closes the window and the place tool keeps placing it;
@@ -83,8 +87,10 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   place — the chosen kind's preview follows the pointer (`placeAt`: the pointer is the
   object's bottom centre), a red fill under it when `canPlace` (`placeObject`) says no, a left click places it
   (`placeObject`), a right click removes `topObjectAt` (the frontmost picture over the cell, `removeObject`; the canvas
-  `contextmenu` is suppressed while editing); door — the door marks (part of the world, rebuilt with it) are visible, a door opens
-  `door-picker.ts`, picking assigns the game (`assignDoor`);
+  `contextmenu` is suppressed while editing); select — the door marks (part of the world, rebuilt with it) are visible, a door opens
+  `door-picker.ts`, picking assigns the game (`assignDoor`); erase — a red fill over the picture area of `topObjectAt` under the
+  pointer, pressing removes it and a drag removes the frontmost object of every cell it crosses (`cellsBetween`, like paint; floor objects
+  too, when nothing else covers the cell); hand — no marks;
   paint — the bar shows four brushes (floor, wall, door, start = map characters), the world's cell marks show every
   cell (a translucent fill — walls and starts in their own colour — and a 1px grid), a white frame on the cell with a
   red fill when `paintCheck` (`paintTile`) says `no` (`same` — already that character — is not red); pressing starts a
