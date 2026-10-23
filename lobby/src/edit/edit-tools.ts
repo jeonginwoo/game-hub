@@ -1,10 +1,11 @@
-// 편집 중 아래쪽 가운데의 도구 줄(놓기·수정·지우개·손·칠하기 + 칠하기 붓 + 저장·취소)과 가운데 놓기 창(묶음 탭 + 썸네일 격자) — DOM 연결만,
+// 편집 중 아래쪽 가운데의 도구 줄(놓기·수정·지우개·손·칠하기 + 칠하기 붓·지우개 층 + 저장·취소)과 가운데 놓기 창(묶음 탭 + 썸네일 격자) — DOM 연결만,
 // 목록은 object-names.ts 의 kindsByGroup, 썸네일 배율은 place.ts 의 thumbScale.
 // (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집 · 2026-10-21: 저장식 편집 · 편집 개편 B 놓기 창 · C 도구 상자). 화면 글자는 textContent 로 넣는다.
 import { OBJECT_SHAPES, type ObjectKind, type TileChar } from '../../../server/src/room-map';
 import { kindsByGroup, OBJECT_INFO } from '../data/object-names';
 import { el } from '../room/entry-screen';
 import { CELL_PX } from '../world/layers';
+import type { ObjectLayer } from '../world/objects';
 import { thumbScale, type EditTool } from './place';
 
 export interface EditTools {
@@ -15,6 +16,8 @@ export interface EditTools {
   kind(): ObjectKind | null;
   /** 칠하기 붓 — 맵 글자 */
   brush(): TileChar;
+  /** 지우개가 지우는 층 — 고른 층만 */
+  eraseLayer(): ObjectLayer;
   /** 놓기 창이 열려 있는지 — 열려 있으면 맵 미리보기를 숨긴다 */
   windowOpen(): boolean;
   /** 도구를 놓기로 하고 놓기 창을 연다 (Esc 한 단계) */
@@ -45,6 +48,12 @@ const BRUSHES: readonly { readonly ch: TileChar; readonly name: string }[] = [
   { ch: 'S', name: '시작점' },
 ];
 
+// 지우개 층 — 쓰는 물체가 있는 층만(위 층 'top' 은 쓰는 물체가 생기면). (결정 2026-10-23: 지우개는 고른 층만)
+const ERASE_LAYERS: readonly { readonly layer: ObjectLayer; readonly name: string }[] = [
+  { layer: 'floor', name: '바닥' },
+  { layer: 'sorted', name: '물체' },
+];
+
 const THUMB_BOX_PX = 56; // 썸네일 한 칸 — 큰 건물은 줄이고 작은 풀은 정수배로 키운다
 
 /**
@@ -59,6 +68,7 @@ export function createEditTools(
   let tool: EditTool = 'place';
   let kind: ObjectKind | null = null;
   let brush: TileChar = '.';
+  let eraseLayer: ObjectLayer = 'sorted'; // 바닥을 실수로 통째 지우지 않게 물체부터
   let open = false;
   const groups = kindsByGroup();
   let group = 0;
@@ -90,6 +100,22 @@ export function createEditTools(
       onChange();
     });
     brushRow.append(b);
+    return b;
+  });
+
+  // 지우개일 때만 도구 줄 오른쪽에 층 둘 — 붓 줄과 같은 모양
+  const layerRow = el('div', 'hub-edit-brushes');
+  bar.append(layerRow);
+  const layerButtons = ERASE_LAYERS.map((r) => {
+    const b = el('button', 'hub-btn hub-small', r.name);
+    b.type = 'button';
+    b.addEventListener('click', () => {
+      b.blur();
+      eraseLayer = r.layer;
+      render();
+      onChange();
+    });
+    layerRow.append(b);
     return b;
   });
 
@@ -182,6 +208,8 @@ export function createEditTools(
     tabButtons.forEach((b, i) => b.classList.toggle('hub-on', i === group));
     brushButtons.forEach((b, i) => b.classList.toggle('hub-on', BRUSHES[i]?.ch === brush));
     brushRow.hidden = tool !== 'paint';
+    layerButtons.forEach((b, i) => b.classList.toggle('hub-on', ERASE_LAYERS[i]?.layer === eraseLayer));
+    layerRow.hidden = tool !== 'erase';
     backdrop.hidden = bar.hidden || !open;
     if (!backdrop.hidden) {
       renderGrid();
@@ -221,6 +249,7 @@ export function createEditTools(
     tool: () => tool,
     kind: () => kind,
     brush: () => brush,
+    eraseLayer: () => eraseLayer,
     windowOpen: () => open,
     openWindow,
     setDirty(dirty) {

@@ -5,6 +5,7 @@ import { bodyColor } from '../avatar/look';
 import type { EditTool } from '../edit/place';
 import type { NetStatus } from '../net/net';
 import type { Others } from '../net/others';
+import type { ObjectLayer } from '../world/objects';
 
 export interface RosterRow {
   readonly id: string; // welcome 전의 나는 ''
@@ -34,6 +35,8 @@ export interface EditNotice {
   readonly tool: EditTool;
   readonly window: boolean;
   readonly dirty: boolean;
+  /** 지우개가 지우는 층 — 없으면 물체(정렬 층) */
+  readonly eraseLayer?: ObjectLayer;
 }
 
 /**
@@ -45,15 +48,22 @@ export function noticeText(status: NetStatus, edit: EditNotice | null = null): s
   if (status === 'connecting') return '연결 중…';
   if (status === 'closed') return '연결 끊김 — 새로고침';
   if (edit === null) return null;
-  const what = edit.window ? '놓을 물체 고르기' : EDIT_NOTICE[edit.tool];
+  const what = edit.window ? '놓을 물체 고르기'
+    : edit.tool === 'erase' ? `누르거나 끌어서 ${ERASE_WHAT[edit.eraseLayer ?? 'sorted']} 지우기` : EDIT_NOTICE[edit.tool];
   const esc = edit.dirty ? '(저장해야 모두에게 · 저장·취소로 끝)' : edit.window ? '(Esc 끝)' : '(Esc 물체 고르기)';
   return `편집 중 — ${what} ${esc}`;
 }
 
-const EDIT_NOTICE: Readonly<Record<EditTool, string>> = {
+/** 지우개가 지우는 층 — 고른 층만 (결정 2026-10-23) */
+const ERASE_WHAT: Readonly<Record<ObjectLayer, string>> = {
+  floor: '바닥',
+  sorted: '물체',
+  top: '위 층 물체',
+};
+
+const EDIT_NOTICE: Readonly<Record<Exclude<EditTool, 'erase'>, string>> = {
   place: '누르면 놓기 · 오른쪽 클릭 치우기',
   select: '문을 눌러 게임 고르기',
-  erase: '누르거나 끌어서 물체 지우기',
   hand: '끌어서 맵 옮기기',
   paint: '누르거나 끌어서 칸 칠하기',
 };

@@ -29,7 +29,7 @@ Files are grouped by feature, not by layer: a feature's pure module and its wiri
 | `room/` | `room.ts` · `entry-screen.ts` | room code / name → first screen |
 | `chat/` | `chat.ts` · `chat-box.ts` | chat rules → chat box |
 | `hud/` | `hud.ts` · `hud-bar.ts` | roster / notice text → top-right buttons |
-| `edit/` | `edit.ts` `place.ts` `paint.ts` `draft.ts` · `door-picker.ts` `edit-tools.ts` | owner's edit mode: who may edit, door marks, game choices, where an object goes / whether it may / which one is under the pointer / how big its thumbnail is / what Esc does, whether a cell may be painted / which cells a drag crosses, whether the draft has changes → door game list, tool bar (with paint brushes and save / cancel) and place window |
+| `edit/` | `edit.ts` `place.ts` `paint.ts` `draft.ts` · `door-picker.ts` `edit-tools.ts` | owner's edit mode: who may edit, door marks, game choices, where an object goes / whether it may / which one is under the pointer / how big its thumbnail is / what Esc does, whether a cell may be painted / which cells a drag crosses, whether the draft has changes → door game list, tool bar (with paint brushes, eraser layers and save / cancel) and place window |
 
 A new module joins the folder of the feature it serves; a new folder is made when a feature
 has no home yet. `games/` is not used as a folder name (it is the repo-root games folder).
@@ -88,9 +88,9 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   object's bottom centre), a red fill under it when `canPlace` (`placeObject`) says no, a left click places it
   (`placeObject`), a right click removes `topObjectAt` (the frontmost picture over the cell, `removeObject`; the canvas
   `contextmenu` is suppressed while editing); select — the door marks (part of the world, rebuilt with it) are visible, a door opens
-  `door-picker.ts`, picking assigns the game (`assignDoor`); erase — a red fill over the picture area of `topObjectAt` under the
-  pointer, pressing removes it and a drag removes the frontmost object of every cell it crosses (`cellsBetween`, like paint; floor objects
-  too, when nothing else covers the cell); hand — no marks;
+  `door-picker.ts`, picking assigns the game (`assignDoor`); erase — the bar shows two layers (floor, object = `floor`, `sorted`;
+  `top` gets a button once some kind uses it), a red fill over the picture area of `topObjectAt` in the chosen layer under the
+  pointer, pressing removes it and a drag removes that layer's frontmost object of every cell it crosses (`cellsBetween`, like paint); hand — no marks;
   paint — the bar shows four brushes (floor, wall, door, start = map characters), the world's cell marks show every
   cell (a translucent fill — walls and starts in their own colour — and a 1px grid), a white frame on the cell with a
   red fill when `paintCheck` (`paintTile`) says `no` (`same` — already that character — is not red); pressing starts a

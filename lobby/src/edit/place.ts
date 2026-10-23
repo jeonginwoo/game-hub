@@ -1,7 +1,7 @@
 // 편집 도구 — 물체 놓기 자리·놓을 수 있는지·치울 물체 고르기·놓기 창 썸네일 배율·Esc 한 단계. Three.js·DOM 과 무관한 순수 함수.
 // (결정 2026-10-16: 물체 배치 편집 — 놓기 판정은 서버와 같은 placeObject · 2026-10-21: 편집 개편 B 놓기 창 · C 도구 상자)
 import { OBJECT_SHAPES, placeObject, type ObjectKind, type Pos, type RoomData } from '../../../server/src/room-map';
-import { objectRect, objectZ, type MapObject } from '../world/objects';
+import { objectRect, objectZ, type MapObject, type ObjectLayer } from '../world/objects';
 
 /** 편집 도구 상자 — 물체 놓기(오른쪽 클릭은 치우기) · 수정(문을 눌러 게임 배정) · 지우개(물체) · 손(맵 끌기) · 타일 칠하기 */
 export type EditTool = 'place' | 'select' | 'erase' | 'hand' | 'paint';
@@ -21,11 +21,15 @@ export function canPlace(data: RoomData, kind: ObjectKind, at: Pos): boolean {
   }
 }
 
-/** 칸을 그림 영역으로 덮는 물체 가운데 맨 앞에 그려진 것(오른쪽 클릭·지우개가 지울 것) — z 가 같으면 목록 뒤쪽(나중에 그려짐). 없으면 undefined */
-export function topObjectAt(objects: readonly MapObject[], cell: Pos): MapObject | undefined {
+/**
+ * 칸을 그림 영역으로 덮는 물체 가운데 맨 앞에 그려진 것(오른쪽 클릭·지우개가 지울 것) — z 가 같으면 목록 뒤쪽(나중에 그려짐). 없으면 undefined.
+ * layer 를 주면 그 층의 물체만 본다 — 지우개는 고른 층만 지운다(결정 2026-10-23)
+ */
+export function topObjectAt(objects: readonly MapObject[], cell: Pos, layer?: ObjectLayer): MapObject | undefined {
   let top: MapObject | undefined;
   let topZ = -Infinity;
   for (const o of objects) {
+    if (layer !== undefined && o.layer !== layer) continue;
     const r = objectRect(o);
     if (cell.x < r.left || cell.x > r.right || cell.y < r.top || cell.y > r.bottom) continue;
     const z = objectZ(o);

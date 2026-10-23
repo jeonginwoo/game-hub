@@ -486,7 +486,9 @@ function refreshStatus(): void {
   hud.update({
     count: peopleCount(netStatus, others),
     rows: rosterRows(others, entered.name, myLook),
-    notice: noticeText(netStatus, editing ? { tool: activeTool(), window: editTools.windowOpen(), dirty: isDirty() } : null),
+    notice: noticeText(netStatus, editing
+      ? { tool: activeTool(), window: editTools.windowOpen(), dirty: isDirty(), eraseLayer: editTools.eraseLayer() }
+      : null),
     owner: canEdit(others),
     editing,
   });
@@ -635,7 +637,7 @@ window.addEventListener('pagehide', () => {
 // 방장만. 켜면 걷기를 멈추고 가운데에 놓기 창(묶음 탭 + 썸네일), 아래쪽 가운데에 도구 줄(놓기·수정·지우개·손·칠하기 + 저장·취소).
 // 놓기: 창에서 고르면 창이 닫히고, 고른 물체의 반투명 미리보기가 포인터를 따라가며(놓을 수 없으면 밑에 빨간 칠) 누를 때마다 놓기.
 // 오른쪽 클릭은 포인터 아래 맨 앞 물체 치우기. Esc 는 창을 다시, 창에서 Esc 면 편집 끝. 수정: 맵의 문을 누르면 옆에 게임 목록 → 고르면 배정.
-// 지우개: 포인터 아래 맨 앞 물체에 빨간 칠, 누르거나 누른 채 끌면 지나간 물체마다 지우기. 손: 끌어서 맵 옮기기(Space 를 누르는 동안은 어느 도구든 손).
+// 지우개: 고른 층(바닥·물체)에서 포인터 아래 맨 앞 물체에 빨간 칠, 누르거나 누른 채 끌면 지나간 물체마다 지우기. 손: 끌어서 맵 옮기기(Space 를 누르는 동안은 어느 도구든 손).
 // 칠하기: 맵 전체에 칸 격자, 포인터 칸에 흰 테두리(칠할 수 없으면 빨간 칠), 누르거나 누른 채 끌면 지나간 칸마다 칠하기.
 // 편집 중엔 캐릭터·머리 위 글·채팅창을 숨겨 맵만 보이고, 카메라는 캐릭터를 따라가지 않고 손으로만 움직인다 — 끄면 다시 캐릭터로.
 // 도구는 초안만 고친다(판정은 서버와 같은 room-map.ts 함수) — 「저장」 때 save 로 한 번에 보내고, 「취소」·연결 끊김·방장 넘어감이면 버린다.
@@ -811,7 +813,7 @@ function updateEditView(): void {
       redMark.visible = true;
     }
   } else if (tool === 'erase') {
-    const o = topObjectAt(world.objects, hoverCell);
+    const o = topObjectAt(world.objects, hoverCell, editTools.eraseLayer());
     if (o) {
       const r = objectRect(o);
       placeScaled(redMark, r.left - 0.5, r.bottom + 0.5, r.right - r.left + 1, r.bottom - r.top + 1);
@@ -836,13 +838,13 @@ function paintTo(cell: Pos): void {
 }
 
 /**
- * 지우개 끌기가 cell 에 닿았다 — 마지막 칸부터 이어 지나간 칸마다 맨 앞 물체를 지운다. 월드는 한 프레임 늦게 따라오므로
+ * 지우개 끌기가 cell 에 닿았다 — 마지막 칸부터 이어 지나간 칸마다 고른 층의 맨 앞 물체를 지운다. 월드는 한 프레임 늦게 따라오므로
  * 이미 지운 물체를 다시 고르면 removeObject 가 던져 그대로 — 겹친 물체는 한 프레임에 하나씩
  */
 function eraseTo(cell: Pos): void {
   if (!stroke) return;
   for (const c of cellsBetween(stroke.last, cell)) {
-    const o = topObjectAt(world.objects, c);
+    const o = topObjectAt(world.objects, c, editTools.eraseLayer());
     if (o) editDraft((d) => removeObject(d, o.id));
   }
   stroke.last = cell;

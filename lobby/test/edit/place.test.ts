@@ -54,6 +54,13 @@ describe('topObjectAt', () => {
     expect(topObjectAt(objs, { x: 18, y: 8 })?.id).toBe('yard');
   });
 
+  it('층을 주면 그 층만 — 나무 밑의 마당도 바닥 층으로 고를 수 있고, 다른 층만 있으면 없음', () => {
+    const objs = drawn([tree, yard]);
+    expect(topObjectAt(objs, { x: 20, y: 8 }, 'floor')?.id).toBe('yard');
+    expect(topObjectAt(objs, { x: 20, y: 8 }, 'sorted')?.id).toBe('t1');
+    expect(topObjectAt(objs, { x: 18, y: 8 }, 'sorted')).toBeUndefined();
+  });
+
   it('정렬 층은 발이 아래인 것이 앞, 같으면 목록 뒤쪽', () => {
     const front: RoomObject = { id: 't2', kind: 'tree', x: 19, y: 11 }; // 2칸 아래 — 8~11
     expect(topObjectAt(drawn([front, tree]), { x: 20, y: 8 })?.id).toBe('t2');
