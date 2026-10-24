@@ -94,31 +94,41 @@
       .hub-door-choices .hub-btn { text-align: left; }
       .hub-btn.hub-on { background: #5e81ac; font-weight: 600; }
       .hub-edit-btn[hidden] { display: none; }
-      /* 편집 중 도구 줄(아래쪽 가운데 — 위쪽은 맵 윗줄의 문을 가린다)과 놓기 물체 목록(왼쪽 위) (src/edit/edit-tools.ts) — 채팅창(왼쪽 아래)을 가리지 않게 높이 제한 */
+      /* 편집 중 아래 줄 — 창 열기 · 지우개(+ 층)·손 · 저장·취소, 묶음마다 구분선 (아래쪽 가운데 — 위쪽은 맵 윗줄의 문을 가린다)
+         (src/edit/edit-tools.ts, 결정 2026-10-23: 편집 창 재구성 · 2026-10-24: 지우개·손은 아래 줄) */
       .hub-edit-tools {
         position: fixed; bottom: 12px; left: 50%; z-index: 20; transform: translateX(-50%); display: flex; gap: 4px; padding: 4px;
         border-radius: 10px; background: rgb(46 52 64 / 0.9);
       }
       .hub-edit-tools[hidden] { display: none; }
-      .hub-edit-brushes { display: flex; gap: 4px; padding-left: 8px; margin-left: 4px; border-left: 1px solid rgb(216 222 233 / 0.3); }
-      .hub-edit-brushes[hidden] { display: none; }
+      .hub-edit-current { min-width: 140px; }
+      .hub-edit-group { display: flex; gap: 4px; padding-left: 8px; margin-left: 4px; border-left: 1px solid rgb(216 222 233 / 0.3); }
+      .hub-edit-group[hidden] { display: none; }
       /* 편집 손 도구(Space 를 누르는 동안도) — 끄는 중이면 쥔 손 (src/main.ts setPan · updateEditView) */
       #app.hub-grab { cursor: grab; }
       #app.hub-grabbing { cursor: grabbing; }
-      /* 저장·취소 — 도구 줄 오른쪽 끝, 붓 줄과 같은 구분선 (결정 2026-10-21: 저장식 편집) */
-      .hub-edit-commit { display: flex; gap: 4px; padding-left: 8px; margin-left: 4px; border-left: 1px solid rgb(216 222 233 / 0.3); }
       .hub-btn:disabled { opacity: 0.45; cursor: default; background: #4c566a; }
-      /* 놓기 창 — 맵을 덮는 어두운 바탕 가운데. 바탕은 도구 줄(20) 아래라 줄의 저장·취소는 그대로 눌린다 (결정 2026-10-21: 편집 개편 B) */
-      .hub-place-backdrop {
+      /* 편집 창 — 맵을 덮는 어두운 바탕 가운데. 바탕은 아래 줄(20) 아래라 줄의 저장·취소는 그대로 눌린다.
+         높이를 정해 두어 탭을 오가도 창이 출렁이지 않고, 묶음 목록·썸네일은 각각 스크롤 */
+      .hub-edit-backdrop {
         position: fixed; inset: 0; z-index: 19; display: flex; align-items: center; justify-content: center;
         padding: 16px 16px 64px; background: rgb(0 0 0 / 0.35);
       }
-      .hub-place-backdrop[hidden] { display: none; }
-      .hub-place-window { width: min(640px, 100%); max-height: 100%; }
-      .hub-object-groups { display: flex; flex-wrap: wrap; gap: 4px; }
-      .hub-object-groups .hub-btn { padding: 4px 8px; font-size: 12px; }
+      .hub-edit-backdrop[hidden] { display: none; }
+      .hub-edit-window { width: min(680px, 100%); height: min(520px, 100%); }
+      .hub-edit-tabs { display: flex; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid rgb(216 222 233 / 0.2); }
+      .hub-edit-tabs .hub-btn { flex: 1; }
+      .hub-edit-place, .hub-edit-choice { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
+      .hub-edit-place[hidden], .hub-edit-choice[hidden] { display: none; }
+      .hub-edit-layers { display: flex; gap: 4px; }
+      .hub-edit-layers .hub-btn { padding: 4px 12px; font-size: 12px; }
+      .hub-edit-lists { display: flex; gap: 8px; flex: 1; min-height: 0; }
+      .hub-object-groups { display: flex; flex-direction: column; gap: 4px; width: 128px; flex: none; overflow-y: auto; }
+      .hub-object-groups .hub-btn { padding: 6px 8px; font-size: 12px; text-align: left; }
+      .hub-object-groups .hub-btn[hidden] { display: none; }
       .hub-object-thumbs {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 4px; min-height: 0; overflow-y: auto;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); grid-auto-rows: 64px; align-content: start;
+        gap: 4px; flex: 1; min-width: 0; overflow-y: auto;
       }
       .hub-thumb {
         display: flex; align-items: center; justify-content: center; height: 64px; padding: 0; border: 2px solid transparent;
@@ -128,6 +138,9 @@
       .hub-thumb.hub-on { border-color: #88c0d0; }
       .hub-thumb canvas { image-rendering: pixelated; }
       .hub-object-caption { min-height: 1.4em; color: #d8dee9; font-size: 13px; text-align: center; }
+      .hub-edit-hint { margin: 0; color: #a3adc2; font-size: 13px; }
+      .hub-edit-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+      .hub-edit-choices .hub-btn { min-width: 88px; }
       /* 캐릭터 머리 위 — 말풍선(있을 때만) + 이름표. main.ts 가 매 프레임 자리를 옮긴다.
          z-index 층: 머리 위 10 < 버튼 줄·창·알림·채팅 20 < 첫 화면 30 — 사람이 들어올 때마다 body 끝에 붙어 창을 덮던 것 */
       .hub-head {

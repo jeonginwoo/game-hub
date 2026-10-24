@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OBJECT_SHAPES } from '../../../server/src/room-map';
+import { OBJECT_ART } from '../../src/data/object-art';
 import { kindsByGroup, OBJECT_INFO } from '../../src/data/object-names';
 
 describe('물체 이름·묶음', () => {
@@ -25,5 +26,15 @@ describe('물체 이름·묶음', () => {
       const idx = g.kinds.map((k) => order.indexOf(k));
       expect(idx, g.group).toEqual([...idx].sort((a, b) => a - b));
     }
+  });
+
+  // 놓기 창의 층 탭 — 바닥 탭에서 고른 것은 배경에 구워지는 바닥 층이어야 한다 (물체 탭엔 지붕·바닥 무늬처럼 바닥 층 그림도 있다)
+  it('바닥 탭 묶음의 종류는 모두 바닥 층 그림, 층마다 묶음이 있다', () => {
+    const groups = kindsByGroup();
+    for (const g of groups.filter((x) => x.layer === 'floor')) {
+      for (const k of g.kinds) expect(OBJECT_ART[k].layer, k).toBe('floor');
+    }
+    expect(groups.some((g) => g.layer === 'floor')).toBe(true);
+    expect(groups.some((g) => g.layer === 'object')).toBe(true);
   });
 });

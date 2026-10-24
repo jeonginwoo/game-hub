@@ -30,7 +30,7 @@ export function peopleCount(status: NetStatus, others: Others): number | null {
   return status === 'open' ? others.players.size + 1 : null;
 }
 
-/** 편집 중 알림에 필요한 것 — 도구, 놓기 창이 열렸는지, 초안에 저장 안 한 바뀐 것이 있는지 */
+/** 편집 중 알림에 필요한 것 — 도구, 편집 창이 열렸는지, 초안에 저장 안 한 바뀐 것이 있는지 */
 export interface EditNotice {
   readonly tool: EditTool;
   readonly window: boolean;
@@ -41,16 +41,16 @@ export interface EditNotice {
 
 /**
  * 위쪽 가운데 알림 — 연결 알림이 먼저, 열려 있으면 편집 중(edit) 도구 안내, 둘 다 아니면 null.
- * Esc 는 창 밖에선 놓기 창을, 창에선 편집 끝. 바뀐 것이 있으면 Esc 로 끝나지 않는다 — 저장·취소로
- * (결정 2026-10-21: 저장식 편집 · 편집 개편 B 놓기 창)
+ * Esc 는 창 밖에선 편집 창을, 창에선 편집 끝. 바뀐 것이 있으면 Esc 로 끝나지 않는다 — 저장·취소로
+ * (결정 2026-10-21: 저장식 편집 · 편집 개편 B 놓기 창 · 2026-10-23: 편집 창 재구성)
  */
 export function noticeText(status: NetStatus, edit: EditNotice | null = null): string | null {
   if (status === 'connecting') return '연결 중…';
   if (status === 'closed') return '연결 끊김 — 새로고침';
   if (edit === null) return null;
-  const what = edit.window ? '놓을 물체 고르기'
+  const what = edit.window ? '도구 고르기'
     : edit.tool === 'erase' ? `누르거나 끌어서 ${ERASE_WHAT[edit.eraseLayer ?? 'sorted']} 지우기` : EDIT_NOTICE[edit.tool];
-  const esc = edit.dirty ? '(저장해야 모두에게 · 저장·취소로 끝)' : edit.window ? '(Esc 끝)' : '(Esc 물체 고르기)';
+  const esc = edit.dirty ? '(저장해야 모두에게 · 저장·취소로 끝)' : edit.window ? '(Esc 끝)' : '(Esc 도구 고르기)';
   return `편집 중 — ${what} ${esc}`;
 }
 

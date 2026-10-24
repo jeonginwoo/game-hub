@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildRoom, type RoomObject } from '../../../server/src/room-map';
 import { DEFAULT_ROOM } from '../../../server/src/room-templates';
 import { OBJECT_ART } from '../../src/data/object-art';
-import { canPlace, escStep, placeAt, thumbScale, topObjectAt } from '../../src/edit/place';
+import { canPlace, escStep, placeAt, isWindowTool, thumbScale, toolLabel, topObjectAt } from '../../src/edit/place';
 import type { MapObject } from '../../src/world/objects';
 
 /** 방 데이터 물체 → 로비가 그리는 물체 (main.ts buildWorld 와 같은 합치기) */
@@ -91,7 +91,7 @@ describe('escStep', () => {
     expect(escStep({ ...s, doorList: true })).toBe('close-door-list');
   });
 
-  it('창 밖(놓는 중·문·칠하기)이면 놓기 창을 다시 연다', () => {
+  it('창 밖(놓는 중·문·칠하기)이면 편집 창을 다시 연다', () => {
     expect(escStep(s)).toBe('open-window');
     expect(escStep({ ...s, dirty: true })).toBe('open-window');
   });
@@ -99,5 +99,30 @@ describe('escStep', () => {
   it('창에서면 편집 끝 — 바뀐 것이 있으면 그대로', () => {
     expect(escStep({ ...s, window: true })).toBe('end');
     expect(escStep({ ...s, window: true, dirty: true })).toBe('stay');
+  });
+});
+
+describe('toolLabel', () => {
+  const pick = { kind: null, brush: '.' } as const;
+
+  it('게임은 이름만', () => {
+    expect(toolLabel('select', pick)).toBe('게임');
+  });
+
+  it('타일 규칙은 붓을 붙인다', () => {
+    expect(toolLabel('paint', { ...pick, brush: '#' })).toBe('타일 규칙 · 벽');
+  });
+
+  it('오브젝트는 고른 물체 이름 — 안 골랐으면 이름만', () => {
+    expect(toolLabel('place', pick)).toBe('오브젝트');
+    expect(toolLabel('place', { ...pick, kind: 'fill-soil' })).toBe('오브젝트 · 갈색 흙 채움');
+  });
+});
+
+describe('isWindowTool', () => {
+  it('오브젝트·게임·타일 규칙은 창 탭, 지우개·손은 아래 줄', () => {
+    for (const t of ['place', 'select', 'paint'] as const) expect(isWindowTool(t), t).toBe(true);
+    expect(isWindowTool('erase')).toBe(false);
+    expect(isWindowTool('hand')).toBe(false);
   });
 });

@@ -29,7 +29,7 @@ Files are grouped by feature, not by layer: a feature's pure module and its wiri
 | `room/` | `room.ts` · `entry-screen.ts` | room code / name → first screen |
 | `chat/` | `chat.ts` · `chat-box.ts` | chat rules → chat box |
 | `hud/` | `hud.ts` · `hud-bar.ts` | roster / notice text → top-right buttons |
-| `edit/` | `edit.ts` `place.ts` `paint.ts` `draft.ts` · `door-picker.ts` `edit-tools.ts` | owner's edit mode: who may edit, door marks, game choices, where an object goes / whether it may / which one is under the pointer / how big its thumbnail is / what Esc does, whether a cell may be painted / which cells a drag crosses, whether the draft has changes → door game list, tool bar (with paint brushes, eraser layers and save / cancel) and place window |
+| `edit/` | `edit.ts` `place.ts` `paint.ts` `draft.ts` · `door-picker.ts` `edit-tools.ts` | owner's edit mode: who may edit, door marks, game choices, where an object goes / whether it may / which one is under the pointer / how big its thumbnail is / what Esc does, whether a cell may be painted / which cells a drag crosses, whether the draft has changes → door game list, edit bar (window button, eraser with its layers, hand, save / cancel) and edit window (object / game / tile-rule tabs) |
 
 A new module joins the folder of the feature it serves; a new folder is made when a feature
 has no home yet. `games/` is not used as a folder name (it is the repo-root games folder).
@@ -44,7 +44,7 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   modules and holds the mutable state. When a branch in `main.ts` starts deciding
   something, move the decision into a pure module.
 - **HTML UI over the canvas** (entry screen, top-right button bar with the edit/look/people/settings
-  buttons and panels, chat box, door game list, edit tool bar and place window) is wiring too, each in its own module (`entry-screen.ts`, `hud-bar.ts`,
+  buttons and panels, chat box, door game list, edit bar and edit window) is wiring too, each in its own module (`entry-screen.ts`, `hud-bar.ts`,
   `chat-box.ts`, `door-picker.ts`, `edit-tools.ts`); what to show is decided in a pure module (`room.ts`, `hud.ts`, `chat.ts`, `look.ts`, `edit.ts`, `place.ts`, `paint.ts`, `object-names.ts`). Icons are inline SVG drawn in code, not emoji. Text goes in
   with `textContent`, never `innerHTML`. Storage (`localStorage`) is read/written inside
   `try/catch` and the lobby works without it. Styles live in `index.html` (`hub-` classes).
@@ -73,25 +73,30 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   respawning — the player stays put unless the new walk map blocks the cell (`unstick`, below).
 - **Edit mode** (owner only, `canEdit`) is a state in `main.ts`: while on, the lobby does not walk, shows only the
   map (the render loop hides every avatar; `setEditing` puts `hub-editing` on `body` so CSS hides head tags and the
-  chat box, and Enter does not open chat), and the tool bar (`edit-tools.ts`, bottom centre — the top row of the map holds doors) picks one of five
-  tools: place, select, erase, hand, paint. Holding Space makes any tool the hand while held (`activeTool` in `main.ts`; the keydown is
+  chat box, and Enter does not open chat), and one of five tools is active: place, select, erase, hand, paint. Tools with
+  something to pick live in the **edit window** (`edit-tools.ts`, centre, over a dimmed backdrop that keeps pointers off the map but
+  stays under the bar), one tab each (`WINDOW_TOOLS` in `place.ts`: 「오브젝트」 = place, 「게임」 = select, 「타일 규칙」 = paint); the
+  **edit bar** (bottom centre — the top row of the map holds doors) holds the window button (labelled by `toolLabel`: the last
+  window tool and what it picked), the tools that act straight away (`BAR_TOOLS`: erase — its two layer buttons show next to it while
+  it is on —, hand) and save / cancel. Holding Space makes any tool the hand while held (`activeTool` in `main.ts`; the keydown is
   `preventDefault`ed so it neither scrolls nor presses a focused button). The camera does not follow the avatar while editing: it starts where
   the view was (`editCenter`) and moves only by the hand — dragging moves the map with the pointer (`panCenter` in `view.ts`, clamped like
-  following, re-clamped every frame; the pointer is captured so a drag over the tool bar keeps panning; canvas cursor `grab` / `grabbing`).
-  Turning edit mode off goes back to following the avatar. Turning edit mode on opens the **place window** (`edit-tools.ts`, centre, over a dimmed backdrop that keeps
-  pointers off the map but stays under the tool bar): group tabs and a grid of thumbnails — each kind painted by the same `paintObject`
-  as the map (`drawThumb` from `main.ts`, cached per kind, only the open tab is built), sized by `thumbScale` (whole-number zoom, or
-  shrunk to fit), the hovered kind's name in a caption line. Picking a kind closes the window and the place tool keeps placing it;
-  the tool bar's 「놓기」 always reopens the window; a click on the backdrop closes it only once a kind is chosen. While the window is
+  following, re-clamped every frame; the pointer is captured so a drag over the bar keeps panning; canvas cursor `grab` / `grabbing`).
+  Turning edit mode off goes back to following the avatar. Turning edit mode on opens the window on the object tab: layer tabs
+  (floor, object — `layer` of `OBJECT_GROUPS`), a scrolling group list on the left and a scrolling grid of thumbnails on the right — each
+  kind painted by the same `paintObject` as the map (`drawThumb` from `main.ts`, cached per kind, only the open group is built), sized
+  by `thumbScale` (whole-number zoom, or shrunk to fit), the hovered kind's name in a caption line. Picking a kind closes the window and
+  the place tool keeps placing it; the tile-rule tab picks a brush the same way; the game tab switches to select at once. The window
+  button reopens the window on the last window tab; a click on the backdrop closes it unless the tool is place with no kind chosen. While the window is
   open the map shows no edit marks. A pointer on the map goes screen → cell (`screenToCell` in `view.ts`), then by tool:
   place — the chosen kind's preview follows the pointer (`placeAt`: the pointer is the
   object's bottom centre), a red fill under it when `canPlace` (`placeObject`) says no, a left click places it
   (`placeObject`), a right click removes `topObjectAt` (the frontmost picture over the cell, `removeObject`; the canvas
   `contextmenu` is suppressed while editing); select — the door marks (part of the world, rebuilt with it) are visible, a door opens
-  `door-picker.ts`, picking assigns the game (`assignDoor`); erase — the bar shows two layers (floor, object = `floor`, `sorted`;
+  `door-picker.ts`, picking assigns the game (`assignDoor`); erase — two layers (floor, object = `floor`, `sorted`;
   `top` gets a button once some kind uses it), a red fill over the picture area of `topObjectAt` in the chosen layer under the
   pointer, pressing removes it and a drag removes that layer's frontmost object of every cell it crosses (`cellsBetween`, like paint); hand — no marks;
-  paint — the bar shows four brushes (floor, wall, door, start = map characters), the world's cell marks show every
+  paint — the brush (floor, wall, door, start = map characters) from the tile-rule tab, the world's cell marks show every
   cell (a translucent fill — walls and starts in their own colour — and a 1px grid), a white frame on the cell with a
   red fill when `paintCheck` (`paintTile`) says `no` (`same` — already that character — is not red); pressing starts a
   stroke and every cell it crosses (`cellsBetween` joins pointer moves, side by side, never diagonally) is painted
@@ -105,7 +110,7 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   draft — when ownership moves or the connection closes. While the draft differs, Esc and the edit button do not end
   edit mode (the notice says to save or cancel). The preview, the frame and the red fill are on the edit layer and are
   re-evaluated only when the pointer enters another cell, the tool changes or the world is rebuilt.
-  Esc steps back one level (`escStep` in `place.ts`) — door game list → the place window (from any tool) → edit mode off
+  Esc steps back one level (`escStep` in `place.ts`) — door game list → the edit window on its last tab (from any tool) → edit mode off
   (from the window, unless the draft differs); an Esc that closed a button-bar panel is `preventDefault`ed so it does not also step back.
 - **A received room may wall a player in.** When the world changes without a respawn (`room`, edit mode turning off),
   `unstick` moves my avatar off a cell the new walk map blocks, to `nearestFloor` (fewest steps, never a door cell),

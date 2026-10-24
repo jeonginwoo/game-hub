@@ -307,7 +307,7 @@ Promise.all(SHEET_NAMES.map((k) => loadImage(TILE_SHEET_DIR + TILE_SHEET_FILE[k]
   .then((imgs) => {
     loadedSheets = Object.fromEntries(SHEET_NAMES.map((k, i) => [k, imgs[i]])) as Record<Sheet, HTMLImageElement>;
     world.paint(loadedSheets);
-    editTools.refreshThumbs(); // 시트 전에 연 놓기 창은 빈 자리였다
+    editTools.refreshThumbs(); // 시트 전에 연 편집 창은 빈 자리였다
   })
   .catch((e: unknown) => console.error(e));
 
@@ -649,15 +649,16 @@ window.addEventListener('pagehide', () => {
 });
 
 // --- 편집 모드 (edit.ts · place.ts) ----------------------------------------------
-// 방장만. 켜면 걷기를 멈추고 가운데에 놓기 창(묶음 탭 + 썸네일), 아래쪽 가운데에 도구 줄(놓기·수정·지우개·손·칠하기 + 저장·취소).
+// 방장만. 켜면 걷기를 멈추고 가운데에 편집 창(탭 셋 — 오브젝트: 층 탭 + 묶음 목록 + 썸네일, 게임, 타일 규칙: 붓),
+// 아래쪽 가운데에 줄(창 열기 — 마지막 창 도구를 글로 · 지우개 + 층 · 손 · 저장·취소).
 // 놓기: 창에서 고르면 창이 닫히고, 고른 물체의 반투명 미리보기가 포인터를 따라가며(놓을 수 없으면 밑에 빨간 칠) 누를 때마다 놓기.
-// 오른쪽 클릭은 포인터 아래 맨 앞 물체 치우기. Esc 는 창을 다시, 창에서 Esc 면 편집 끝. 수정: 맵의 문을 누르면 옆에 게임 목록 → 고르면 배정.
+// 오른쪽 클릭은 포인터 아래 맨 앞 물체 치우기. Esc 는 창을 마지막 탭으로 다시, 창에서 Esc 면 편집 끝. 수정: 맵의 문을 누르면 옆에 게임 목록 → 고르면 배정.
 // 지우개: 고른 층(바닥·물체)에서 포인터 아래 맨 앞 물체에 빨간 칠, 누르거나 누른 채 끌면 지나간 물체마다 지우기. 손: 끌어서 맵 옮기기(Space 를 누르는 동안은 어느 도구든 손).
 // 칠하기: 맵 전체에 칸 격자, 포인터 칸에 흰 테두리(칠할 수 없으면 빨간 칠), 누르거나 누른 채 끌면 지나간 칸마다 칠하기.
 // 편집 중엔 캐릭터·머리 위 글·채팅창을 숨겨 맵만 보이고, 카메라는 캐릭터를 따라가지 않고 손으로만 움직인다 — 끄면 다시 캐릭터로.
 // 도구는 초안만 고친다(판정은 서버와 같은 room-map.ts 함수) — 「저장」 때 save 로 한 번에 보내고, 「취소」·연결 끊김·방장 넘어감이면 버린다.
 // 바뀐 것이 있으면 Esc·편집 버튼으로는 끝나지 않는다
-// (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집 · 2026-10-21: 저장식 편집 · 편집 개편 B 놓기 창 · C 도구 상자)
+// (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집 · 2026-10-21: 저장식 편집 · 편집 개편 B 놓기 창 · C 도구 상자 · 2026-10-23: 편집 창 재구성 · 2026-10-24: 지우개·손은 아래 줄)
 
 const doorPicker = createDoorPicker();
 const editTools = createEditTools(() => {
@@ -808,12 +809,13 @@ function setPan(p: { sx: number; sy: number } | null): void {
   renderer.domElement.classList.toggle('hub-grabbing', p !== null);
 }
 
-/** 도구·포인터 칸·방이 바뀌면 — 문 테두리(수정 도구일 때만), 놓기 미리보기, 지울 물체 빨간 칠, 칠할 칸 테두리. 놓기 창이 떠 있으면 맵 표시는 없다 */
+/** 도구·포인터 칸·방이 바뀌면 — 문 테두리(수정 도구일 때만), 놓기 미리보기, 지울 물체 빨간 칠, 칠할 칸 테두리. 편집 창이 떠 있으면 맵 표시는 없다 */
 function updateEditView(): void {
   const tool = activeTool();
   renderer.domElement.classList.toggle('hub-grab', editing && tool === 'hand');
-  world.marks.visible = editing && tool === 'select';
-  world.cellMarks.visible = editing && tool === 'paint';
+  const onMap = editing && !editTools.windowOpen(); // 창이 떠 있으면 맵 표시 없이 — 게임·타일 규칙 도구 중에도 창이 열린다
+  world.marks.visible = onMap && tool === 'select';
+  world.cellMarks.visible = onMap && tool === 'paint';
   preview.visible = redMark.visible = cellFrame.visible = false;
   if (!editing || !hoverCell || editTools.windowOpen()) return;
   const kind = editTools.kind();
@@ -1031,7 +1033,7 @@ window.addEventListener('keydown', (e) => {
   if (entered === null || isTyping(e.target) || hud?.isOpen()) return;
   // 버튼 줄 창을 닫은 Esc 는 넘긴다(defaultPrevented). 목록이 열려 있으면 목록만, 아니면 편집 모드를 끝낸다
   if (e.key === 'Escape' && editing && !e.defaultPrevented) {
-    // 한 단계씩 — 게임 목록 → 놓기 창 → 편집 끝. 바뀐 것이 있으면 끝내지 않는다 — 알림이 저장·취소를 가리킨다
+    // 한 단계씩 — 게임 목록 → 편집 창(마지막 탭) → 편집 끝. 바뀐 것이 있으면 끝내지 않는다 — 알림이 저장·취소를 가리킨다
     const step = escStep({ doorList: doorPicker.isOpen(), window: editTools.windowOpen(), dirty: isDirty() });
     if (step === 'close-door-list') doorPicker.close();
     else if (step === 'open-window') editTools.openWindow();
@@ -1089,7 +1091,7 @@ canvas.addEventListener('pointerdown', (e) => {
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   if (!editing) return;
   if (e.button === 0 && activeTool() === 'hand' && !editTools.windowOpen()) {
-    canvas.setPointerCapture(e.pointerId); // 도구 줄 위로 끌고 나가도 계속 옮긴다
+    canvas.setPointerCapture(e.pointerId); // 아래 줄 위로 끌고 나가도 계속 옮긴다
     setPan({ sx: e.clientX, sy: e.clientY });
   } else if (e.button === 0) editAt(cellAt(e.clientX, e.clientY));
   else if (e.button === 2) removeAt(cellAt(e.clientX, e.clientY));
@@ -1111,7 +1113,7 @@ canvas.addEventListener('pointermove', (e) => {
 });
 canvas.addEventListener('pointerleave', () => {
   hoverAt(null);
-  stroke = null; // 도구 줄·창 위로 끌고 나가면 끌기 끝 — 돌아와도 그 사이 칸을 잇지 않는다
+  stroke = null; // 아래 줄·창 위로 끌고 나가면 끌기 끝 — 돌아와도 그 사이 칸을 잇지 않는다
 });
 for (const ev of ['pointerup', 'pointercancel', 'blur'] as const) {
   window.addEventListener(ev, () => {

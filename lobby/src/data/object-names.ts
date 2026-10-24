@@ -3,28 +3,31 @@
 import { FLOOR_TILES, type FloorTileKind } from '../../../server/src/object-shapes';
 import { OBJECT_SHAPES, type ObjectKind } from '../../../server/src/room-map';
 
-/** 편집 도구 줄의 묶음 — 이 순서로 늘어놓는다 */
+/** 놓기 창의 묶음 — 이 순서로 늘어놓는다. layer 는 편집 창 「오브젝트」 탭의 층 탭(바닥·물체) — 바닥 탭은 바닥 층 그림만 (결정 2026-10-23: 편집 창 재구성 · 2026-10-24) */
 export const OBJECT_GROUPS = [
-  { id: 'tree', name: '나무' },
-  { id: 'plant', name: '풀·꽃' },
-  { id: 'rock', name: '바위·돌' },
-  { id: 'floor', name: '바닥' },
-  { id: 'tile-sand', name: '모래 조각' },
-  { id: 'tile-pink', name: '분홍 모래 조각' },
-  { id: 'tile-grass', name: '풀 조각' },
-  { id: 'tile-grass-dark', name: '짙은 풀 조각' },
-  { id: 'tile-snow', name: '눈 조각' },
-  { id: 'tile-soil', name: '흙·마루 조각' },
-  { id: 'tile-ice', name: '얼음 조각' },
-  { id: 'tile-clay', name: '주황 조각' },
-  { id: 'building', name: '건물' },
-  { id: 'statue', name: '석상' },
-  { id: 'furniture', name: '가구' },
-  { id: 'goods', name: '살림' },
-  { id: 'decor', name: '장식' },
+  { id: 'tree', name: '나무', layer: 'object' },
+  { id: 'plant', name: '풀·꽃', layer: 'object' },
+  { id: 'rock', name: '바위·돌', layer: 'object' },
+  { id: 'floor', name: '바닥', layer: 'floor' },
+  { id: 'tile-sand', name: '모래 조각', layer: 'floor' },
+  { id: 'tile-pink', name: '분홍 모래 조각', layer: 'floor' },
+  { id: 'tile-grass', name: '풀 조각', layer: 'floor' },
+  { id: 'tile-grass-dark', name: '짙은 풀 조각', layer: 'floor' },
+  { id: 'tile-snow', name: '눈 조각', layer: 'floor' },
+  { id: 'tile-soil', name: '흙·마루 조각', layer: 'floor' },
+  { id: 'tile-ice', name: '얼음 조각', layer: 'floor' },
+  { id: 'tile-clay', name: '주황 조각', layer: 'floor' },
+  { id: 'building', name: '건물', layer: 'object' },
+  { id: 'statue', name: '석상', layer: 'object' },
+  { id: 'furniture', name: '가구', layer: 'object' },
+  { id: 'goods', name: '살림', layer: 'object' },
+  { id: 'decor', name: '장식', layer: 'object' },
 ] as const;
 
 export type ObjectGroup = (typeof OBJECT_GROUPS)[number]['id'];
+
+/** 놓기 창의 층 탭 */
+export type PlaceLayer = (typeof OBJECT_GROUPS)[number]['layer'];
 
 export interface ObjectInfo {
   readonly group: ObjectGroup;
@@ -349,8 +352,15 @@ export const OBJECT_INFO: Readonly<Record<ObjectKind, ObjectInfo>> = {
   'fill-clay': floor('주황 채움'),
 };
 
-/** 묶음 순서대로, 각 묶음의 종류를 모양 표 순서로 — 편집 도구 줄이 이대로 늘어놓는다 */
-export function kindsByGroup(): { readonly group: ObjectGroup; readonly name: string; readonly kinds: readonly ObjectKind[] }[] {
+export interface KindGroup {
+  readonly group: ObjectGroup;
+  readonly name: string;
+  readonly layer: PlaceLayer;
+  readonly kinds: readonly ObjectKind[];
+}
+
+/** 묶음 순서대로, 각 묶음의 종류를 모양 표 순서로 — 놓기 창이 이대로 늘어놓는다 */
+export function kindsByGroup(): KindGroup[] {
   const kinds = Object.keys(OBJECT_SHAPES).filter((k): k is ObjectKind => Object.hasOwn(OBJECT_SHAPES, k));
-  return OBJECT_GROUPS.map(({ id, name }) => ({ group: id, name, kinds: kinds.filter((k) => OBJECT_INFO[k].group === id) }));
+  return OBJECT_GROUPS.map(({ id, name, layer }) => ({ group: id, name, layer, kinds: kinds.filter((k) => OBJECT_INFO[k].group === id) }));
 }
