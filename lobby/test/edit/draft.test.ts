@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { RoomData } from '../../../server/src/room-map';
 import { draftDirty, rebaseDraft } from '../../src/edit/draft';
 
-const base: RoomData = { rows: ['#S..#'], objects: [], doors: [] };
-const edited: RoomData = { ...base, rows: ['#S.##'] };
-const received: RoomData = { ...base, rows: ['#S#.#'] };
+const base: RoomData = { rows: ['#S..#'], ground: ['...'], objects: [], doors: [] };
+const edited: RoomData = { ...base, rows: ['#S.##'], ground: ['...'] };
+const received: RoomData = { ...base, rows: ['#S#.#'], ground: ['...'] };
 
 describe('draftDirty', () => {
   it('편집 중이 아니거나 내용이 같으면 false — 다른 객체여도', () => {

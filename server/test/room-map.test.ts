@@ -176,7 +176,7 @@ describe('solidCells', () => {
 describe('buildRoom', () => {
   // 문 0 = (3~4, 0) 붙은 두 칸 · 문 1 = (6, 3)
   const data: RoomData = {
-    rows: ['###DD##', '#.....#', '#.....#', '#S....D', '#.....#', '#######'],
+    rows: ['###DD##', '#.....#', '#.....#', '#S....D', '#.....#', '#######'], ground: ['....', '....', '....'],
     objects: [{ id: 't', kind: 'tree', x: 1, y: 4 }],
     doors: [{ x: 4, y: 0, game: 'snake-race' }],
   };
@@ -189,8 +189,15 @@ describe('buildRoom', () => {
   });
 
   it('맵·물체가 틀리면 거부한다', () => {
-    expect(() => buildRoom({ ...data, rows: ['#..#'] })).toThrow(/시작점/);
+    expect(() => buildRoom({ ...data, rows: ['#..#'], ground: ['..'] })).toThrow(/시작점/);
     expect(() => buildRoom({ ...data, objects: [{ id: 't', kind: 'tree', x: 4, y: 4 }] })).toThrow(/맵 밖/);
+  });
+
+  it('재질 맵이 칸 맵 반 크기가 아니거나 모르는 글자면 거부한다', () => {
+    expect(() => buildRoom({ ...data, ground: ['g.Gi', 'sSpP', 'cCbB'] })).not.toThrow();
+    expect(() => buildRoom({ ...data, ground: ['....', '....'] })).toThrow(/재질 맵/);
+    expect(() => buildRoom({ ...data, ground: ['....', '.....', '....'] })).toThrow(/재질 맵/);
+    expect(() => buildRoom({ ...data, ground: ['....', '..x.', '....'] })).toThrow(/모르는 글자/);
   });
 
   it('문 칸이 아닌 배정 · 한 문에 두 번 배정 · 형식이 틀린 게임 id 는 거부한다', () => {
@@ -204,7 +211,7 @@ describe('buildRoom', () => {
 describe('assignDoor', () => {
   // buildRoom 과 같은 맵 — 문 0 = (3~4, 0), 문 1 = (6, 3), 문 0 에 snake-race
   const data: RoomData = {
-    rows: ['###DD##', '#.....#', '#.....#', '#S....D', '#.....#', '#######'],
+    rows: ['###DD##', '#.....#', '#.....#', '#S....D', '#.....#', '#######'], ground: ['....', '....', '....'],
     objects: [],
     doors: [{ x: 4, y: 0, game: 'snake-race' }],
   };
@@ -236,7 +243,7 @@ describe('assignDoor', () => {
 describe('placeObject', () => {
   // 시작점 (1, 4). 나무 4×4 는 맨 아랫줄 가운데 두 칸(x+1, x+2)을 막는다
   const data: RoomData = {
-    rows: ['###DD###', '#......#', '#......#', '#......#', '#S.....#', '########'],
+    rows: ['###DD###', '#......#', '#......#', '#......#', '#S.....#', '########'], ground: ['....', '....', '....'],
     objects: [{ id: 'p1', kind: 'yard', x: 1, y: 5 }],
     doors: [],
   };
@@ -276,7 +283,7 @@ describe('placeObject', () => {
 describe('paintTile', () => {
   // 문 0 = (3~4, 0) 에 snake-race, 문 1 = (6, 3) 에 maze. 시작점 (1, 3). 나무 (1, 4) 의 밑둥은 (2, 4)·(3, 4)
   const data: RoomData = {
-    rows: ['###DD##', '#.....#', '#.....#', '#S....D', '#.....#', '#######'],
+    rows: ['###DD##', '#.....#', '#.....#', '#S....D', '#.....#', '#######'], ground: ['....', '....', '....'],
     objects: [{ id: 't', kind: 'tree', x: 1, y: 4 }],
     doors: [{ x: 4, y: 0, game: 'snake-race' }, { x: 6, y: 3, game: 'maze' }],
   };
@@ -300,12 +307,12 @@ describe('paintTile', () => {
   });
 
   it('문이 둘로 갈라지면 배정은 적힌 칸 쪽에 남는다', () => {
-    const wide: RoomData = { ...data, rows: ['#DDD###', '#.....#', '#.....#', '#S....#', '#.....#', '#######'], doors: [{ x: 3, y: 0, game: 'a' }] };
+    const wide: RoomData = { ...data, rows: ['#DDD###', '#.....#', '#.....#', '#S....#', '#.....#', '#######'], ground: ['....', '....', '....'], doors: [{ x: 3, y: 0, game: 'a' }] };
     expect(buildRoom(paintTile(wide, { x: 2, y: 0 }, '#')).doorGames).toEqual({ 1: 'a' });
   });
 
   it('두 문이 붙어 하나가 되면 먼저 적힌 배정만 남긴다', () => {
-    const two: RoomData = { ...data, rows: ['#D.D###', '#.....#', '#.....#', '#S....#', '#.....#', '#######'], doors: [{ x: 1, y: 0, game: 'a' }, { x: 3, y: 0, game: 'b' }] };
+    const two: RoomData = { ...data, rows: ['#D.D###', '#.....#', '#.....#', '#S....#', '#.....#', '#######'], ground: ['....', '....', '....'], doors: [{ x: 1, y: 0, game: 'a' }, { x: 3, y: 0, game: 'b' }] };
     expect(paintTile(two, { x: 2, y: 0 }, 'D').doors).toEqual([{ x: 1, y: 0, game: 'a' }]);
   });
 
@@ -325,7 +332,7 @@ describe('paintTile', () => {
 
   it('상태 꼬리표 물체의 발 밑 문 칸은 지울 수 없다', () => {
     // 문 = (1~2, 2) 두 칸, 풀(2×2) 의 발 칸 (1, 2)
-    const tagged: RoomData = { rows: ['#####', '#...#', '#DD.#', '#S..#', '#####'], objects: [{ id: 'g', kind: 'grass-1', x: 1, y: 2, state: 'shut' }], doors: [] };
+    const tagged: RoomData = { rows: ['#####', '#...#', '#DD.#', '#S..#', '#####'], ground: ['...', '...', '...'], objects: [{ id: 'g', kind: 'grass-1', x: 1, y: 2, state: 'shut' }], doors: [] };
     expect(() => buildRoom(tagged)).not.toThrow();
     expect(() => paintTile(tagged, { x: 1, y: 2 }, '#')).toThrow(/발 칸/);
     expect(() => paintTile(tagged, { x: 2, y: 2 }, '#')).not.toThrow(); // 문의 다른 칸은 괜찮다
@@ -334,7 +341,7 @@ describe('paintTile', () => {
 
 describe('removeObject', () => {
   const data: RoomData = {
-    rows: ['#S.D#'],
+    rows: ['#S.D#'], ground: ['...'],
     objects: [{ id: 'a', kind: 'yard', x: 0, y: 0 }, { id: 'b', kind: 'yard', x: 0, y: 0 }],
     doors: [],
   };
@@ -351,7 +358,7 @@ describe('removeObject', () => {
 
 describe('parseRoomData', () => {
   const data = {
-    rows: ['#S.D#'],
+    rows: ['#S.D#'], ground: ['...'],
     objects: [{ id: 't', kind: 'tree', x: 1, y: 0 }],
     doors: [{ x: 3, y: 0, game: 'g' }],
   };
@@ -368,6 +375,8 @@ describe('parseRoomData', () => {
     expect(parseRoomData({ ...data, rows: 'abc' })).toBeNull();
     expect(parseRoomData({ ...data, rows: ['#S#', 3] })).toBeNull();
     expect(parseRoomData({ ...data, objects: undefined })).toBeNull();
+    expect(parseRoomData({ ...data, ground: undefined })).toBeNull();
+    expect(parseRoomData({ ...data, ground: ['...', 3] })).toBeNull();
     expect(parseRoomData({ ...data, objects: [{ id: 't', kind: 'castle', x: 1, y: 0 }] })).toBeNull();
     expect(parseRoomData({ ...data, objects: [{ id: 't', kind: 'toString', x: 1, y: 0 }] })).toBeNull();
     expect(parseRoomData({ ...data, objects: [{ id: 't', kind: 'tree', x: 1.5, y: 0 }] })).toBeNull();
@@ -382,13 +391,16 @@ describe('parseRoomData', () => {
     expect(parseRoomData(data)?.objects[0]).not.toHaveProperty('state');
   });
 
-  it('크기 상한을 넘으면 null — 줄 수·줄 길이·물체 수·문 배정 수·id 길이', () => {
+  it('크기 상한을 넘으면 null — 줄 수·줄 길이·재질 맵·물체 수·문 배정 수·id 길이', () => {
     const tree = (i: number) => ({ id: `t${i}`, kind: 'tree', x: 1, y: 0 });
     const door = { x: 3, y: 0, game: 'g' };
     expect(parseRoomData({ ...data, rows: Array.from({ length: MAP_ROWS_MAX }, () => '#') })).not.toBeNull();
     expect(parseRoomData({ ...data, rows: Array.from({ length: MAP_ROWS_MAX + 1 }, () => '#') })).toBeNull();
     expect(parseRoomData({ ...data, rows: ['#'.repeat(MAP_COLS_MAX)] })).not.toBeNull();
     expect(parseRoomData({ ...data, rows: ['#'.repeat(MAP_COLS_MAX + 1)] })).toBeNull();
+    expect(parseRoomData({ ...data, ground: Array.from({ length: MAP_ROWS_MAX / 2 }, () => '.'.repeat(MAP_COLS_MAX / 2)) })).not.toBeNull();
+    expect(parseRoomData({ ...data, ground: Array.from({ length: MAP_ROWS_MAX / 2 + 1 }, () => '.') })).toBeNull();
+    expect(parseRoomData({ ...data, ground: ['.'.repeat(MAP_COLS_MAX / 2 + 1)] })).toBeNull();
     expect(parseRoomData({ ...data, objects: Array.from({ length: MAX_OBJECTS }, (_, i) => tree(i)) })).not.toBeNull();
     expect(parseRoomData({ ...data, objects: Array.from({ length: MAX_OBJECTS + 1 }, (_, i) => tree(i)) })).toBeNull();
     expect(parseRoomData({ ...data, doors: Array.from({ length: DOOR_GAMES_MAX }, () => door) })).not.toBeNull();
@@ -402,25 +414,26 @@ describe('parseRoomData', () => {
   });
 
   it('맵·배치가 맞는지는 보지 않는다 — buildRoom 몫', () => {
-    expect(parseRoomData({ rows: ['#'], objects: [], doors: [{ x: 0, y: 0, game: 'g' }] })).not.toBeNull();
+    expect(parseRoomData({ rows: ['#'], ground: ['.'], objects: [], doors: [{ x: 0, y: 0, game: 'g' }] })).not.toBeNull();
   });
 });
 
 describe('sameRoomData', () => {
   const data: RoomData = {
-    rows: ['#S.D#'],
+    rows: ['#S.D#'], ground: ['...'],
     objects: [{ id: 't', kind: 'tree', x: 1, y: 0 }],
     doors: [{ x: 3, y: 0, game: 'g' }],
   };
 
   it('내용이 같으면 같다 — 다른 객체여도, 필드 순서가 달라도', () => {
     expect(sameRoomData(data, JSON.parse(JSON.stringify(data)))).toBe(true);
-    expect(sameRoomData(data, { doors: [{ game: 'g', y: 0, x: 3 }], objects: [{ y: 0, x: 1, kind: 'tree', id: 't' }], rows: ['#S.D#'] })).toBe(true);
+    expect(sameRoomData(data, { doors: [{ game: 'g', y: 0, x: 3 }], objects: [{ y: 0, x: 1, kind: 'tree', id: 't' }], rows: ['#S.D#'], ground: ['...'] })).toBe(true);
     expect(sameRoomData(DEFAULT_ROOM, JSON.parse(JSON.stringify(DEFAULT_ROOM)))).toBe(true);
   });
 
-  it('맵 줄·물체·문 배정 중 하나라도 다르면 다르다', () => {
-    expect(sameRoomData(data, { ...data, rows: ['#SD.#'] })).toBe(false);
+  it('맵 줄·재질 맵·물체·문 배정 중 하나라도 다르면 다르다', () => {
+    expect(sameRoomData(data, { ...data, ground: ['.g.'] })).toBe(false);
+    expect(sameRoomData(data, { ...data, rows: ['#SD.#'], ground: ['...'] })).toBe(false);
     expect(sameRoomData(data, { ...data, rows: [...data.rows, '#####'] })).toBe(false);
     expect(sameRoomData(data, { ...data, objects: [{ id: 't', kind: 'torii', x: 1, y: 0 }] })).toBe(false);
     expect(sameRoomData(data, { ...data, objects: [] })).toBe(false);

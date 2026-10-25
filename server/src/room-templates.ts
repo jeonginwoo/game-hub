@@ -5,6 +5,7 @@
 // 문자 맵은 그림이 없다(문만) — 바닥·벽·건물 그림도 물체로 깐다 (결정 2026-10-19: 문자 맵은 투명, 바닥은 물체).
 // 맵마다 테마가 있고 바닥 재질·벽 그림도 테마를 따른다 (결정 2026-10-19: 테마 기본 맵).
 // 좌우 대칭 맵은 폭의 절반이 홀수 — 가운데 문(x = 폭/2 - 1)이 32px 격자에 맞고 맵 한가운데에 온다.
+import { blankGround } from './ground.ts';
 import { FILL, FLOOR_TILES, OBJECT_SHAPES, type FloorTileKind, type ObjectKind } from './object-shapes.ts';
 import { parseMap, solidCells, type DoorGame, type RoomData, type RoomObject } from './room-map.ts';
 
@@ -160,7 +161,8 @@ function room(rows: readonly string[], look: Look, spots: readonly Spot[], doors
   const taken = new Set(
     spots.flatMap(([kind, x, y]) => solidCells({ ...OBJECT_SHAPES[kind], id: '', x, y })).map((p) => `${p.x},${p.y}`),
   );
-  return { rows, objects: objects(dressed(rows, look, taken), spots), doors };
+  const ground = blankGround(rows[0]?.length ?? 0, rows.length);
+  return { rows, ground, objects: objects(dressed(rows, look, taken), spots), doors };
 }
 
 // --- 맵 -------------------------------------------------------------------------------
@@ -1055,7 +1057,7 @@ function galleryRoom(): RoomData {
   const rows = [wall, wall, doorRow, doorRow];
   while (rows.length < height - 4) rows.push(floor);
   rows.push(startRow, floor, wall, wall);
-  return { rows, objects, doors: [{ x: 6, y: 2, game: 'whiteboard-3d' }] };
+  return { rows, ground: blankGround(GALLERY_W, rows.length), objects, doors: [{ x: 6, y: 2, game: 'whiteboard-3d' }] };
 }
 
 function isObjectKind(k: string): k is ObjectKind {

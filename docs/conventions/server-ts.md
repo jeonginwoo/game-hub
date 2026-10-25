@@ -11,7 +11,9 @@
 
 - **Pure modules** hold the rules: `protocol.ts` (message types + `parseClientMsg`, imports
   neither `node:*` nor the DOM, so the lobby can reuse it), `room-map.ts` (room data: map parsing,
-  object checks, `buildRoom` — same constraint, shared with the lobby), `object-shapes.ts` (size and
+  object checks, `buildRoom` — same constraint, shared with the lobby), `ground.ts` (the room's ground
+  material grid — one letter per 32px tile — and which Floor sheet cell each tile draws, including the
+  position-fixed variant pick, so every client draws the same ground — pure, shared), `object-shapes.ts` (size and
   blocked cells per object kind — pure data, shared, re-exported by `room-map.ts`), `room-templates.ts`
   (room data rooms start from — pure data, shared; the `gallery` template is generated from the
   shape table so every kind shows up once) and `roster.ts` (who is in, relay).
@@ -19,7 +21,7 @@
 - **Wiring** is `ws.ts` (`attachLobby` — upgrades on `WS_PATH` only, heartbeat) and `main.ts`
   (deploy entry: serves `lobby/dist` + `/ws` on one port, `PORT` env).
 - Dev and deploy share `attachLobby`: dev attaches it to the Vite server through
-  `lobby/vite.config.ts`. Besides that, lobby `src/` may import `protocol.ts`, `room-map.ts`,
+  `lobby/vite.config.ts`. Besides that, lobby `src/` may import `protocol.ts`, `room-map.ts`, `ground.ts`,
   `object-shapes.ts` and `room-templates.ts` — so they must stay free of `node:*`, `ws` and the DOM.
 - Every socket and stream gets an `'error'` listener (`ws.on('error', …)`, `pipeline(…, cb)`):
   an unhandled `'error'` kills the process — in dev, Vite with it.
@@ -35,7 +37,9 @@
   sends both in `welcome`; it goes away with the room. The current data starts as the template's and
   changes only through the owner's `save{room}` — the whole edited room data at once (`save` in `roster.ts`), relayed to
   everyone, sender included, as `room{room}`; one from anyone else, one equal to the current room (`sameRoomData`),
-  or one that fails `buildRoom` is dropped. Its shape and size caps (`MAP_ROWS_MAX`, `MAP_COLS_MAX`, `MAX_OBJECTS`,
+  or one that fails `buildRoom` is dropped. Room data carries `ground` (one line per 32px tile row, half the map size
+  rounded up — `checkGround` in `buildRoom`). Its shape and size caps (`MAP_ROWS_MAX`, `MAP_COLS_MAX` — and half of each
+  for `ground` — `MAX_OBJECTS`,
   `DOOR_GAMES_MAX`, `ID_MAX`) are `parseRoomData`'s; `MAX_PAYLOAD` in `ws.ts` is sized so a room at those caps fits.
   An object may carry a door-state tag `state: 'open' | 'shut'` (only when its bottom-left cell is a door cell — it
   follows that door); `checkObjects` lets a `shut` object's solid cover its own door's cells and lets the `open` and

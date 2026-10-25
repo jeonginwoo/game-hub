@@ -16,7 +16,7 @@ describe('Roster', () => {
     new Roster().join(a, { t: 'hello', name: 'A', at: spot(1, 1), look: DEFAULT_LOOK });
     expect(a.got[0]).toMatchObject({ t: 'welcome', room: DEFAULT_ROOM, map: 'plaza' });
 
-    const small: RoomTemplate = { id: 'small', name: '작은 방', room: { rows: ['#S.D#'], objects: [], doors: [] } };
+    const small: RoomTemplate = { id: 'small', name: '작은 방', room: { rows: ['#S.D#'], ground: ['...'], objects: [], doors: [] } };
     const b = peer();
     new Roster(Date.now, small).join(b, { t: 'hello', name: 'B', at: spot(1, 0), look: DEFAULT_LOOK });
     expect(b.got[0]).toMatchObject({ t: 'welcome', room: small.room, map: 'small' });
@@ -215,11 +215,11 @@ describe('Roster — 저장', () => {
   const small: RoomTemplate = {
     id: 'small',
     name: '작은 방',
-    room: { rows: ['###DD###', '#......#', '#......#', '#......#', '#S.....#', '########'], objects: [], doors: [] },
+    room: { rows: ['###DD###', '#......#', '#......#', '#......#', '#S.....#', '########'], ground: ['....', '....', '....'], objects: [], doors: [] },
   };
   const hello = (name: string): Extract<ClientMsg, { t: 'hello' }> => ({ t: 'hello', name, at: spot(1, 4), look: DEFAULT_LOOK });
   const edited = {
-    rows: ['###DD###', '#......#', '#..#...#', '#......#', '#S.....#', '########'],
+    rows: ['###DD###', '#......#', '#..#...#', '#......#', '#S.....#', '########'], ground: ['....', '....', '....'],
     objects: [{ id: 'p1', kind: 'tree' as const, x: 2, y: 3 }],
     doors: [{ x: 4, y: 0, game: 'a-1' }],
   };
@@ -262,7 +262,7 @@ describe('Roster — 저장', () => {
     const count = a.got.length;
     roster.handle(ida, { t: 'save', room: { ...edited, objects: [{ id: 'p1', kind: 'tree', x: 0, y: 4 }] } }); // 시작점을 막는다
     roster.handle(ida, { t: 'save', room: { ...edited, doors: [{ x: 1, y: 1, game: 'a-1' }] } }); // 문 칸이 아니다
-    roster.handle(ida, { t: 'save', room: { ...edited, rows: ['########'] } }); // 시작점이 없다
+    roster.handle(ida, { t: 'save', room: { ...edited, rows: ['########'], ground: ['....'] } }); // 시작점이 없다
     roster.handle(ida, { t: 'save', room: { ...small.room } });
     expect(a.got.length).toBe(count);
   });

@@ -5,7 +5,7 @@ import { cellsBetween, paintCheck } from '../../src/edit/paint';
 describe('paintCheck', () => {
   // 문 (3~4, 0), 시작점 (1, 3) 하나. 나무 (1, 4) 의 밑둥은 (2, 4)·(3, 4)
   const data: RoomData = {
-    rows: ['###DD##', '#.....#', '#.....#', '#S....#', '#.....#', '#######'],
+    rows: ['###DD##', '#.....#', '#.....#', '#S....#', '#.....#', '#######'], ground: ['....', '....', '....'],
     objects: [{ id: 't', kind: 'tree', x: 1, y: 4 }],
     doors: [],
   };

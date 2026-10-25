@@ -1,7 +1,8 @@
-// 방 데이터 — 문자 맵 + 물체 배치 + 문 배정, 그리고 그 해석·검사. 순수 모듈, node·DOM 을 import 하지 않는다 (로비 src/ 도 쓴다).
+// 방 데이터 — 문자 맵 + 바닥 재질 + 물체 배치 + 문 배정, 그리고 그 해석·검사. 순수 모듈, node·DOM 을 import 하지 않는다 (로비 src/ 도 쓴다).
 // 모두가 같은 맵으로 충돌을 판정해야 하므로 로비·서버가 같은 검사를 쓴다 (결정 2026-10-16: 방이 상태를 갖는다).
 // 그림(시트 칸·층)은 로비 몫 — 방 데이터에는 물체 종류·자리와 게임 id 만 둔다 (결정 2026-10-16: 문 = 붙은 D 묶음 + 배정은 칸).
 // 좌표는 칸 단위(16px), x 는 오른쪽, y 는 아래쪽(줄 번호)으로 증가한다.
+import { checkGround } from './ground.ts';
 import { OBJECT_SHAPES, type ObjectKind, type ObjectShape } from './object-shapes.ts';
 
 export type Tile = 'wall' | 'floor' | 'door';
@@ -208,6 +209,8 @@ export interface DoorGame {
 /** 방 하나의 데이터 — 서버가 들고 모두에게 같은 것을 보낸다 */
 export interface RoomData {
   readonly rows: readonly string[];
+  /** 바닥 재질 — 32px 타일 하나에 한 글자, 칸 맵의 반 크기(홀수면 올림). 글자는 ground.ts (결정 2026-10-23: 바닥 재질 칠하기) */
+  readonly ground: readonly string[];
   readonly objects: readonly RoomObject[];
   readonly doors: readonly DoorGame[];
 }
@@ -245,6 +248,8 @@ export const MAP_ROWS_MAX = 256; // 줄
 export const MAP_COLS_MAX = 256; // 칸
 export const DOOR_GAMES_MAX = 256; // 개
 export const ID_MAX = 64; // 글자 — 물체 id·게임 id
+const GROUND_ROWS_MAX = Math.ceil(MAP_ROWS_MAX / 2); // 재질 맵 줄 — 32px 타일 하나에 한 글자
+const GROUND_COLS_MAX = Math.ceil(MAP_COLS_MAX / 2);
 
 function isShortString(v: unknown): v is string {
   return typeof v === 'string' && v.length <= ID_MAX;
@@ -261,23 +266,31 @@ function parseRoomObject(v: unknown): RoomObject | null {
   return isObjectState(v.state) ? { ...object, state: v.state } : null;
 }
 
+function parseLines(v: unknown, rowsMax: number, colsMax: number): string[] | null {
+  if (!Array.isArray(v) || v.length > rowsMax) return null;
+  const lines: string[] = [];
+  for (const r of v) {
+    if (typeof r !== 'string' || r.length > colsMax) return null;
+    lines.push(r);
+  }
+  return lines;
+}
+
 function parseDoorGame(v: unknown): DoorGame | null {
   if (!isRecord(v) || !isInt(v.x) || !isInt(v.y) || !isShortString(v.game)) return null;
   return { x: v.x, y: v.y, game: v.game };
 }
 
 /**
- * 받은 JSON 이 방 데이터 모양인지만 본다 — 하나라도 틀리거나 크기 상한(줄·칸·물체·문 배정 수, id 길이)을 넘으면 null,
- * 모르는 필드는 버린다. 맵·물체·문 배정이 맞는지(겹침·문 칸 등)는 buildRoom 몫
+ * 받은 JSON 이 방 데이터 모양인지만 본다 — 하나라도 틀리거나 크기 상한(줄·칸·재질 맵·물체·문 배정 수, id 길이)을 넘으면 null,
+ * 모르는 필드는 버린다. 맵·재질·물체·문 배정이 맞는지(겹침·문 칸·재질 맵 크기 등)는 buildRoom 몫
  */
 export function parseRoomData(v: unknown): RoomData | null {
-  if (!isRecord(v) || !Array.isArray(v.rows) || !Array.isArray(v.objects) || !Array.isArray(v.doors)) return null;
-  if (v.rows.length > MAP_ROWS_MAX || v.objects.length > MAX_OBJECTS || v.doors.length > DOOR_GAMES_MAX) return null;
-  const rows: string[] = [];
-  for (const r of v.rows) {
-    if (typeof r !== 'string' || r.length > MAP_COLS_MAX) return null;
-    rows.push(r);
-  }
+  if (!isRecord(v) || !Array.isArray(v.objects) || !Array.isArray(v.doors)) return null;
+  if (v.objects.length > MAX_OBJECTS || v.doors.length > DOOR_GAMES_MAX) return null;
+  const rows = parseLines(v.rows, MAP_ROWS_MAX, MAP_COLS_MAX);
+  const ground = parseLines(v.ground, GROUND_ROWS_MAX, GROUND_COLS_MAX);
+  if (!rows || !ground) return null;
   const objects: RoomObject[] = [];
   for (const o of v.objects) {
     const object = parseRoomObject(o);
@@ -290,12 +303,13 @@ export function parseRoomData(v: unknown): RoomData | null {
     if (!door) return null;
     doors.push(door);
   }
-  return { rows, objects, doors };
+  return { rows, ground, objects, doors };
 }
 
-/** 두 방 데이터가 같은가 — 맵 줄·물체(상태 꼬리표 포함)·문 배정을 순서까지 비교한다 (로비: 받은 방이 지금 그린 방인지 · 서버: 저장이 바뀐 것이 있는지) */
+/** 두 방 데이터가 같은가 — 맵 줄·재질 맵·물체(상태 꼬리표 포함)·문 배정을 순서까지 비교한다 (로비: 받은 방이 지금 그린 방인지 · 서버: 저장이 바뀐 것이 있는지) */
 export function sameRoomData(a: RoomData, b: RoomData): boolean {
   return a.rows.length === b.rows.length && a.rows.every((r, i) => r === b.rows[i])
+    && a.ground.length === b.ground.length && a.ground.every((r, i) => r === b.ground[i])
     && a.objects.length === b.objects.length
     && a.objects.every((o, i) => {
       const p = b.objects[i];
@@ -308,9 +322,10 @@ export function sameRoomData(a: RoomData, b: RoomData): boolean {
     });
 }
 
-/** 방 데이터를 해석하고 검사한다 — 맵·물체·문 배정 중 하나라도 틀리면 throw */
+/** 방 데이터를 해석하고 검사한다 — 맵·재질 맵·물체·문 배정 중 하나라도 틀리면 throw */
 export function buildRoom(data: RoomData): Room {
   const map = parseMap(data.rows);
+  checkGround(data.ground, map.width, map.height);
   const objects = data.objects.map((o) => ({ ...OBJECT_SHAPES[o.kind], ...o }));
   checkObjects(map, objects);
 
