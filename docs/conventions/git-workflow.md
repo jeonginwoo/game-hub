@@ -9,8 +9,8 @@
 - **No code or rule change lands on `main` directly.** Every such task starts with
   `git switch main && git switch -c <type>/<short-name>`. "Rule" = CLAUDE.md, `docs/conventions/`,
   `.claude/`, `scripts/`, and `docs/game-entry-contract.md`.
-- **Exception — record-only doc edits go straight to `main`** (`docs:` commit, `bash scripts/verify.sh`
-  green first, no merge question): PROGRESS updates (state, session log, 후보 일감, a decision-log
+- **Exception — record-only doc edits go straight to `main`** (`docs:` commit right away,
+  `bash scripts/verify.sh` green first, no `/wrap-up` needed, nothing to merge): PROGRESS updates (state, session log, 후보 일감, a decision-log
   entry recording a decision already made), and typo or stale-line fixes in `docs/` records.
   If the edit changes what anyone must do, it is a rule change — use a branch.
 - **Naming**: `<type>/<short-name>`, type = the commit type of the work
@@ -26,8 +26,10 @@
 
 ## 2. Merging
 
-- **Merge only on the user's explicit yes.** `/wrap-up` asks after committing; without a
-  yes the branch stays as it is.
+- **The user calling `/wrap-up` is the approval.** `/wrap-up` commits and merges in one go —
+  no separate question. Before that, nothing is merged.
+- **Exception — `design/` and `experiment/` are never merged by `/wrap-up`.** It commits on
+  the branch and stops; only the 시안 the user picks is merged, on their explicit word.
 - Method: `git switch main && git merge --ff-only <branch>`. If `main` moved and the
   fast-forward fails, rebase the branch onto `main`, re-run `bash scripts/verify.sh`, then merge.
 - Delete the local branch after merging (`git branch -d`). Design 시안 that lost are kept.
@@ -35,6 +37,11 @@
 
 ## 3. Commits
 
+- **Commit task branches only at `/wrap-up`** (record-only docs on `main` excepted, §1). When the work is done, report it
+  and leave it uncommitted: the user's review fixes then land in the same commit instead of
+  a `fix:` right behind it. If a session must stop before `/wrap-up`, a `wip: <요약>` commit on
+  the task branch is allowed; `/wrap-up` folds it into the task commit
+  (`git reset --soft $(git merge-base main HEAD)`). Loop mode (ralph) commits per item.
 - Format: `type: 한국어 요약`, then `- ` bullet lines (CLAUDE.md).
 - `bash scripts/verify.sh` is green before every commit.
 - A harness rule change is its own `chore:` commit/branch, merged before the work that needs it.

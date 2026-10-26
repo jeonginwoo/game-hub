@@ -17,6 +17,10 @@ Code, identifiers and file paths stay as they are.
    Read the `docs/conventions/` file for the area you will touch before planning.
    Once approved, cut the task branch from `main` (`docs/conventions/git-workflow.md`) before the first edit.
 5. Keep the unit of work small: one feature/fix = one session = one commit.
+6. **Do not commit task-branch work when it is done** (record-only docs on `main` are
+   committed right away). Report it and leave it uncommitted — the user
+   may ask for fixes. `/wrap-up` commits and merges. If the session must stop before
+   `/wrap-up`, a `wip:` commit on the task branch is allowed; `/wrap-up` folds it in.
 
 ## Loop mode (`/next --loop` — used by scripts/ralph.sh, no human approval)
 
@@ -26,5 +30,6 @@ Code, identifiers and file paths stay as they are.
 2. Implement exactly that one item, tests first where tests exist. If you discover
    follow-up work, append it to 후보 일감 — never to the queue, and never do it silently.
 3. Run `bash scripts/verify.sh` until green.
-4. Check the item off, add a one-line session log entry, commit.
+4. Check the item off, add a one-line session log entry, commit (loop mode commits per
+   item — there is no human to call `/wrap-up`; the human merges the branch later).
 5. STOP. Never take a second item.
