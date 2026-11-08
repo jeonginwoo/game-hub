@@ -49,5 +49,8 @@
 ## 4. Remote
 
 - `origin` = GitHub `jeonginwoo/game-hub`. Push only when the user asks.
+- **Pushing `main` deploys** when it touches `lobby/`, `server/`, `package*.json` or
+  `scripts/deploy-vm.sh` (`.github/workflows/deploy.yml` → the Oracle VM, `docs/deploy.md`).
+  A deploy restarts the server, which wipes every room's in-memory edits — say so when pushing.
 - No force push to `main`. A task branch that was pushed is force-pushed only with
   `--force-with-lease`.
