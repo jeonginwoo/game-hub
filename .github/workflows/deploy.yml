@@ -1,0 +1,44 @@
+# Deploy to the Oracle VM on every push to main that touches what the server runs.
+# Record-only doc commits go straight to main (git-workflow.md) — they must not restart the
+# server, because a restart wipes every room's in-memory edits. Hence the paths filter.
+# Setup (keys, secrets, VM side): docs/deploy.md.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lobby/**'
+      - 'server/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/deploy-vm.sh'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DEPLOY_HOST: nolja-lobby.duckdns.org
+      DEPLOY_USER: ubuntu
+    steps:
+      - name: Write SSH key and known host
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      # The VM runs scripts/deploy-vm.sh no matter what command is sent (forced command).
+      - name: Deploy
+        run: >-
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes
+          "$DEPLOY_USER@$DEPLOY_HOST" deploy
