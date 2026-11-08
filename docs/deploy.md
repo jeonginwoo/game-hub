@@ -22,6 +22,14 @@ main 에 push (lobby/·server/·package*.json·scripts/deploy-vm.sh 가 바뀐 �
 | Node | NodeSource `setup_22.x` 로 설치(`/usr/bin/node`) — `package.json` 이 `>=22.18.0`(`.ts` 바로 실행) 을 요구하는데 Ubuntu 24.04 기본 apt 의 Node 는 18 |
 | 방화벽 | Oracle Security List 에 TCP 80·443 + VM `iptables` 에 80·443 ACCEPT 를 REJECT 줄 **위에**(`netfilter-persistent save`) |
 
+### 같은 VM 의 게임
+
+게임은 로비와 독립(불변식 1)이라 저장소·서비스·주소를 따로 둔다 — 서브도메인 하나에 서비스 하나, Caddyfile 에 블록 하나. 로비는 `lobby/src/data/games.ts` 의 `devOr(dev, 배포 주소)` 로 배포 빌드에서만 배포 주소를 쓴다.
+
+| 게임 | 주소 | 서비스 | 포트 | 체크아웃 | 배포 |
+|---|---|---|---|---|---|
+| whiteboard-3d | https://nolja-board.duckdns.org | `whiteboard-3d.service` (`node server/main.ts`) | 8081 | `/home/ubuntu/whiteboard-3d` | 손으로 (`git pull && npm ci && npm run build && sudo systemctl restart whiteboard-3d`) |
+
 **재시작하면 방 편집이 초기화된다** — 방 상태가 서버 메모리에만 있다. 그래서 기록 문서만 바뀐 push 는 배포하지 않는다(워크플로 `paths`).
 
 **배포는 원자적이지 않다** — 체크아웃·`node_modules`·`lobby/dist` 를 그 자리에서 바꾼다. `npm ci`·build 가 실패하면 재시작은 안 하지만 사이트가 깨진 채로 남을 수 있다. 고친 커밋을 다시 push 하거나, VM 에서 `git reset --hard <이전 커밋>` 뒤 손으로 배포.

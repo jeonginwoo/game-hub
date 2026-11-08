@@ -9,14 +9,14 @@
 - **검증 기준선:** `bash scripts/verify.sh` 6단계 PASS (docs · reviewer model · script line endings · typecheck · unit tests · build). 테스트 로비 171개 + 서버 136개(소켓 통합 포함). 번들 500 kB 경고는 그대로(실패 아님)
 - **디자인 브랜치 (시안마다 하나, 모두 `main` 에서 땀):** 시안 A `design/lobby` — 32px 타일셋(Mage City Arcanos, CC0) + 코드로 그린 32×40 2등신 캐릭터·꾸미기 값. 시안 B `design/zep-style` — ZEP 식 배경 한 장 + 물체 스프라이트 + 앞화면, 48×64·방향당 5프레임 시트 캐릭터. 사용자가 고른 시안만 `main` 에 합친다 (세부는 각 브랜치 PROGRESS)
 - **다음 작업:** 바닥 재질 G2~G3(작업 큐, 결정 2026-10-23 · G1 방 데이터 `ground` 는 2026-10-25). 그다음 D2·E 는 2026-10-21 결정 기록 「편집 개편」 순서대로
-- **배포:** https://nolja-lobby.duckdns.org — Oracle 무료 VM, `main` push 가 곧 배포(코드 경로만, `docs/deploy.md`). 재시작마다 방 편집 초기화. 자동 배포 키 세팅은 아직(세션 로그 2026-11-08)
+- **배포:** https://nolja-lobby.duckdns.org — Oracle 무료 VM, `main` push 가 곧 배포(코드 경로만, GitHub Actions `deploy` — 첫 수동 실행 성공 2026-11-08, `docs/deploy.md`). 재시작마다 방 편집 초기화. 같은 VM 에 whiteboard-3d https://nolja-board.duckdns.org (8081, 손으로 업데이트) — 로비는 배포 빌드에서만 그 주소(`games.ts` `devOr`)
 - **차단 요소:** 없음
 
 ## 열린 질문 (다음 세션에서 사용자와 결정)
 
 > `/next` 3단계가 보는 곳. 결정되면 결정 기록으로 옮기고 여기서 지운다. 1~3 은 2026-10-09 결정 기록으로 이동 — 번호는 유지한다. 4 는 2026-10-13 결정.
 
-5. **협업 방식** — 게임마다 담당자 1명인지. (원격은 정해짐 — 결정 기록 2026-10-13, 브랜치 규칙도 — 2026-10-14, 로비 호스팅도 — 2026-11-08 Oracle 무료 VM, `docs/deploy.md`.) 게임(whiteboard-3d 등)을 어디에 올릴지는 첫 게임 배포 때 — 같은 VM 에 서비스를 하나 더 두거나 정적이면 무료 정적 호스팅.
+5. **협업 방식** — 게임마다 담당자 1명인지. (원격은 정해짐 — 결정 기록 2026-10-13, 브랜치 규칙도 — 2026-10-14, 호스팅도 — 2026-11-08 Oracle 무료 VM 에 로비·게임마다 서브도메인, `docs/deploy.md`.)
 
 ## 결정 기록 (Decision Log)
 
@@ -97,6 +97,7 @@
 | 2026-10-25 | **바닥 재질 = 방 데이터 `ground` (프로토콜 변경).** `RoomData.ground: string[]` — 32px 타일 하나에 한 글자, 크기는 칸 맵의 반(홀수면 올림), `parseRoomData` 필수(상한은 줄·칸 상한의 반) · `sameRoomData` 비교 · `buildRoom` 이 `checkGround` 로 크기·글자 검사 — `welcome`·`save`·`room` 이 모두 싣는다. 테마 여덟 = Floor 시트 재질 구역 여덟: `s` 모래 · `p` 분홍 모래 · `g` 풀(길 흙) · `d` 짙은 풀(길 짙은 흙) · `n` 눈(길 흰 눈) · `b` 갈색 흙(길 마루) · `i` 얼음 · `c` 진흙, 소문자 = 바닥(구역 바깥 재질), 대문자 = 같은 테마의 길(안쪽 재질), `.` = 없음(장면 바탕색). 얼음·진흙은 바닥이 흰 바탕 한 칸(시트 (0,25)) · 무늬 없음 · 외딴 점 조각이 없어 가운데로. 공용 순수 모듈 `server/src/ground.ts` — `groundTiles` 가 길은 같은 테마 길 이웃(4방향 + 대각선 안쪽 모서리, 한 타일 폭 띠·끝·점 포함)으로, 바닥은 타일 좌표 해시 무늬(4/16, 로비 `fillCell` 도 같은 `pickVariant`)로 시트 칸을 고른다. 다른 테마끼리 맞닿는 곳은 이음 조각 없이 경계만 | 사용자 승인 2026-10-24(G1 계획 — 테마 여덟·글자 배정). 한 글자 = 타일 하나라 문자 맵처럼 읽히고 최대 128×128 = 16 KB 로 `MAX_PAYLOAD` 안. 테마별 길 이웃만 잇는 것은 시트의 가장자리 조각이 제 구역 바닥만 그리기 때문 |
 | 2026-10-26 | **커밋은 `/wrap-up` 에서만, `/wrap-up` 이 합치기까지.** 작업이 끝나도 커밋하지 않고 보고만 한다 — 사용자의 수정 요청은 같은 커밋에 담긴다. `/wrap-up` 호출이 곧 허가: 커밋 하나(`wip:` 가 있으면 `git reset --soft` 로 접음) → `--ff-only` 합치기(안 되면 rebase + verify) → 브랜치 삭제. 합치기 질문은 없앰. 예외: `design/`·`experiment/` 는 커밋만 하고 합치지 않음, ralph 루프는 항목마다 커밋. 기록 문서는 그대로 `main` 에 바로 커밋(2026-10-14). 2026-10-14 「합칠지 묻는다」를 대체 | 사용자 결정. 기능 커밋 바로 뒤에 후속 수정 커밋이 붙어 이력이 지저분했다(예: `6f31692 feat: 놓기 창` ↔ `e28dd2d fix: 채움 썸네일`). 사용자는 결과를 보고 고친 뒤 `/wrap-up` 을 부르므로 그때가 이미 허가 시점 — 다시 묻는 것은 중복 |
 | 2026-11-08 | **배포 = Oracle Cloud Always Free VM 하나** (E2.1.Micro, Osaka) — systemd 로 `node server/src/main.ts`(8080), 앞에 Caddy(자동 HTTPS), 도메인 DuckDNS `nolja-lobby.duckdns.org`. **`main` push 가 곧 배포** — GitHub Actions `deploy` 가 배포 전용 SSH 키(VM 에서 `restrict,command=` 로 `scripts/deploy-vm.sh` 만)로 VM 에 붙어 ff-only 당기기 → `npm ci` → build → restart. `lobby/`·`server/`·`package*.json`·배포 스크립트가 바뀐 push 만 — 기록 문서 커밋은 배포 안 함. 세부·세팅 `docs/deploy.md`. 열린 질문 5 의 호스팅 부분 종결 | 사용자 결정 — 소규모·상시 켜 둠·무료. Render 무료는 15분 무접속이면 잠들어 메모리의 방 편집이 날아가고, Fly.io(월 ~$2)·Railway(월 $5)는 유료, 집 PC + Cloudflare Tunnel 은 PC 를 켜 둬야 한다. Actions → SSH 를 VM 이 주기적으로 당기는 방식보다 고른 것은 즉시 반영 + 실패가 Actions 탭·메일로 보여서(추천안 승인). 재시작마다 방 편집이 초기화되므로 문서 커밋으로 재시작하지 않게 경로를 거른다 |
+| 2026-11-08 | **게임도 같은 VM 에, 게임마다 서브도메인 + 서비스 하나** — whiteboard-3d = `nolja-board.duckdns.org` → Caddy → 8081 `whiteboard-3d.service`. 로비 등록 표 `GAMES` 의 url 은 `devOr(dev 서버, 배포 주소)` 로 `import.meta.env.DEV` 에 따라 고른다. 열린 질문 5 의 「게임 호스팅」 부분 종결 | 사용자 승인. 게임이 game-hub 와 같은 모양(`dist` + `/ws` 한 포트, `PORT` 환경 변수)이라 서비스만 하나 더면 되고 node 하나 ~50 MB 라 1 GB VM 에 넉넉. 경로(`/whiteboard/`)로 붙이면 게임의 Vite `base`·`/ws` 경로를 로비에 맞춰 고쳐야 해 불변식 2 에 어긋난다. DuckDNS 는 계정당 5개 무료 |
 
 ## 작업 큐 (ralph 루프용)
 
@@ -139,6 +140,8 @@
 
 - 방 상태 영구 저장 — 배포(2026-11-08) 뒤로 서버 재시작 = 모든 방의 편집 초기화. `main` 에 코드가 합쳐질 때마다 일어난다. 방 데이터를 디스크(JSON 파일)에 두고 시작할 때 읽기 — 방은 비면 사라지는 지금 규칙과 함께 정해야 함
 - 배포를 원자적으로 — `deploy-vm.sh` 는 체크아웃·`node_modules`·`lobby/dist` 를 그 자리에서 바꿔, `npm ci`·build 가 실패하면 도는 서버는 살아도 사이트가 깨질 수 있다(reviewer MAJOR, 2026-11-08 — 알고 받아들임, `docs/deploy.md`). 거슬리면 `dist.next` 에 빌드 후 바꿔치기 · 릴리스 폴더 둘을 번갈아 쓰기
+- (whiteboard-3d 저장소) 깨진 퍼센트 인코딩 주소(`/%E0`) 요청 하나로 서버가 죽는다 — `server/main.ts` 의 `decodeURIComponent` 가 try 밖, `createReadStream(...).pipe` 에 오류 처리 없음. systemd 가 다시 살리지만 진행 중인 화이트보드 방이 날아간다. 공개 배포 중이라 그 저장소에서 고치기 (game-hub `server/src/main.ts` 처럼 try/catch + `pipeline`) (2026-11-08)
+- whiteboard-3d 자동 배포 — 지금은 VM 에서 손으로. 필요해지면 그 저장소에 game-hub 와 같은 워크플로·스크립트·배포 키(키는 저장소마다 따로) (2026-11-08)
 - 배포 전에 검사 — 지금 `deploy` 워크플로는 VM 에서 build 만 한다(typecheck·테스트 없음, 로컬 verify 를 믿음). `main` 에 verify 를 거치지 않은 코드가 들어갈 길이 생기면 Actions 에서 typecheck·test 를 먼저 (2026-11-08)
 - 저장이 서버에서 버려지면(검사 실패·크기 상한 — 로비가 같은 함수로 미리 보므로 드묾) 방장 화면만 초안을 보여 다른 사람과 어긋난다. 알림이 없다 — 생기면 서버가 거절 메시지를 보내거나, 저장 뒤 `room` 이 안 오면 되돌리기 (편집 개편 S 2026-10-21)
 - 막힌 칸에서 옮긴 자리의 `move` 는 루프(`requestAnimationFrame`)에서 나가 뒤에 숨은 탭은 앞으로 나올 때까지 안 보낸다 — 다른 사람 화면에선 그동안 벽 위에 서 있다. headless 두 탭 시험에서 확인. 거슬리면 `unstick` 이 바로 `sendIfMoved` (편집 개편 S 2026-10-21)
@@ -196,6 +199,11 @@
 - 미해결: <다음 세션으로 넘기는 것 · 확인하지 못한 것>
 - 다음 작업: <구체적으로>
 ```
+
+### 2026-11-08 — 게임 배포 주소: whiteboard-3d 를 같은 VM 에 (`feat/game-urls`)
+- 완료: 앞 세션의 자동 배포 키 세팅 마무리 — 배포 전용 키(`gh secret set DEPLOY_SSH_KEY`, 로컬 개인 키 삭제)·VM `authorized_keys` `restrict,command=`·`DEPLOY_KNOWN_HOSTS`(붙여 준 값과 `ssh-keyscan` 대조 일치), Actions 「Run workflow」 성공(`deployed 7b78fa1 -> 7b78fa1`), 바깥에서 https 200. 사용자가 VM 에 whiteboard-3d 를 손으로(clone·build·`whiteboard-3d.service` PORT 8081·Caddy 블록·DuckDNS `nolja-board`) — 바깥에서 https 200 확인. 로비 `games.ts` 에 `devOr(dev, 배포)` — `import.meta.env.DEV` 면 `http://localhost:5174/`, 배포 빌드면 `https://nolja-board.duckdns.org/`(빌드 번들에 들어간 것 확인). `docs/deploy.md` 「같은 VM 의 게임」 표. verify 6단계 PASS
+- 미해결: push 뒤 배포된 로비에서 문 → 화이트보드 → 「로비로」 왕복·화이트보드 멀티는 브라우저로 확인 전(push 전에는 배포된 로비가 아직 `localhost:5174` 로 보냄 — 사용자 확인). whiteboard-3d 는 자동 배포 없음
+- 다음 작업: push → 왕복 확인. 그 뒤 바닥 재질 G2
 
 ### 2026-11-08 — 배포: Oracle 무료 VM + push 자동 배포 (`chore/auto-deploy`)
 - 완료: 사용자가 Oracle Cloud Always Free VM(E2.1.Micro, Osaka)에 손으로 세팅 — iptables·스왑·Node 22·systemd `game-hub`·Caddy·DuckDNS `nolja-lobby.duckdns.org`, `curl` 200·Let's Encrypt 인증서 발급까지 로그로 확인. 저장소에 `.github/workflows/deploy.yml`(main push + `lobby/`·`server/`·`package*.json`·배포 스크립트 경로만 → SSH 배포 전용 키) · `scripts/deploy-vm.sh`(ff-only → `npm ci` → build → restart → :8080 응답 확인) · `docs/deploy.md`(구성·세팅·문제 해결) · git-workflow §4 「main push = 배포」. reviewer MAJOR 둘 반영(비원자 배포를 사실대로 적고 후보 일감으로 · 규칙 변경을 따로 `chore:` 커밋). verify 6단계 PASS

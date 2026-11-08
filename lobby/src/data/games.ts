@@ -10,9 +10,17 @@ export interface GameEntry {
   readonly url: string;
 }
 
-// url 은 개발 중 각 게임의 dev 서버 주소 — 배포 URL 은 호스팅(PROGRESS 열린 질문 5)이 정해지면 바꾼다
+/** 개발(`npm run dev`)이면 게임의 dev 서버, 배포 빌드면 배포 주소 (docs/deploy.md) */
+function devOr(dev: string, deployed: string): string {
+  return import.meta.env.DEV ? dev : deployed;
+}
+
 export const GAMES: readonly GameEntry[] = [
-  // 독립 저장소 github.com/jeonginwoo/whiteboard-3d — `npm run dev` 가 5174 에 뜬다
-  { id: 'whiteboard-3d', title: '3D 화이트보드', url: 'http://localhost:5174/' },
+  // 독립 저장소 github.com/jeonginwoo/whiteboard-3d — `npm run dev` 가 5174 에 뜨고, 배포는 같은 VM 의 다른 서비스
+  {
+    id: 'whiteboard-3d',
+    title: '3D 화이트보드',
+    url: devOr('http://localhost:5174/', 'https://nolja-board.duckdns.org/'),
+  },
 ];
 
