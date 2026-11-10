@@ -78,7 +78,7 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   stays under the bar), one tab each (`WINDOW_TOOLS` in `place.ts`: 「오브젝트」 = place and ground, 「게임」 = select, 「타일 규칙」 = paint; `tabOf`); the
   **edit bar** (bottom centre — the top row of the map holds doors) holds the window button (labelled by `toolLabel`: the last
   window tool and what it picked), the tools that act straight away (`BAR_TOOLS`: erase — its two layer buttons show next to it while
-  it is on —, hand) and save / cancel. Holding Space makes any tool the hand while held (`activeTool` in `main.ts`; the keydown is
+  it is on —, hand), the door-state toggle (open / shut — `DOOR_STATES`, back to shut every time edit mode turns on) and save / cancel. Holding Space makes any tool the hand while held (`activeTool` in `main.ts`; the keydown is
   `preventDefault`ed so it neither scrolls nor presses a focused button). The camera does not follow the avatar while editing: it starts where
   the view was (`editCenter`) and moves only by the hand — dragging moves the map with the pointer (`panCenter` in `view.ts`, clamped like
   following, re-clamped every frame; the pointer is captured so a drag over the bar keeps panning; canvas cursor `grab` / `grabbing`).
@@ -94,8 +94,8 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   open the map shows no edit marks. A pointer on the map goes screen → cell (`screenToCell` in `view.ts`), then by tool:
   place — the chosen kind's preview follows the pointer (`placeAt`: the pointer is the
   object's bottom centre), a red fill under it when `canPlace` says no (`placeObject` throws, or — an edit-tool rule only, not the server's — a floor-layer
-  picture would overlap another floor-layer picture), a left click places it when `canPlace` says yes
-  (`placeObject`), a right click removes `topObjectAt` (the frontmost picture over the cell, `removeObject`; the canvas
+  picture would overlap another visible floor-layer picture), a left click places it when `canPlace` says yes
+  (`placeObject`; an object whose centre foot cell — `footCell`, the pointer's cell — is a door cell gets the toggle's state tag — `placeState`), a right click removes `topObjectAt` (the frontmost picture over the cell, `removeObject`; the canvas
   `contextmenu` is suppressed while editing); select — the door marks (part of the world, rebuilt with it) are visible, a door opens
   `door-picker.ts`, picking assigns the game (`assignDoor`); erase — two layers (floor, object = `floor`, `sorted`;
   `top` gets a button once some kind uses it), a red fill over the picture area of `topObjectAt` in the chosen layer under the
@@ -173,6 +173,11 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
 - Drawing never blocks movement by itself: what is impassable is the character map's `#`,
   closed doors (no registered game — `withShutDoors`), and each object's `solid` cells
   (`withSolidObjects`), fitted to the art cell by cell.
+- An object with a door-state tag (`state`) is drawn and blocks only while its door is in that state
+  (`visibleObjects` in `objects.ts`): normally open = a registered game is assigned to the door, otherwise shut;
+  while editing, the edit bar's open / shut toggle applies to every door. `buildWorld` keeps only the visible objects
+  (`World.objects`, which the eraser and right click pick from) and records the view it was built for (`World.view`),
+  so `switchRoom` rebuilds when the room or the view changes.
 - The map (terrain: `#` `.` `D` `S`) and objects are separate layers. An object may sit on any
   cell, `#` included; `checkObjects` only rejects `solid` cells that block a door or start, or that
   overlap another object's `solid` cells. Pictures may overlap freely.

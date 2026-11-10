@@ -1,7 +1,9 @@
 // 편집 도구 — 창 탭·아래 줄 도구·붓·지우개 층 이름과 창 열기 버튼 글, 물체 놓기 자리·놓을 수 있는지·치울 물체 고르기·놓기 창 썸네일 배율·Esc 한 단계. Three.js·DOM 과 무관한 순수 함수.
 // (결정 2026-10-16: 물체 배치 편집 — 놓기 판정은 서버와 같은 placeObject · 2026-10-21: 편집 개편 B 놓기 창 · C 도구 상자 · 2026-10-23: 편집 창 재구성 · 2026-10-24: 지우개·손은 아래 줄
-//  · 2026-11-10: 바닥 재질 붓, 바닥 층 그림끼리 겹쳐 놓지 않기)
-import { OBJECT_SHAPES, placeObject, type ObjectKind, type Pos, type Rect, type RoomData, type TileChar } from '../../../server/src/room-map';
+//  · 2026-11-10: 바닥 재질 붓, 바닥 층 그림끼리 겹쳐 놓지 않기 · 편집 개편 D2: 열림/닫힘 토글)
+import {
+  footCell, OBJECT_SHAPES, parseMap, placeObject, type ObjectKind, type ObjectState, type Pos, type Rect, type RoomData, type TileChar, type TileMap,
+} from '../../../server/src/room-map';
 import { OBJECT_ART } from '../data/object-art';
 import { OBJECT_INFO } from '../data/object-names';
 import { objectRect, objectZ, type MapObject, type ObjectLayer } from '../world/objects';
@@ -76,20 +78,39 @@ function overlaps(a: Rect, b: Rect): boolean {
   return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 }
 
+/** 편집 중 문 상태 토글 — 이 상태의 꼬리표 물체만 보이고, 문 칸에 놓는 물체는 이 꼬리표를 단다. 편집을 켤 때마다 닫힘부터 */
+export const DOOR_STATES: readonly { readonly state: ObjectState; readonly name: string }[] = [
+  { state: 'open', name: '열림' },
+  { state: 'shut', name: '닫힘' },
+];
+
+/**
+ * 왼쪽 아래 칸 at 에 놓는 물체의 상태 꼬리표 — 가운데 발 칸(footCell, 포인터 칸)이 문 칸이면 편집 토글 상태, 아니면 없음
+ * (결정 2026-10-21: 꼬리표는 문 칸 위 물체만, 그 문을 따른다 · 2026-11-10: 기준은 가운데 발 칸)
+ */
+export function placeState(map: TileMap, kind: ObjectKind, at: Pos, toggle: ObjectState): ObjectState | undefined {
+  return map.doorAt(footCell({ ...at, w: OBJECT_SHAPES[kind].w })) === undefined ? undefined : toggle;
+}
+
 /**
  * 놓을 수 있는 자리인지 — 서버와 같은 placeObject 를 돌려 보고 던지면 false (맵 밖·문 막기·solid 겹침·개수 상한).
+ * state 는 붙일 상태 꼬리표(placeState) — 같은 문의 다른 상태 물체와는 막는 칸·그림이 겹쳐도 된다(함께 보이지 않는다).
  * 그리고 바닥 층 그림(바닥 장식 등)은 다른 바닥 층 그림과 그림 영역이 겹치면 false — 겹쳐 깔면 아래 것이 가려져 지저분하다.
  * 이 규칙은 편집 도구만의 것이라 서버·템플릿은 겹친 바닥 그림을 그대로 받는다 (결정 2026-11-10)
  */
-export function canPlace(data: RoomData, kind: ObjectKind, at: Pos): boolean {
+export function canPlace(data: RoomData, kind: ObjectKind, at: Pos, state?: ObjectState): boolean {
   try {
-    placeObject(data, kind, at);
+    placeObject(data, kind, at, state);
   } catch {
     return false;
   }
   if (OBJECT_ART[kind].layer !== 'floor') return true;
+  const map = parseMap(data.rows);
+  const door = map.doorAt(footCell({ ...at, w: OBJECT_SHAPES[kind].w }));
+  const hidden = (o: RoomData['objects'][number]): boolean =>
+    state !== undefined && o.state !== undefined && o.state !== state && map.doorAt(footCell({ ...o, w: OBJECT_SHAPES[o.kind].w })) === door;
   const rect = objectRect({ id: '', ...at, ...OBJECT_SHAPES[kind] });
-  return !data.objects.some((o) => OBJECT_ART[o.kind].layer === 'floor' && overlaps(rect, objectRect({ ...o, ...OBJECT_SHAPES[o.kind] })));
+  return !data.objects.some((o) => OBJECT_ART[o.kind].layer === 'floor' && !hidden(o) && overlaps(rect, objectRect({ ...o, ...OBJECT_SHAPES[o.kind] })));
 }
 
 /**

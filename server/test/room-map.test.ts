@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignDoor, buildRoom, checkObjects, DOOR_GAMES_MAX, ID_MAX, MAP_COLS_MAX, MAP_ROWS_MAX, MAX_OBJECTS, OBJECT_SHAPES, objectRect, parseMap, parseRoomData, paintTile, placeObject, removeObject, sameRoomData, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
+import { assignDoor, buildRoom, checkObjects, footCell, DOOR_GAMES_MAX, ID_MAX, MAP_COLS_MAX, MAP_ROWS_MAX, MAX_OBJECTS, OBJECT_SHAPES, objectRect, parseMap, parseRoomData, paintTile, placeObject, removeObject, sameRoomData, solidCells, type PlacedShape, type RoomData } from '../src/room-map.ts';
 import { DEFAULT_ROOM, DEFAULT_TEMPLATE, ROOM_TEMPLATES, templateFor } from '../src/room-templates.ts';
 
 const tree: PlacedShape = { id: 'tree', x: 4, y: 5, w: 2, h: 3 };
@@ -131,14 +131,14 @@ describe('checkObjects — 상태 꼬리표', () => {
   });
 
   it('닫힘 물체도 다른 문의 칸은 못 막는다 — 그 문이 열리면 입구가 막힌다', () => {
-    const wide = { ...block('a', 2, 0, 'shut'), w: 3, solid: [{ x: 2, y: 0 }] };
+    const wide = { ...block('a', 0, 0, 'shut'), w: 5, solid: [{ x: 4, y: 0 }] }; // 가운데 발 칸 (2, 0) = 문 0
     expect(() => checkObjects(map, [wide])).toThrow(/\(4, 0\) 의 문·시작점/);
   });
 
   it('같은 문의 열림·닫힘 물체끼리만 solid 가 겹쳐도 된다', () => {
-    // 둘 다 문 0 의 (2, 0) 을 발로 두고 옆 벽 칸 (3, 0) 을 막는다
-    const shut = { ...block('s', 2, 0, 'shut'), w: 2, solid: [{ x: 1, y: 0 }] };
-    const open = { ...block('o', 2, 0, 'open'), w: 2, solid: [{ x: 1, y: 0 }] };
+    // 둘 다 문 0 의 (2, 0) 을 가운데 발로 두고 옆 벽 칸 (3, 0) 을 막는다
+    const shut = { ...block('s', 1, 0, 'shut'), w: 3, solid: [{ x: 2, y: 0 }] };
+    const open = { ...block('o', 1, 0, 'open'), w: 3, solid: [{ x: 2, y: 0 }] };
     expect(() => checkObjects(map, [shut, open])).not.toThrow();
     expect(() => checkObjects(map, [shut, { ...shut, id: 's2' }])).toThrow(/'s' 와 겹친다/);
     expect(() => checkObjects(map, [open, { ...open, id: 'o2' }])).toThrow(/'o' 와 겹친다/);
@@ -149,7 +149,7 @@ describe('checkObjects — 상태 꼬리표', () => {
 describe('checkObjects — 상태 꼬리표, 문 둘 · 시작점', () => {
   // 문 0 = (1, 1) · 문 1 = (2, 2) (대각선이라 따로) · 시작점 (1, 0). (2, 1) 은 두 문 사이의 벽
   const map = parseMap(['#S###', '#D#.#', '#.D.#', '#####']);
-  const fromDoor0 = (state: 'open' | 'shut'): PlacedShape => ({ ...tree, id: 'a', x: 1, y: 1, w: 2, h: 1, solid: [{ x: 1, y: 0 }], state });
+  const fromDoor0 = (state: 'open' | 'shut'): PlacedShape => ({ ...tree, id: 'a', x: 0, y: 1, w: 3, h: 1, solid: [{ x: 2, y: 0 }], state });
   const fromDoor1 = (state: 'open' | 'shut'): PlacedShape => ({ ...tree, id: 'b', x: 2, y: 2, w: 1, h: 2, solid: [{ x: 0, y: 1 }], state });
 
   it('다른 문의 꼬리표 물체끼리는 상태가 달라도 겹치면 거부한다 — 두 문이 따로 열리고 닫힌다', () => {
@@ -160,6 +160,14 @@ describe('checkObjects — 상태 꼬리표, 문 둘 · 시작점', () => {
   it('시작점은 닫힘 물체도 못 막는다', () => {
     const tall: PlacedShape = { ...tree, id: 'a', x: 1, y: 1, w: 1, h: 2, solid: [{ x: 0, y: 1 }], state: 'shut' };
     expect(() => checkObjects(map, [tall])).toThrow(/\(1, 0\) 의 문·시작점/);
+  });
+});
+
+describe('footCell', () => {
+  it('맨 아랫줄 가운데 — 폭이 짝수면 가운데 두 칸 중 오른쪽', () => {
+    expect(footCell({ x: 3, y: 6, w: 6 })).toEqual({ x: 6, y: 6 });
+    expect(footCell({ x: 3, y: 6, w: 3 })).toEqual({ x: 4, y: 6 });
+    expect(footCell({ x: 3, y: 6, w: 1 })).toEqual({ x: 3, y: 6 });
   });
 });
 
@@ -274,6 +282,15 @@ describe('placeObject', () => {
     expect(placeObject(data, 'yard', { x: 1, y: 5 }).objects).toHaveLength(2);
   });
 
+  it('state 를 주면 꼬리표를 붙인다 — 가운데 발 칸이 문 칸이 아니면 거부한다', () => {
+    // 문 (3~4, 2). 풀은 2×2, solid 없음 — 가운데 발 칸은 왼쪽 아래 칸 + 1
+    const room: RoomData = { ...data, rows: ['########', '#......#', '#..DD..#', '#......#', '#S.....#', '########'], objects: [] };
+    expect(placeObject(room, 'grass-1', { x: 3, y: 2 }, 'shut').objects).toEqual([{ id: 'p1', kind: 'grass-1', x: 3, y: 2, state: 'shut' }]);
+    expect(placeObject(room, 'grass-1', { x: 3, y: 2 }).objects[0]).not.toHaveProperty('state');
+    expect(placeObject(room, 'grass-1', { x: 2, y: 2 }, 'open').objects).toHaveLength(1); // 왼쪽 아래 (2, 2) 는 문 밖이어도 가운데 (3, 2) 가 문
+    expect(() => placeObject(room, 'grass-1', { x: 4, y: 2 }, 'open')).toThrow(/문 칸이어야/);
+  });
+
   it(`물체가 MAX_OBJECTS 개면 더 놓지 않는다`, () => {
     const full: RoomData = { ...data, objects: Array.from({ length: MAX_OBJECTS }, (_, i) => ({ id: `y${i}`, kind: 'yard', x: 1, y: 5 })) };
     expect(() => placeObject(full, 'yard', { x: 1, y: 5 })).toThrow(/더 놓을 수 없다/);
@@ -331,11 +348,11 @@ describe('paintTile', () => {
   });
 
   it('상태 꼬리표 물체의 발 밑 문 칸은 지울 수 없다', () => {
-    // 문 = (1~2, 2) 두 칸, 풀(2×2) 의 발 칸 (1, 2)
+    // 문 = (1~2, 2) 두 칸, 풀(2×2) 의 가운데 발 칸 (2, 2)
     const tagged: RoomData = { rows: ['#####', '#...#', '#DD.#', '#S..#', '#####'], ground: ['...', '...', '...'], objects: [{ id: 'g', kind: 'grass-1', x: 1, y: 2, state: 'shut' }], doors: [] };
     expect(() => buildRoom(tagged)).not.toThrow();
-    expect(() => paintTile(tagged, { x: 1, y: 2 }, '#')).toThrow(/발 칸/);
-    expect(() => paintTile(tagged, { x: 2, y: 2 }, '#')).not.toThrow(); // 문의 다른 칸은 괜찮다
+    expect(() => paintTile(tagged, { x: 2, y: 2 }, '#')).toThrow(/발 칸/);
+    expect(() => paintTile(tagged, { x: 1, y: 2 }, '#')).not.toThrow(); // 문의 다른 칸은 괜찮다
   });
 });
 

@@ -1,15 +1,15 @@
 // 편집 중 가운데 편집 창(위에 탭 셋 — 오브젝트: 층 탭 + 왼쪽 목록 · 오른쪽 썸네일(바닥 층은 재질 붓 — 테마 · 바닥/길, 물체 층은 묶음 · 물체), 게임, 타일 규칙: 붓)과
-// 아래쪽 가운데 줄(창 열기 · 지우개 + 층 · 손 · 저장·취소) — DOM 연결만, 목록은 object-names.ts 의 kindsByGroup, 이름·배율은 place.ts.
+// 아래쪽 가운데 줄(창 열기 · 지우개 + 층 · 손 · 열림/닫힘 · 저장·취소) — DOM 연결만, 목록은 object-names.ts 의 kindsByGroup, 이름·배율은 place.ts.
 // (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집 · 2026-10-21: 저장식 편집 · 편집 개편 B 놓기 창 · C 도구 상자
-//  · 2026-10-23: 편집 창 재구성 · 2026-10-24: 지우개·손은 아래 줄 · 2026-11-10: 바닥 탭은 재질 붓). 화면 글자는 textContent 로 넣는다.
-import { OBJECT_SHAPES, type ObjectKind, type TileChar } from '../../../server/src/room-map';
+//  · 2026-10-23: 편집 창 재구성 · 2026-10-24: 지우개·손은 아래 줄 · 2026-11-10: 바닥 탭은 재질 붓 · 편집 개편 D2: 열림/닫힘 토글). 화면 글자는 textContent 로 넣는다.
+import { OBJECT_SHAPES, type ObjectKind, type ObjectState, type TileChar } from '../../../server/src/room-map';
 import { kindsByGroup, OBJECT_INFO } from '../data/object-names';
 import { el } from '../room/entry-screen';
 import { CELL_PX } from '../world/layers';
 import type { ObjectLayer } from '../world/objects';
 import { brushPartName, GROUND_BRUSH_THEMES, groundChar, type GroundBrush } from './ground-brush';
 import {
-  BAR_TOOLS, BRUSHES, ERASE_LAYERS, tabOf, thumbScale, toolLabel, WINDOW_TOOLS, type EditTool, type PickTool, type WindowTool,
+  BAR_TOOLS, BRUSHES, DOOR_STATES, ERASE_LAYERS, tabOf, thumbScale, toolLabel, WINDOW_TOOLS, type EditTool, type PickTool, type WindowTool,
 } from './place';
 
 export interface EditTools {
@@ -24,6 +24,8 @@ export interface EditTools {
   ground(): GroundBrush;
   /** 지우개가 지우는 층 — 고른 층만 */
   eraseLayer(): ObjectLayer;
+  /** 문 상태 토글 — 이 상태의 꼬리표 물체만 보이고, 문 칸에 놓는 물체는 이 꼬리표를 단다 */
+  doorState(): ObjectState;
   /** 편집 창이 열려 있는지 — 열려 있으면 맵 미리보기를 숨긴다 */
   windowOpen(): boolean;
   /** 편집 창을 마지막 창 탭으로 연다 (Esc 한 단계) */
@@ -85,6 +87,7 @@ export function createEditTools(
   let objectTool: 'place' | 'ground' = 'place'; // 오브젝트 탭에서 마지막에 고른 도구 — 창 열기 버튼 글과 다시 열 층
   let groundTheme = ground.theme; // 바닥 층에서 보고 있는 테마 — 고르기 전엔 붓이 그대로
   let eraseLayer: ObjectLayer = 'sorted'; // 바닥을 실수로 통째 지우지 않게 물체부터
+  let doorState: ObjectState = 'shut'; // 편집을 켤 때마다 닫힘부터 — 배정 전 문이 대부분이라 닫힌 모습부터 꾸민다
   let open = false;
   let tab: WindowTool = 'place'; // 창에 보이는 탭 — 고르기 전에는 도구가 그대로, 지우개·손 중에도 마지막 창 도구
   let layer: PlaceLayer = 'object';
@@ -113,11 +116,22 @@ export function createEditTools(
     layerRow.append(b);
     return b;
   });
+  // 문 상태 토글 — 도구와 상관없이 늘 보인다. 바꾸면 보이는 물체가 바뀐다(월드를 다시 만드는 것은 onChange 쪽)
+  const stateRow = el('div', 'hub-edit-group');
+  const stateButtons = DOOR_STATES.map((r) => {
+    const b = button('hub-btn hub-small', r.name, () => {
+      doorState = r.state;
+      render();
+      onChange();
+    });
+    stateRow.append(b);
+    return b;
+  });
   const commitRow = el('div', 'hub-edit-group');
   const saveButton = button('hub-btn hub-small hub-primary', '저장', () => commit.onSave());
   const cancelButton = button('hub-btn hub-small', '취소', () => commit.onCancel());
   commitRow.append(saveButton, cancelButton);
-  bar.append(windowButton, barTools, layerRow, commitRow);
+  bar.append(windowButton, barTools, layerRow, stateRow, commitRow);
   saveButton.disabled = true;
 
   // 편집 창 — 어두운 바탕이 맵을 덮어 창이 떠 있는 동안 맵은 눌리지 않는다. 아래 줄은 바탕 위에 남는다
@@ -279,6 +293,7 @@ export function createEditTools(
     barButtons.forEach((b, i) => b.classList.toggle('hub-on', BAR_TOOLS[i]?.tool === tool));
     layerButtons.forEach((b, i) => b.classList.toggle('hub-on', ERASE_LAYERS[i]?.layer === eraseLayer));
     layerRow.hidden = tool !== 'erase';
+    stateButtons.forEach((b, i) => b.classList.toggle('hub-on', DOOR_STATES[i]?.state === doorState));
     backdrop.hidden = bar.hidden || !open;
     if (backdrop.hidden) return;
     tabButtons.forEach((b, i) => b.classList.toggle('hub-on', WINDOW_TOOLS[i]?.tool === tab));
@@ -341,6 +356,7 @@ export function createEditTools(
       tool = 'place';
       objectTool = 'place';
       tab = 'place';
+      doorState = 'shut';
       open = on;
       render();
     },
@@ -349,6 +365,7 @@ export function createEditTools(
     brush: () => brush,
     ground: () => ground,
     eraseLayer: () => eraseLayer,
+    doorState: () => doorState,
     windowOpen: () => open,
     openWindow,
     setDirty(dirty) {

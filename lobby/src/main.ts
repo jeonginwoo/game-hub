@@ -3,7 +3,7 @@
 // 칸은 타일(그림 32px)의 1/2 — 걷기·충돌만 잘게, 그림 크기는 그대로 (결정 2026-10-16: 칸 2배 밀도).
 import * as THREE from 'three';
 import type { Look, Spot } from '../../server/src/protocol';
-import { assignDoor, buildRoom, OBJECT_SHAPES, paintTile, placeObject, removeObject, type ObjectKind, type Room, type RoomData } from '../../server/src/room-map';
+import { assignDoor, buildRoom, OBJECT_SHAPES, paintTile, placeObject, removeObject, type ObjectKind, type ObjectState, type Room, type RoomData } from '../../server/src/room-map';
 import { DEFAULT_ROOM, templateFor } from '../../server/src/room-templates';
 import { avatarCanvas } from './avatar/avatar-art';
 import { bubbleText, chatLine, say, type Bubble } from './chat/chat';
@@ -16,10 +16,10 @@ import { loadLook, showHud, type Hud } from './hud/hud-bar';
 import { AVATAR_PX, CELL_PX, drawZ } from './world/layers';
 import { OBJECT_ART } from './data/object-art';
 import { lookKey } from './avatar/look';
-import { nearestFloor, sameRoomData, TILE_CELLS, withShutDoors, type Pos, type TileMap } from './world/map';
+import { nearestFloor, parseMap, sameRoomData, TILE_CELLS, withShutDoors, type Pos, type TileMap } from './world/map';
 import { facingOf, reversesWalk, stepHeld, type Dir } from './world/movement';
 import { connect, type Connection, type NetStatus } from './net/net';
-import { objectRect, objectZ, withSolidObjects, type MapObject } from './world/objects';
+import { objectRect, objectZ, visibleObjects, withSolidObjects, type MapObject } from './world/objects';
 import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from './net/others';
 import { homeUrl, roomFromSearch, screenFor, withRoom } from './room/room';
 import { fillCell, groundArt, SHEET_PX, type Cell, type Sheet } from './world/tiles';
@@ -28,7 +28,7 @@ import { canEdit, doorChoices, doorMarks } from './edit/edit';
 import { createDoorPicker } from './edit/door-picker';
 import { draftDirty, rebaseDraft } from './edit/draft';
 import { createEditTools } from './edit/edit-tools';
-import { canPlace, escStep, placeAt, topObjectAt, type EditTool } from './edit/place';
+import { canPlace, escStep, placeAt, placeState, topObjectAt, type EditTool } from './edit/place';
 import { cellsBetween, paintCheck } from './edit/paint';
 import { groundChar, paintGround, tileOf } from './edit/ground-brush';
 
@@ -159,12 +159,16 @@ function blankTexture(wCells: number, hCells: number): { readonly canvas: HTMLCa
 // --- 월드 (방 데이터 → 배경·물체·걷기 판정) ---------------------------------------
 // 방이 바뀌면(welcome 의 방이 지금 그린 방과 다르면) 통째로 버리고 다시 만든다 (결정 2026-10-16: 맵 템플릿 + 맵 선택)
 
+/** 어느 상태의 꼬리표 물체를 보일지 — null 이면 평소(문마다 열림·닫힘), 아니면 편집 토글 하나를 모든 문에 (결정 2026-10-21: 편집 개편 D) */
+type WorldView = ObjectState | null;
+
 interface World {
   readonly data: RoomData;
+  readonly view: WorldView;
   readonly room: Room;
-  /** 걷기 판정 — 맵의 벽 + 물체의 solid 칸 */
+  /** 걷기 판정 — 맵의 벽 + 보이는 물체의 solid 칸 */
   readonly walkMap: TileMap;
-  /** 그리는 물체 — 치우기가 누른 칸의 맨 앞 물체를 고른다 */
+  /** 그리는(보이는) 물체 — 치우기가 누른 칸의 맨 앞 물체를 고른다. 숨은 상태의 꼬리표 물체는 빠진다 */
   readonly objects: readonly MapObject[];
   readonly meshes: readonly THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
   /** 편집 중에만 보이는 문 테두리 — 배정된 문·빈 문 다른 색 */
@@ -175,11 +179,14 @@ interface World {
   readonly paint: (sheets: Sheets) => void;
 }
 
-/** 검사를 마친 방으로 월드를 만들어 장면에 넣는다 — buildRoom 이 던지면 아무것도 넣지 않는다 */
-function buildWorld(data: RoomData): World {
+/** 검사를 마친 방으로 월드를 만들어 장면에 넣는다 — buildRoom 이 던지면 아무것도 넣지 않는다. view 상태의 꼬리표 물체만 그리고 막는다 */
+function buildWorld(data: RoomData, view: WorldView): World {
   const room = buildRoom(data);
   const map = room.map;
-  const objects: readonly MapObject[] = room.objects.map((o) => ({ ...o, ...OBJECT_ART[o.kind] }));
+  // 열린 문 = 게임이 배정된 문 (결정 2026-10-21: 문도 투명)
+  const isOpenDoor = (door: number): boolean => gameAtDoor(door, GAMES, room.doorGames) !== undefined;
+  const doorState = (door: number): ObjectState => view ?? (isOpenDoor(door) ? 'open' : 'shut');
+  const objects: readonly MapObject[] = visibleObjects(room.objects.map((o) => ({ ...o, ...OBJECT_ART[o.kind] })), map, doorState);
 
   // 배경 한 장 — 바닥 층 물체를 Ninja Adventure 시트에서 잘라 찍은 맵 크기 캔버스. 그림은 32px 로 키운 크기 그대로.
   // 캐릭터와 픽셀 밀도는 맞추지 않는다. 시트 세 장이 다 오기 전에는 비어 있다. 아무것도 없는 칸은 투명
@@ -219,9 +226,8 @@ function buildWorld(data: RoomData): World {
   };
   if (loadedSheets) paint(loadedSheets);
   // 닫힌 문(게임 없음)은 벽, 열린 문은 바닥 + 입장 (결정 2026-10-21: 문도 투명)
-  const isOpenDoor = (door: number): boolean => gameAtDoor(door, GAMES, room.doorGames) !== undefined;
   const walkMap = withSolidObjects(withShutDoors(map, isOpenDoor), objects);
-  return { data, room, walkMap, objects, meshes, marks, cellMarks, paint };
+  return { data, view, room, walkMap, objects, meshes, marks, cellMarks, paint };
 }
 
 const CELL_MARK = 'rgba(236, 239, 244, 0.12)'; // 그 밖의 칸 — 투명한 문자 맵의 칸이 보이게
@@ -306,7 +312,7 @@ let editBase: RoomData = DEFAULT_ROOM; // 편집을 켤 때의 방 — 취소하
 let draftShown = true; // 월드가 지금 초안을 그렸는지 — 칠하기 끌기가 칸마다 월드를 다시 만들지 않게 루프가 한 프레임에 한 번
 
 // 서버 없이·welcome 전에도 그릴 수 있게 기본 방으로 시작한다. 로비에 들어가면 고른·기억해 둔 맵, welcome 이 오면 그 방으로 바꾼다
-let world: World = buildWorld(DEFAULT_ROOM);
+let world: World = buildWorld(DEFAULT_ROOM, null);
 
 const SHEET_NAMES = Object.keys(TILE_SHEET_FILE) as Sheet[];
 Promise.all(SHEET_NAMES.map((k) => loadImage(TILE_SHEET_DIR + TILE_SHEET_FILE[k])))
@@ -545,13 +551,14 @@ function syncViews(): void {
  * search 가 null 이면 자리 그대로 — room 메시지는 문 배정만 바꿔 지금 칸이 그대로 유효하다.
  * 바뀐 자리는 루프의 sendIfMoved 가 move 로 보낸다. 지금 그린 방과 같으면 아무것도 하지 않는다.
  * 검사를 통과하지 못한 방은 콘솔에 남기고 지금 방 그대로 — 모두가 같은 맵이어야 하지만, 깨진 방으로는 걸을 수도 없다.
- * 지금 그려진 것이 이 방이면 true
+ * 보기(worldView — 편집 토글·평소)가 바뀌었을 때도 같은 방으로 다시 만든다. 지금 그려진 것이 이 방이면 true
  */
 function switchRoom(data: RoomData, search: string | null): boolean {
-  if (sameRoomData(data, world.data)) return true;
+  const view = worldView();
+  if (sameRoomData(data, world.data) && view === world.view) return true;
   let next: World;
   try {
-    next = buildWorld(data);
+    next = buildWorld(data, view);
   } catch (err) {
     console.error('방 데이터가 검사를 통과하지 못했다 — 지금 방 그대로', err);
     return false;
@@ -670,6 +677,7 @@ window.addEventListener('pagehide', () => {
 const doorPicker = createDoorPicker();
 const editTools = createEditTools(() => {
   doorPicker.close();
+  if (editing && world.view !== editTools.doorState()) draftShown = false; // 토글이 바뀌었다 — 루프의 flushDraft 가 그 보기로 다시 그린다
   updateEditView();
   refreshStatus();
 }, { onSave: saveEdit, onCancel: () => setEditing(false) }, (kind) => {
@@ -719,6 +727,16 @@ let previewKind: ObjectKind | null = null; // 미리보기에 칠해 둔 종류 
 /** 편집 중 포인터가 든 칸 — 맵 밖으로 나가면 null */
 let hoverCell: Pos | null = null;
 
+/** 놓기 자리 at 의 상태 꼬리표 — 초안의 맵(월드는 한 프레임 늦다)에서 가운데 발 칸이 문이면 토글 상태 */
+function placeStateAt(kind: ObjectKind, at: Pos): ObjectState | undefined {
+  return placeState(parseMap(editData().rows), kind, at, editTools.doorState());
+}
+
+/** 지금 보일 꼬리표 물체 — 편집 중이면 토글, 아니면 평소(문마다) */
+function worldView(): WorldView {
+  return editing ? editTools.doorState() : null;
+}
+
 function setEditing(on: boolean): void {
   const next = on && canEdit(others);
   if (!next) {
@@ -741,13 +759,15 @@ function setEditing(on: boolean): void {
       draft = null;
       void switchRoom(editBase, null);
     }
-    unstick(); // 편집 중 받은 방·저장한 방에서 내 칸이 막혔을 수 있다
   }
   editTools.setDirty(false);
   // 맵에만 집중하게 — 캐릭터는 루프가, 머리 위 글·채팅창은 CSS(.hub-editing)가 숨긴다
   document.body.classList.toggle('hub-editing', next);
   if (next && document.activeElement instanceof HTMLElement) document.activeElement.blur(); // 채팅 입력 칸에서 빠져나온다
-  editTools.show(next);
+  editTools.show(next); // 켜면 토글이 닫힘부터
+  // 보기 바꾸기 — 켜면 토글 상태, 끄면 평소(문마다 열림·닫힘)의 꼬리표 물체로 다시 그린다
+  void switchRoom(world.data, null);
+  if (!next) unstick(); // 편집 중 받은 방·저장한 방에서 내 칸이 막혔을 수 있다
   updateEditView();
   held.length = 0; // 켜는 순간 누르고 있던 방향키로 계속 걷지 않게
   tapped = null;
@@ -839,7 +859,7 @@ function updateEditView(): void {
     const shape = OBJECT_SHAPES[kind];
     placeScaled(preview, at.x - 0.5, at.y + 0.5, shape.w, shape.h);
     preview.visible = true;
-    if (!canPlace(editData(), kind, at)) {
+    if (!canPlace(editData(), kind, at, placeStateAt(kind, at))) {
       placeScaled(redMark, at.x - 0.5, at.y + 0.5, shape.w, shape.h);
       redMark.visible = true;
     }
@@ -934,7 +954,8 @@ function editAt(cell: Pos): void {
     if (!kind) return;
     const at = placeAt(kind, cell);
     // 빨간 자리면 그대로 — 바닥 층 그림끼리 겹치기는 placeObject 가 아니라 canPlace 만 막는다
-    if (canPlace(editData(), kind, at)) editDraft((d) => placeObject(d, kind, at));
+    const state = placeStateAt(kind, at);
+    if (canPlace(editData(), kind, at, state)) editDraft((d) => placeObject(d, kind, at, state));
     return;
   }
   if (tool === 'ground') {

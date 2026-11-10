@@ -1,12 +1,12 @@
 // 맵 위 물체 — 배경 그림과 따로 그려지는 것(나무·마당·도리이 등)의 층과 그림. 순수 데이터 + 걷기 판정.
 // 자리·모양·검사는 로비·서버 공용(server/src/room-map.ts), 그림(시트 칸·층)만 로비 몫이다.
 // 충돌은 두 가지 — 문자 맵의 '#'(맵 자체)와, 물체마다 정한 solid 칸(나무 밑둥 등). 그림 크기와는 별개다.
-import { objectRect, solidCells, type PlacedShape } from '../../../server/src/room-map';
+import { footCell, objectRect, solidCells, type ObjectState, type PlacedShape } from '../../../server/src/room-map';
 import { drawZ, type Layer } from './layers';
 import type { TileMap } from './map';
 import type { Cell } from './tiles';
 
-export { objectRect, solidCells, type Rect } from '../../../server/src/room-map';
+export { objectRect, solidCells, type ObjectState, type Rect } from '../../../server/src/room-map';
 
 export type ObjectLayer = Extract<Layer, 'floor' | 'sorted' | 'top'>;
 
@@ -32,4 +32,17 @@ export function withSolidObjects(map: TileMap, objects: readonly PlacedShape[]):
     ...map,
     tileAt: (p) => (blocked.has(`${p.x},${p.y}`) ? 'wall' : map.tileAt(p)),
   };
+}
+
+/**
+ * 지금 보이는 물체 — 상태 꼬리표가 없으면 늘 보이고, 있으면 가운데 발 칸(footCell)의 문 상태(doorState)와 같을 때만.
+ * 평소엔 문마다 열림(게임 배정)·닫힘, 편집 중엔 토글 하나를 모든 문에. 그리기·막는 칸·지우개는 이것만 본다
+ * (결정 2026-10-21: 편집 개편 D — 상태 꼬리표 물체는 그 문을 따른다)
+ */
+export function visibleObjects<T extends PlacedShape>(objects: readonly T[], map: TileMap, doorState: (door: number) => ObjectState): T[] {
+  return objects.filter((o) => {
+    if (o.state === undefined) return true;
+    const door = map.doorAt(footCell(o));
+    return door !== undefined && doorState(door) === o.state;
+  });
 }

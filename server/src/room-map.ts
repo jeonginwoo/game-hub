@@ -103,7 +103,7 @@ export function parseMap(rows: readonly string[]): TileMap {
 // 종류별 크기·막는 칸 표는 object-shapes.ts — 종류가 많아 따로 둔다
 export { OBJECT_SHAPES, type ObjectKind, type ObjectShape };
 
-/** 문 상태 꼬리표 — 물체가 발 칸의 문의 어느 상태에 딸리는지. 그 상태일 때만 보이고 막는 것은 로비 몫(편집 개편 D2) (결정 2026-10-21: 편집 개편 D) */
+/** 문 상태 꼬리표 — 물체가 가운데 발 칸(footCell)의 문의 어느 상태에 딸리는지. 그 상태일 때만 보이고 막는 것은 로비 몫(visibleObjects) (결정 2026-10-21: 편집 개편 D) */
 export type ObjectState = 'open' | 'shut';
 
 /** 방 데이터 속 물체 하나 — 종류와 왼쪽 아래 칸, 그리고 문 칸 위라면 상태 꼬리표 */
@@ -113,7 +113,7 @@ export interface RoomObject {
   /** 왼쪽 아래 칸 — 물체는 여기서 오른쪽(w)·위쪽(h)으로 뻗는다. 발은 이 칸의 아래 선 */
   readonly x: number;
   readonly y: number;
-  /** 없으면 늘 보인다. 있으면 발 칸 (x, y) 이 문 칸이어야 하고 그 문을 따른다 */
+  /** 없으면 늘 보인다. 있으면 가운데 발 칸(footCell)이 문 칸이어야 하고 그 문을 따른다 */
   readonly state?: ObjectState;
 }
 
@@ -139,6 +139,14 @@ export function objectRect(o: PlacedShape): Rect {
   return { left, top: bottom - o.h, right: left + o.w, bottom };
 }
 
+/**
+ * 물체의 가운데 발 칸 — 맨 아랫줄 가운데(폭이 짝수면 가운데 두 칸 중 오른쪽). 편집에서 포인터가 가리키는 칸과 같다.
+ * 상태 꼬리표는 이 칸의 문을 따른다 — 문보다 넓은 그림(양옆 기둥 등)도 문 가운데에 놓이게 (결정 2026-11-10: 꼬리표 기준은 가운데 발 칸)
+ */
+export function footCell(o: { readonly x: number; readonly y: number; readonly w: number }): Pos {
+  return { x: o.x + Math.floor(o.w / 2), y: o.y };
+}
+
 /** 물체가 막는 칸들 */
 export function solidCells(o: PlacedShape): Pos[] {
   return (o.solid ?? []).map((c) => ({ x: o.x + c.x, y: o.y - c.y }));
@@ -159,7 +167,7 @@ function claimsClash(a: SolidClaim, b: SolidClaim): boolean {
 /**
  * 물체 목록 검사 — id 중복, 크기 0 이하, 맵 밖으로 나간 물체, 물체를 벗어나거나 문·시작점을 막는 solid,
  * 다른 물체의 solid 와 겹치는 solid 를 거부한다. 그림끼리 겹치거나 solid 가 맵의 '#' 위에 놓이는 것은 괜찮다.
- * 상태 꼬리표 물체는 발 칸이 문 칸이어야 하고, 닫힘 물체의 solid 는 제 문의 칸을 막아도 되며(닫힌 문은 어차피 벽),
+ * 상태 꼬리표 물체는 가운데 발 칸(footCell)이 문 칸이어야 하고, 닫힘 물체의 solid 는 제 문의 칸을 막아도 되며(닫힌 문은 어차피 벽),
  * 같은 문의 열림·닫힘 물체끼리는 solid 가 겹쳐도 된다 (결정 2026-10-23: 상태 꼬리표 검사)
  */
 export function checkObjects(map: TileMap, objects: readonly PlacedShape[]): void {
@@ -178,9 +186,10 @@ export function checkObjects(map: TileMap, objects: readonly PlacedShape[]): voi
         throw new Error(`물체 '${o.id}' 의 solid 칸 (${c.x}, ${c.y}) — 물체 ${o.w}×${o.h} 안이어야 한다`);
       }
     }
-    const door = o.state === undefined ? undefined : map.doorAt(o);
+    const foot = footCell(o);
+    const door = o.state === undefined ? undefined : map.doorAt(foot);
     if (o.state !== undefined && door === undefined) {
-      throw new Error(`물체 '${o.id}' 의 상태 '${o.state}' — 발 칸 (${o.x}, ${o.y}) 이 문 칸이어야 한다`);
+      throw new Error(`물체 '${o.id}' 의 상태 '${o.state}' — 가운데 발 칸 (${foot.x}, ${foot.y}) 이 문 칸이어야 한다`);
     }
     const claim: SolidClaim = { id: o.id, door, state: o.state };
     for (const p of solidCells(o)) {
@@ -367,11 +376,13 @@ function freeObjectId(objects: readonly RoomObject[]): string {
 
 /**
  * 물체 하나를 놓은 새 방 데이터 — at 은 왼쪽 아래 칸, id 는 새로 붙인다. 결과는 buildRoom 으로 검사한다 —
- * 맵 밖·문/시작점을 막는 solid·다른 물체의 solid 와 겹치는 solid 이거나 MAX_OBJECTS 개가 이미 있으면 throw (결정 2026-10-16: 물체 배치 편집)
+ * 맵 밖·문/시작점을 막는 solid·다른 물체의 solid 와 겹치는 solid 이거나 MAX_OBJECTS 개가 이미 있으면 throw (결정 2026-10-16: 물체 배치 편집).
+ * state 를 주면 상태 꼬리표를 붙인다 — 가운데 발 칸(footCell)이 문 칸이 아니면 throw (결정 2026-10-23: 상태 꼬리표 검사)
  */
-export function placeObject(data: RoomData, kind: ObjectKind, at: Pos): RoomData {
+export function placeObject(data: RoomData, kind: ObjectKind, at: Pos, state?: ObjectState): RoomData {
   if (data.objects.length >= MAX_OBJECTS) throw new Error(`물체가 이미 ${MAX_OBJECTS} 개 — 더 놓을 수 없다`);
-  const next: RoomData = { ...data, objects: [...data.objects, { id: freeObjectId(data.objects), kind, x: at.x, y: at.y }] };
+  const object: RoomObject = { id: freeObjectId(data.objects), kind, x: at.x, y: at.y, ...(state !== undefined && { state }) };
+  const next: RoomData = { ...data, objects: [...data.objects, object] };
   buildRoom(next);
   return next;
 }

@@ -584,7 +584,7 @@ const MARKET_ROOM: RoomData = room(
     ['sack-white', 50, 29],
     ['crate-small', 52, 29],
     ['basket-tipped', 54, 29],
-    ['shelf', 58, 27],
+    ['wall-wood', 58, 27],
     // 아래 가게들
     ['shop', 4, 37],
     ['house-red', 12, 37],

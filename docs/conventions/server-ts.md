@@ -41,9 +41,10 @@
   rounded up — `checkGround` in `buildRoom`). Its shape and size caps (`MAP_ROWS_MAX`, `MAP_COLS_MAX` — and half of each
   for `ground` — `MAX_OBJECTS`,
   `DOOR_GAMES_MAX`, `ID_MAX`) are `parseRoomData`'s; `MAX_PAYLOAD` in `ws.ts` is sized so a room at those caps fits.
-  An object may carry a door-state tag `state: 'open' | 'shut'` (only when its bottom-left cell is a door cell — it
+  An object may carry a door-state tag `state: 'open' | 'shut'` (only when its centre foot cell — `footCell`: bottom row, middle, right of the two when the width is even — is a door cell — it
   follows that door); `checkObjects` lets a `shut` object's solid cover its own door's cells and lets the `open` and
-  `shut` objects of the same door overlap, nothing else.
+  `shut` objects of the same door overlap, nothing else. `placeObject` takes the tag as an optional last argument;
+  which tagged objects are drawn and block is the lobby's (`visibleObjects`).
   The edit functions (`assignDoor`, `placeObject`, `removeObject`, `paintTile` in `room-map.ts`) are used by the
   lobby on its draft, not by the server. The server never looks at positions — a player left on a blocked cell moves
   themselves. The template is the `map` of the `hello`

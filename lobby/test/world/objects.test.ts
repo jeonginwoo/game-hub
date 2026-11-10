@@ -4,7 +4,7 @@ import { DEFAULT_ROOM } from '../../../server/src/room-templates';
 import { OBJECT_ART } from '../../src/data/object-art';
 import { drawZ } from '../../src/world/layers';
 import { parseMap } from '../../src/world/map';
-import { objectZ, withSolidObjects, type MapObject } from '../../src/world/objects';
+import { objectZ, visibleObjects, withSolidObjects, type MapObject } from '../../src/world/objects';
 
 const tree: MapObject = { id: 'tree', layer: 'sorted', x: 4, y: 5, w: 2, h: 3, sprite: { sheet: 'nature', col: 0, row: 0 } };
 
@@ -28,6 +28,31 @@ describe('withSolidObjects', () => {
     expect(walk.tileAt({ x: 2, y: 1 })).toBe('floor'); // 물체 윗줄 — 그림 뒤로 지나간다
     expect(walk.tileAt({ x: 0, y: 0 })).toBe('wall');
     expect(map.tileAt({ x: 2, y: 2 })).toBe('floor');
+  });
+});
+
+describe('visibleObjects', () => {
+  // 문 0 = (1~2, 0), 문 1 = (4, 2)
+  const map = parseMap(['#DD##', '#S..#', '#...D', '#####']);
+  const bit = (id: string, x: number, y: number, state?: 'open' | 'shut'): MapObject => ({ ...tree, id, x, y, w: 1, h: 1, ...(state && { state }) });
+  const objects = [bit('plain', 2, 1), bit('d0-open', 1, 0, 'open'), bit('d0-shut', 2, 0, 'shut'), bit('d1-open', 4, 2, 'open'), bit('d1-shut', 4, 2, 'shut')];
+  const ids = (os: readonly MapObject[]): string[] => os.map((o) => o.id);
+
+  it('꼬리표 없는 물체는 늘 보이고, 꼬리표 물체는 제 문의 상태일 때만', () => {
+    expect(ids(visibleObjects(objects, map, (d) => (d === 0 ? 'open' : 'shut')))).toEqual(['plain', 'd0-open', 'd1-shut']);
+    expect(ids(visibleObjects(objects, map, (d) => (d === 0 ? 'shut' : 'open')))).toEqual(['plain', 'd0-shut', 'd1-open']);
+  });
+
+  it('편집 토글처럼 모든 문에 한 상태', () => {
+    expect(ids(visibleObjects(objects, map, () => 'shut'))).toEqual(['plain', 'd0-shut', 'd1-shut']);
+  });
+
+  it('숨은 물체의 막는 칸은 걷기 판정에서도 빠진다', () => {
+    const post = { ...bit('post', 4, 2, 'shut'), solid: [{ x: 0, y: 0 }] };
+    const open = withSolidObjects(map, visibleObjects([post], map, () => 'open'));
+    expect(open.tileAt({ x: 4, y: 2 })).toBe('door');
+    const shut = withSolidObjects(map, visibleObjects([post], map, () => 'shut'));
+    expect(shut.tileAt({ x: 4, y: 2 })).toBe('wall');
   });
 });
 

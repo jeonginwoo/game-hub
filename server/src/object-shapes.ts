@@ -249,9 +249,11 @@ const SHAPES = {
   column: base(4, 10, 2),
   'column-thin': base(2, 6),
   desk: base(6, 6, 2),
-  shelf: base(6, 6, 2),
-  'table-big': base(6, 6, 2),
-  cabinet: base(6, 6, 2),
+  'wall-wood': base(6, 6, 2), // 나무 벽 — 나무 문과 같은 틀의 막힌 칸, 문 옆에 이어 붙인다 (결정 2026-11-10)
+  // 나무 문 — 열림은 양옆 기둥(아래 두 줄의 왼쪽·오른쪽 두 칸)만 막아 가운데 두 칸으로 지나가고, 닫힘은 아래 두 줄 전부.
+  // 문 칸 위에 열림·닫힘 꼬리표로 겹쳐 놓는 짝 (결정 2026-11-10: 9b 에서 가구로 잘못 붙인 이름·모양)
+  'gate-open': { w: 6, h: 6, solid: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 4, y: 0 }, { x: 5, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 4, y: 1 }, { x: 5, y: 1 }] },
+  'gate-shut': base(6, 6, 2),
   'table-long': base(6, 4),
   'table-long-dark': base(6, 4),
   'bench-v': base(2, 6, 6),

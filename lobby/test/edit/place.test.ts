@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildRoom, type RoomObject } from '../../../server/src/room-map';
+import { buildRoom, parseMap, type RoomData, type RoomObject } from '../../../server/src/room-map';
 import { DEFAULT_ROOM } from '../../../server/src/room-templates';
 import { OBJECT_ART } from '../../src/data/object-art';
-import { canPlace, escStep, placeAt, tabOf, thumbScale, toolLabel, topObjectAt } from '../../src/edit/place';
+import { canPlace, escStep, placeAt, placeState, tabOf, thumbScale, toolLabel, topObjectAt } from '../../src/edit/place';
 import { placeObject } from '../../../server/src/room-map';
 import type { MapObject } from '../../src/world/objects';
 
@@ -54,6 +54,48 @@ describe('canPlace — 바닥 층 그림끼리', () => {
 
   it('물체 층 그림은 바닥 그림 위에 놓을 수 있다', () => {
     expect(canPlace(withPebbles, 'sunflower', { x: 60, y: 30 })).toBe(true);
+  });
+});
+
+// 편집 개편 D2 — 가운데 발 칸이 문 칸인 물체는 토글 상태의 꼬리표를 단다
+describe('placeState · canPlace — 상태 꼬리표', () => {
+  // 문 0 = (5~6, 6). 시작점 (1, 7). 나무 문 6×6 이 들어가게 문을 아래쪽에
+  const data: RoomData = {
+    rows: ['############', '#..........#', '#..........#', '#..........#', '#..........#', '#..........#', '#....DD....#', '#S.........#', '############'],
+    ground: ['......', '......', '......', '......', '......'], objects: [], doors: [],
+  };
+  const map = parseMap(data.rows);
+
+  it('가운데 발 칸(포인터 칸)이 문 칸이면 토글 상태, 아니면 꼬리표 없음', () => {
+    expect(placeState(map, 'log', placeAt('log', { x: 5, y: 6 }), 'shut')).toBe('shut'); // 왼쪽 아래 칸 (4, 6) 은 문 밖이어도
+    expect(placeState(map, 'log', placeAt('log', { x: 6, y: 6 }), 'open')).toBe('open');
+    expect(placeState(map, 'log', placeAt('log', { x: 7, y: 6 }), 'open')).toBeUndefined();
+    expect(placeState(map, 'gate-open', placeAt('gate-open', { x: 6, y: 6 }), 'open')).toBe('open'); // 문보다 넓은 그림
+  });
+
+  it('같은 문의 다른 상태 물체와는 막는 칸이 겹쳐도 놓인다 — 같은 상태끼리는 안 된다', () => {
+    const at = placeAt('log', { x: 5, y: 6 }); // 통나무 2×2 는 아랫줄 (4~5, 6) 을 막는다 — 문 칸 (5, 6) 을 막으니 닫힘 꼬리표만
+    expect(canPlace(data, 'log', at)).toBe(false);
+    expect(canPlace(data, 'log', at, 'shut')).toBe(true);
+    const shut = placeObject(data, 'log', at, 'shut');
+    expect(canPlace(shut, 'log', at, 'shut')).toBe(false);
+    expect(canPlace(shut, 'stump-small', at, 'open')).toBe(false); // 열림 물체는 문 칸을 못 막는다
+  });
+
+  it('나무 문 — 닫힘을 놓은 자리에 열림을 겹쳐 놓는다. 열림은 양옆 기둥만 막아 문 칸이 비어 있다', () => {
+    const at = placeAt('gate-shut', { x: 6, y: 6 }); // (3, 6) — 6칸 폭이 2칸 문 가운데에
+    expect(canPlace(data, 'gate-shut', at, 'shut')).toBe(true);
+    const shut = placeObject(data, 'gate-shut', at, 'shut');
+    expect(canPlace(shut, 'gate-open', at, 'open')).toBe(true);
+    expect(canPlace(shut, 'gate-shut', at, 'open')).toBe(false); // 닫힌 문 그림을 열림으로 — 문 칸을 막는다
+  });
+
+  it('바닥 층 그림도 같은 문의 다른 상태와는 겹쳐 놓인다', () => {
+    const at = placeAt('pebbles-1', { x: 6, y: 6 }); // (5, 6)
+    const shut = placeObject(data, 'pebbles-1', at, 'shut');
+    expect(canPlace(shut, 'pebbles-2', at, 'open')).toBe(true);
+    expect(canPlace(shut, 'pebbles-2', at, 'shut')).toBe(false);
+    expect(canPlace(shut, 'pebbles-2', placeAt('pebbles-2', { x: 7, y: 6 }))).toBe(false); // 꼬리표 없는 물체와는 늘 함께 보인다
   });
 });
 

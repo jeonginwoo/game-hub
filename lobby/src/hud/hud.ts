@@ -62,7 +62,7 @@ const ERASE_WHAT: Readonly<Record<ObjectLayer, string>> = {
 };
 
 const EDIT_NOTICE: Readonly<Record<Exclude<EditTool, 'erase'>, string>> = {
-  place: '누르면 놓기 · 오른쪽 클릭 치우기',
+  place: '누르면 놓기(문 칸이면 열림·닫힘 토글 상태로) · 오른쪽 클릭 치우기',
   ground: '누르거나 끌어서 바닥 재질 칠하기',
   select: '문을 눌러 게임 고르기',
   hand: '끌어서 맵 옮기기',
