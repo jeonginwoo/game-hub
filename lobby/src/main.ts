@@ -22,7 +22,7 @@ import { connect, type Connection, type NetStatus } from './net/net';
 import { objectRect, objectZ, withSolidObjects, type MapObject } from './world/objects';
 import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from './net/others';
 import { homeUrl, roomFromSearch, screenFor, withRoom } from './room/room';
-import { fillCell, SHEET_PX, type Cell, type Sheet } from './world/tiles';
+import { fillCell, groundArt, SHEET_PX, type Cell, type Sheet } from './world/tiles';
 import { clampAxis, driftCenter, panCenter, screenToCell } from './world/view';
 import { canEdit, doorChoices, doorMarks } from './edit/edit';
 import { createDoorPicker } from './edit/door-picker';
@@ -87,14 +87,19 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 type Sheets = Readonly<Record<Sheet, HTMLImageElement>>;
 
 /**
- * 배경 한 장 — 바닥 층 물체를 방 데이터 순서대로(나중 것이 위) 찍는다. 문자 맵은 문까지 그리지 않아 그 밖은 투명 — 장면 바탕색이 보인다
- * (결정 2026-10-19: 문자 맵은 투명, 바닥은 물체 · 2026-10-21: 문도 투명). 바닥 물체를 메시 하나씩 두지 않고 한 장에 굽는다 — 채움으로 넓게 깔아도 메시가 늘지 않게
+ * 배경 한 장 — 재질 맵(ground)을 32px 타일마다 먼저, 그 위에 바닥 층 물체를 방 데이터 순서대로(나중 것이 위) 찍는다.
+ * 문자 맵은 문까지 그리지 않아 재질도 물체도 없는 곳은 투명 — 장면 바탕색이 보인다
+ * (결정 2026-10-19: 문자 맵은 투명 · 2026-10-21: 문도 투명 · 2026-10-25: 바닥 재질 = ground). 바닥을 메시 하나씩 두지 않고 한 장에 굽는다
  */
-function paintBackground(c: HTMLCanvasElement, floorObjects: readonly MapObject[], sheets: Sheets): void {
+function paintBackground(c: HTMLCanvasElement, ground: readonly string[], floorObjects: readonly MapObject[], sheets: Sheets): void {
   const g = c.getContext('2d');
   if (!g) throw new Error('2d 캔버스를 만들 수 없다');
   g.imageSmoothingEnabled = false;
   g.clearRect(0, 0, c.width, c.height);
+  const tilePx = CELL_PX * TILE_CELLS;
+  for (const { tx, ty, cell } of groundArt(ground)) {
+    g.drawImage(sheets[cell.sheet], cell.col * SHEET_PX, cell.row * SHEET_PX, SHEET_PX, SHEET_PX, tx * tilePx, ty * tilePx, tilePx, tilePx);
+  }
   for (const o of floorObjects) {
     const left = o.x;
     const top = o.y - o.h + 1;
@@ -204,7 +209,7 @@ function buildWorld(data: RoomData): World {
   scene.add(marks);
 
   const paint = (sheets: Sheets): void => {
-    paintBackground(backgroundArt.canvas, floorObjects, sheets);
+    paintBackground(backgroundArt.canvas, data.ground, floorObjects, sheets);
     backgroundArt.tex.needsUpdate = true;
     for (const a of objectArt) {
       paintObject(a.canvas, a.o, sheets);

@@ -481,6 +481,21 @@ describe('방 템플릿', () => {
     expect(kinds).toEqual(Object.keys(OBJECT_SHAPES));
   });
 
+  it('바닥은 재질 맵으로 — 물체 전시 말고는 바닥 조각·채움 물체가 없고 재질 맵에 빈 타일이 없다', () => {
+    for (const t of ROOM_TEMPLATES.filter((t) => t.id !== 'gallery')) {
+      expect(t.room.objects.filter((o) => /^(floor|fill)-/.test(o.kind)), t.id).toEqual([]);
+      expect(t.room.ground.join('').includes('.'), t.id).toBe(false);
+    }
+  });
+
+  it('광장 — 바닥은 풀, 가운데 흙 광장과 문 앞 길은 흙길', () => {
+    const ground = DEFAULT_ROOM.ground;
+    expect(ground[0]?.[0]).toBe('g'); // 왼쪽 위 귀퉁이
+    expect(ground[15]?.[19]).toBe('G'); // 광장 가운데 (칸 38, 30)
+    expect(ground[2]?.[18]).toBe('G'); // 가운데 문 앞 길 (칸 36, 4)
+    expect(new Set(ground.join(''))).toEqual(new Set(['g', 'G']));
+  });
+
   it('id 가 겹치지 않고 첫 번째가 기본 방', () => {
     expect(new Set(ROOM_TEMPLATES.map((t) => t.id)).size).toBe(ROOM_TEMPLATES.length);
     expect(ROOM_TEMPLATES[0]).toBe(DEFAULT_TEMPLATE);

@@ -3,7 +3,7 @@
 // 문자 맵(#·.·D·S)은 문까지 그림이 없다 — 걷기·충돌·문·시작점 규칙만 담고, 그림은 모두 물체다
 // (결정 2026-10-19: 문자 맵은 투명, 바닥은 물체 · 2026-10-21: 문도 투명). 그림 한 장(시트 한 칸)은 크기 그대로 칸 2×2 를 덮는다.
 
-import { pickVariant } from '../../../server/src/ground';
+import { groundTiles, pickVariant } from '../../../server/src/ground';
 
 export const SHEET_PX = 16; // 시트 한 칸의 픽셀 크기 — 배경에는 TILE_PX(32) 크기로, 칸마다 그 한 조각씩 찍는다
 
@@ -21,4 +21,16 @@ export interface Cell {
  */
 export function fillCell(cells: readonly Cell[], tx: number, ty: number): Cell | undefined {
   return pickVariant(cells, tx, ty);
+}
+
+/** 배경에 먼저 굽는 재질 타일 하나 — 맵 기준 타일(32px) 자리와 찍을 Floor 시트 칸 */
+export interface GroundArt {
+  readonly tx: number;
+  readonly ty: number;
+  readonly cell: Cell;
+}
+
+/** 방의 재질 맵 → 타일마다 찍을 그림. 고르는 규칙(길 가장자리 autotile·무늬)은 ground.ts, 재질 없는 타일은 빠진다 */
+export function groundArt(ground: readonly string[]): GroundArt[] {
+  return groundTiles(ground).map(({ tx, ty, col, row }) => ({ tx, ty, cell: { sheet: 'floor', col, row } }));
 }

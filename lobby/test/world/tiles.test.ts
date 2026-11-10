@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fillCell, type Cell } from '../../src/world/tiles';
+import { fillCell, groundArt, type Cell } from '../../src/world/tiles';
 
 describe('fillCell', () => {
   const base: Cell = { sheet: 'floor', col: 0, row: 12 };
@@ -18,5 +18,17 @@ describe('fillCell', () => {
     const bases = picks.filter((c) => c === base).length;
     expect(bases).toBeGreaterThan(picks.length / 2);
     expect(picks.some((c) => c === v1 || c === v2)).toBe(true);
+  });
+});
+
+describe('groundArt', () => {
+  it('재질 없는 타일은 빼고, 타일마다 Floor 시트 칸 — 풀 바닥은 풀 구역 바탕·무늬 줄', () => {
+    const art = groundArt(['g.', '.g']);
+    expect(art.map((a) => [a.tx, a.ty])).toEqual([[0, 0], [1, 1]]);
+    for (const a of art) expect(a.cell).toMatchObject({ sheet: 'floor', row: 12 });
+  });
+
+  it('길은 이웃을 보고 가장자리 조각 — 혼자인 흙길 타일은 점 조각', () => {
+    expect(groundArt(['G'])[0]?.cell).toEqual({ sheet: 'floor', col: 3, row: 10 });
   });
 });

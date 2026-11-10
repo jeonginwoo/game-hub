@@ -2,11 +2,11 @@
 // 「로비 만들기」에서 하나를 고르고, 방을 만드는 hello{map} 이 그 id 를 싣는다 (결정 2026-10-16: 맵 템플릿 + 맵 선택).
 // 한 글자 = 칸 하나(16px). 그림(32px)은 2×2 칸에 걸쳐 그려지므로 벽·문은 2칸 단위로 그리면 그림과 맞는다.
 // 물체 자리는 칸 — 타일 (tx, ty) 의 왼쪽 아래 칸은 (2·tx, 2·ty + 1).
-// 문자 맵은 그림이 없다(문만) — 바닥·벽·건물 그림도 물체로 깐다 (결정 2026-10-19: 문자 맵은 투명, 바닥은 물체).
+// 문자 맵은 그림이 없다(문만) — 벽·건물 그림은 물체로, 바닥은 재질 맵 ground 로 깐다 (결정 2026-10-19: 문자 맵은 투명 · 2026-10-25: 바닥 재질 = ground).
 // 맵마다 테마가 있고 바닥 재질·벽 그림도 테마를 따른다 (결정 2026-10-19: 테마 기본 맵).
 // 좌우 대칭 맵은 폭의 절반이 홀수 — 가운데 문(x = 폭/2 - 1)이 32px 격자에 맞고 맵 한가운데에 온다.
-import { blankGround } from './ground.ts';
-import { FILL, FLOOR_TILES, OBJECT_SHAPES, type FloorTileKind, type ObjectKind } from './object-shapes.ts';
+import { blankGround, groundSize, type GroundThemeKey } from './ground.ts';
+import { FLOOR_TILES, OBJECT_SHAPES, type ObjectKind } from './object-shapes.ts';
 import { parseMap, solidCells, type DoorGame, type RoomData, type RoomObject } from './room-map.ts';
 
 /** 물체 하나 — [종류, 왼쪽 아래 칸 x, y] */
@@ -37,106 +37,51 @@ function grid(kind: ObjectKind, x: number, y: number, nx: number, ny: number, dx
   return spots;
 }
 
-/** 맵 전체에 채움 하나를 깐다 — 끝에서 남는 줄·열은 마지막 채움을 안쪽으로 당겨 겹친다 */
-function covered(kind: ObjectKind, width: number, height: number): Spot[] {
-  const starts = (size: number): number[] => {
-    const out: number[] = [];
-    for (let v = 0; v < size; v += FILL) out.push(Math.min(v, size - FILL));
-    return out;
-  };
-  return starts(height).flatMap((top) => starts(width).map((left): Spot => [kind, left, top + FILL - 1]));
+// --- 바닥 재질 -----------------------------------------------------------------------
+// 바닥은 물체가 아니라 방 데이터의 재질 맵 ground — 32px 타일마다 한 글자(결정 2026-10-25: 바닥 재질 = ground).
+// 맵 옷의 테마 글자(소문자 = 바닥)로 맵 전체를 덮고, 그 위에 같은 테마의 길(대문자)을 사각형들로 칠한다.
+// 가장자리·안쪽 모서리·무늬는 ground.ts 의 groundTiles 가 이웃을 보고 고른다 — 모양은 어느 쪽으로든 두 타일(4칸) 이상 두께여야 맞는다
+
+/** 길 하나 — 길 글자(대문자)와 그 글자를 칠할 칸 사각형들. 나중 길이 앞 길을 덮는다 */
+interface Path {
+  readonly ch: Uppercase<GroundThemeKey>;
+  readonly rects: readonly Rect[];
 }
 
-// --- 바닥 재질 (Floor 시트) --------------------------------------------------------
-// 시트는 재질 구역 여덟(가로 둘 × 세로 넷, 구역마다 11열 × 7줄)이고 구역마다 배치가 같다. 구역 왼쪽 위 3×3 덩어리가
-// 바깥 바닥 위에 안쪽 재질을 까는 가장자리 세트 — 모서리·변·가운데. (5,1)(6,1)(5,2)(6,2) 는 안쪽 모서리(대각선만 바깥).
-// 바깥 바닥이 풀인 것은 흙 둘뿐 — 다른 재질은 그 구역의 바깥 채움(fill-sand·fill-snow·fill-soil) 위에 깐다
-
-interface Terrain {
-  /** 구역 왼쪽 위 시트 칸 */
-  readonly col: number;
-  readonly row: number;
-  /** 안쪽 재질 채움 — 덩어리 가운데 칸을 되풀이 */
-  readonly fill: ObjectKind;
+function path(ch: Uppercase<GroundThemeKey>, rects: readonly Rect[]): Path {
+  return { ch, rects };
 }
 
-const TERRAIN = {
-  dirt: { col: 0, row: 7, fill: 'fill-dirt' }, // 풀 위 흙
-  'dirt-dark': { col: 11, row: 7, fill: 'fill-dirt-dark' }, // 짙은 풀 위 흙
-  'sand-light': { col: 0, row: 0, fill: 'fill-sand-light' }, // 모래 위 옅은 모래
-  'snow-white': { col: 0, row: 14, fill: 'fill-snow-white' }, // 눈 위 흰 눈
-  planks: { col: 11, row: 14, fill: 'fill-planks' }, // 갈색 흙 위 마루
-  ice: { col: 0, row: 21, fill: 'fill-ice' }, // 흰 눈 테두리 얼음
-} as const satisfies Record<string, Terrain>;
-
-const FLOOR_KINDS: ReadonlySet<string> = new Set(FLOOR_TILES.map((t) => t.kind));
-
-/** 시트 칸 (col, row) 의 바닥 조각 종류 — 그림 없는 칸이면 throw (템플릿을 만들 때 바로 드러나게) */
-function floorKind(col: number, row: number): ObjectKind {
-  const kind = `floor-${col}-${row}`;
-  if (!FLOOR_KINDS.has(kind)) throw new Error(`바닥 조각 ${kind} 은 시트에 그림이 없다`);
-  return kind as FloorTileKind;
-}
-
-/**
- * 재질 하나를 사각형들을 합친 모양으로 깐다 — 32px 타일마다 이웃을 보고 모서리·변·안쪽 모서리·가운데를 고른다(autotile).
- * 가운데가 4×4 타일 넘게 이어지면 채움 한 장으로. 모양은 어느 쪽으로든 두 타일(4칸) 이상 두께여야 가장자리가 맞는다
- */
-function terrain(t: Terrain, rects: readonly Rect[]): Spot[] {
-  const inside = new Set<string>();
-  for (const [x, y, w, h] of rects) {
-    for (let ty = y / 2; ty < (y + h) / 2; ty++) for (let tx = x / 2; tx < (x + w) / 2; tx++) inside.add(`${tx},${ty}`);
-  }
-  const has = (tx: number, ty: number): boolean => inside.has(`${tx},${ty}`);
-  const tiles = [...inside].map((k) => k.split(',').map(Number) as [number, number]).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-  const piece = (dc: number, dr: number): ObjectKind => floorKind(t.col + dc, t.row + dr);
-  const isCenter = (tx: number, ty: number): boolean =>
-    [-1, 0, 1].every((dy) => [-1, 0, 1].every((dx) => has(tx + dx, ty + dy)));
-
-  const spots: Spot[] = [];
-  const filled = new Set<string>();
-  for (const [tx, ty] of tiles) {
-    const at = (kind: ObjectKind): Spot => [kind, tx * 2, ty * 2 + 1];
-    const n = has(tx, ty - 1);
-    const s = has(tx, ty + 1);
-    const w = has(tx - 1, ty);
-    const e = has(tx + 1, ty);
-    if (!n) spots.push(at(!w ? piece(0, 0) : !e ? piece(2, 0) : piece(1, 0)));
-    else if (!s) spots.push(at(!w ? piece(0, 2) : !e ? piece(2, 2) : piece(1, 2)));
-    else if (!w) spots.push(at(piece(0, 1)));
-    else if (!e) spots.push(at(piece(2, 1)));
-    else if (!has(tx - 1, ty - 1)) spots.push(at(piece(6, 2)));
-    else if (!has(tx + 1, ty - 1)) spots.push(at(piece(5, 2)));
-    else if (!has(tx - 1, ty + 1)) spots.push(at(piece(6, 1)));
-    else if (!has(tx + 1, ty + 1)) spots.push(at(piece(5, 1)));
-    else if (!filled.has(`${tx},${ty}`)) {
-      // 가운데 — 여기서 4×4 타일이 모두 가운데이고 아직 안 덮였으면 채움 한 장, 아니면 조각 하나
-      const span = FILL / 2;
-      let block = true;
-      for (let dy = 0; dy < span && block; dy++) {
-        for (let dx = 0; dx < span && block; dx++) block = isCenter(tx + dx, ty + dy) && !filled.has(`${tx + dx},${ty + dy}`);
+/** 재질 맵 — 칸 맵 크기의 반, 온통 floor 글자 위에 길들을 칠한다 */
+function groundMap(mapWidth: number, mapHeight: number, floor: GroundThemeKey, paths: readonly Path[]): string[] {
+  const { width, height } = groundSize(mapWidth, mapHeight);
+  const tiles = Array.from({ length: height }, () => Array.from({ length: width }, (): string => floor));
+  for (const { ch, rects } of paths) {
+    for (const [x, y, w, h] of rects) {
+      for (let ty = y / 2; ty < (y + h) / 2; ty++) {
+        for (let tx = x / 2; tx < (x + w) / 2; tx++) {
+          const line = tiles[ty];
+          if (line === undefined || tx >= width) throw new Error(`길 ${ch} 의 타일 (${tx}, ${ty}) 이 맵 밖이다`);
+          line[tx] = ch;
+        }
       }
-      if (block) {
-        for (let dy = 0; dy < span; dy++) for (let dx = 0; dx < span; dx++) filled.add(`${tx + dx},${ty + dy}`);
-        spots.push([t.fill, tx * 2, (ty + span) * 2 - 1]);
-      } else spots.push(at(piece(1, 1)));
     }
   }
-  return spots;
+  return tiles.map((line) => line.join(''));
 }
 
 // --- 맵 옷 ---------------------------------------------------------------------------
 
-/** 맵 옷 — 온 바닥에 까는 채움과 벽 타일에 놓는 2×2 그림 */
+/** 맵 옷 — 온 바닥의 재질 테마(바닥 글자)와 벽 타일에 놓는 2×2 그림 */
 interface Look {
-  readonly ground: ObjectKind;
+  readonly ground: GroundThemeKey;
   readonly wall: ObjectKind;
 }
 
-const MEADOW: Look = { ground: 'fill-grass', wall: 'hedge-round' };
+const MEADOW: Look = { ground: 'g', wall: 'hedge-round' };
 
 /**
- * 맵 옷 — 바닥 채움 위에, 문이 있는 줄의 벽은 건물 정면, 그 위 두 칸은 지붕(두 무늬 번갈아), 나머지 벽은 look.wall.
+ * 맵 옷 — 문이 있는 줄의 벽은 건물 정면, 그 위 두 칸은 지붕(두 무늬 번갈아), 나머지 벽은 look.wall. 바닥은 재질 맵이 깐다.
  * 벽은 32px 타일(2×2 칸) 단위로 본다 — 타일 왼쪽 위 칸이 벽이면 그 타일 전체. 벽·문이 짝수 칸에 맞춰진 맵만 맞아 보인다.
  * taken: 템플릿 물체가 막는 칸 — 그 칸이 든 벽 타일엔 벽 그림을 두지 않는다(나무 무더기를 덤불 벽 위에 얹을 때, solid 겹침 금지)
  */
@@ -144,7 +89,7 @@ function dressed(rows: readonly string[], look: Look, taken: ReadonlySet<string>
   const map = parseMap(rows);
   const doorRow = (y: number): boolean => map.doors.some((d) => y >= d.y && y < d.y + d.h);
   const building = (x: number, y: number): boolean => map.tileAt({ x, y }) === 'door' || (map.tileAt({ x, y }) === 'wall' && doorRow(y));
-  const spots: Spot[] = covered(look.ground, map.width, map.height);
+  const spots: Spot[] = [];
   for (let y = 0; y + 1 < map.height; y += 2) {
     for (let x = 0; x + 1 < map.width; x += 2) {
       if (map.tileAt({ x, y }) !== 'wall') continue;
@@ -156,12 +101,12 @@ function dressed(rows: readonly string[], look: Look, taken: ReadonlySet<string>
   return spots;
 }
 
-/** 방 하나 — 맵 옷이 먼저(아래), 템플릿 물체가 그 위. 바닥 재질도 템플릿 물체로 넘긴다 */
-function room(rows: readonly string[], look: Look, spots: readonly Spot[], doors: readonly DoorGame[]): RoomData {
+/** 방 하나 — 재질 맵(테마 바닥 + 길), 맵 옷이 먼저(아래), 템플릿 물체가 그 위 */
+function room(rows: readonly string[], look: Look, paths: readonly Path[], spots: readonly Spot[], doors: readonly DoorGame[]): RoomData {
   const taken = new Set(
     spots.flatMap(([kind, x, y]) => solidCells({ ...OBJECT_SHAPES[kind], id: '', x, y })).map((p) => `${p.x},${p.y}`),
   );
-  const ground = blankGround(rows[0]?.length ?? 0, rows.length);
+  const ground = groundMap(rows[0]?.length ?? 0, rows.length, look.ground, paths);
   return { rows, ground, objects: objects(dressed(rows, look, taken), spots), doors };
 }
 
@@ -228,8 +173,8 @@ export const DEFAULT_ROOM: RoomData = room(
     '##############################################################################',
   ],
   MEADOW,
+  [path('G', [[20, 14, 38, 32], [36, 4, 6, 10], [36, 46, 6, 8], [8, 4, 6, 4], [22, 4, 6, 4], [50, 4, 6, 4], [64, 4, 6, 4]])],
   [
-    ...terrain(TERRAIN.dirt, [[20, 14, 38, 32], [36, 4, 6, 10], [36, 46, 6, 8], [8, 4, 6, 4], [22, 4, 6, 4], [50, 4, 6, 4], [64, 4, 6, 4]]),
     ['statue-orb-stone', 37, 31],
     ['arch-stone', 36, 51],
     ...mirrored(78, [
@@ -350,11 +295,13 @@ const FOREST_ROOM: RoomData = room(
     '########################################################',
     '########################################################',
   ],
-  { ground: 'fill-grass-dark', wall: 'hedge-round' },
+  { ground: 'd', wall: 'hedge-round' },
   [
-    ...terrain(TERRAIN['dirt-dark'], [
+    path('D', [
       [40, 4, 8, 24], [8, 24, 40, 4], [8, 24, 8, 20], [8, 40, 40, 4], [40, 40, 8, 18], [6, 54, 42, 4], [6, 54, 8, 14],
     ]),
+  ],
+  [
     // 문 앞 — 오른쪽 문 앞 도리이
     ['torii', 42, 9],
     ['tree-big-green', 2, 11],
@@ -489,8 +436,8 @@ const COURT_ROOM: RoomData = room(
     '##############################################################',
   ],
   MEADOW,
+  [path('G', [[28, 4, 6, 44], [24, 22, 14, 12]])],
   [
-    ...terrain(TERRAIN.dirt, [[28, 4, 6, 44], [24, 22, 14, 12]]),
     ['statue-orb-stone', 29, 30],
     ['arch-stone', 28, 47],
     ...mirrored(62, [
@@ -578,8 +525,8 @@ const MARKET_ROOM: RoomData = room(
     '######################################################################',
   ],
   MEADOW,
+  [path('G', [[4, 6, 62, 34], [32, 4, 6, 4], [10, 4, 6, 4], [54, 4, 6, 4]])],
   [
-    ...terrain(TERRAIN.dirt, [[4, 6, 62, 34], [32, 4, 6, 4], [10, 4, 6, 4], [54, 4, 6, 4]]),
     // 왼쪽 위 좌판 — 과일·곡식·그릇
     ['table-long', 6, 13],
     ['table-long', 16, 13],
@@ -718,8 +665,8 @@ const SHRINE_ROOM: RoomData = room(
     '##########################################################',
   ],
   MEADOW,
+  [path('G', [[26, 4, 6, 52], [16, 4, 26, 8]])],
   [
-    ...terrain(TERRAIN.dirt, [[26, 4, 6, 52], [16, 4, 26, 8]]),
     ...grid('pebbles-pale', 28, 13, 1, 22, 2),
     ...grid('torii', 26, 13, 1, 6, 8),
     ...mirrored(58, [
@@ -790,10 +737,9 @@ const WINTER_ROOM: RoomData = room(
     '##############################################################',
     '##############################################################',
   ],
-  { ground: 'fill-snow', wall: 'rock-snowy' },
+  { ground: 'n', wall: 'rock-snowy' },
+  [path('N', [[28, 4, 6, 40], [8, 34, 46, 6]]), path('I', [[20, 18, 22, 12]])],
   [
-    ...terrain(TERRAIN['snow-white'], [[28, 4, 6, 40], [8, 34, 46, 6]]),
-    ...terrain(TERRAIN.ice, [[20, 18, 22, 12]]),
     ...mirrored(62, [
       ['statue-snowcap-stone', 26, 7],
       ['tree-snow', 20, 11],
@@ -865,8 +811,8 @@ const FARM_ROOM: RoomData = room(
     '##############################################################',
   ],
   MEADOW,
+  [path('G', [[28, 4, 6, 40], [14, 6, 12, 14], [36, 6, 12, 14]])],
   [
-    ...terrain(TERRAIN.dirt, [[28, 4, 6, 40], [14, 6, 12, 14], [36, 6, 12, 14]]),
     ...grid('sprout-olive', 16, 9, 4, 3, 2, 4),
     ...grid('sprout-orange', 38, 9, 4, 3, 2, 4),
     ...grid('tree-lime', 4, 29, 3, 2, 6, 7),
@@ -953,9 +899,9 @@ const MINE_ROOM: RoomData = room(
     '##################################################################',
     '##################################################################',
   ],
-  { ground: 'fill-soil', wall: 'stone-brown-2' },
+  { ground: 'b', wall: 'stone-brown-2' },
+  [path('B', [[16, 20, 34, 14]])],
   [
-    ...terrain(TERRAIN.planks, [[16, 20, 34, 14]]),
     // 왼쪽 벼랑
     ['cliff-brown', 2, 13],
     ['pillar-brown', 10, 11],

@@ -10,7 +10,7 @@
 > The lobby touches `server/` in two places only: `vite.config.ts` (dev `/ws` plugin, types
 > checked through `tsconfig.node.json`) and `src/` importing the shared pure modules of
 > `server/src/` — `protocol.ts` (messages, room code), `room-map.ts` (room data: map parsing,
-> object checks, `buildRoom`; re-exports the per-kind shape table of `object-shapes.ts`) and `room-templates.ts` (room data the lobby starts from) —
+> object checks, `buildRoom`; re-exports the per-kind shape table of `object-shapes.ts`) and `room-templates.ts` (room data the lobby starts from) and `ground.ts` (which Floor sheet cell each ground tile draws) —
 > shared so both ends parse and check the same way. Nothing else in `server/`.
 
 ## Layout of `src/`
@@ -156,7 +156,7 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
 ## 6. Layers & drawing
 
 - Draw order is ZEP-style and decided only by `layers.ts`: background (one map-sized
-  image) → floor objects → sorted (objects and characters by foot y) → top objects →
+  image: the room's `ground` tiles first — `groundArt` in `tiles.ts` — then floor objects baked on top) → sorted (objects and characters by foot y) → top objects →
   foreground → edit marks (only while editing). Every mesh gets its z from `drawZ` / `objectZ` — no hand-picked z values.
 - Everything is in **cells** (`CELL_PX` 16): one map character, positions, walking,
   collision, objects, the network and world units. Art keeps its size — a sheet cell is a

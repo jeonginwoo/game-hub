@@ -15,7 +15,7 @@
   material grid — one letter per 32px tile — and which Floor sheet cell each tile draws, including the
   position-fixed variant pick, so every client draws the same ground — pure, shared), `object-shapes.ts` (size and
   blocked cells per object kind — pure data, shared, re-exported by `room-map.ts`), `room-templates.ts`
-  (room data rooms start from — pure data, shared; the `gallery` template is generated from the
+  (room data rooms start from — pure data, shared; each template's floor is its `ground` — the look's theme letter over the whole map, paths painted as rectangles — not floor objects; the `gallery` template is generated from the
   shape table so every kind shows up once) and `roster.ts` (who is in, relay).
   They are tested without sockets.
 - **Wiring** is `ws.ts` (`attachLobby` — upgrades on `WS_PATH` only, heartbeat) and `main.ts`
