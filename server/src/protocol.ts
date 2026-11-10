@@ -35,8 +35,13 @@ export interface Player extends Spot {
 }
 
 export type ClientMsg =
-  // 접속 후 첫 메시지 — 그 전에는 명단에 없다. map 은 방이 없을 때 만들 템플릿 id (없거나 모르는 id 면 기본)
-  | { readonly t: 'hello'; readonly name: string; readonly at: Spot; readonly look: Look; readonly map?: string }
+  // 접속 후 첫 메시지 — 그 전에는 명단에 없다. map 은 방이 없을 때 만들 템플릿 id (없거나 모르는 id 면 기본),
+  // room 은 방이 없을 때 그 템플릿 대신 시작할 방 데이터 — 로비가 기억해 둔 마지막 방. 명단이 buildRoom 으로 검사하고,
+  // 틀리면 템플릿 그대로 (결정 2026-11-10: 빈 방이 사라져도 문 배정을 잃지 않게)
+  | {
+    readonly t: 'hello'; readonly name: string; readonly at: Spot; readonly look: Look; readonly map?: string;
+    readonly room?: RoomData;
+  }
   | { readonly t: 'move'; readonly at: Spot }
   | { readonly t: 'chat'; readonly text: string } // 같은 방 모두에게 — 보낸 사람에게도 돌아온다
   | { readonly t: 'rename'; readonly name: string } // 로비 안 닉네임 변경 — 보낸 사람은 이미 바꿨으므로 돌려받지 않는다
@@ -155,9 +160,11 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       // 외형이 틀리면 접속을 막지 않고 기본 외형으로 — 이름을 다듬는 것과 같은 태도
       const look = parseLook(v.look) ?? DEFAULT_LOOK;
       if (!at || typeof v.name !== 'string') return null;
-      const hello: Extract<ClientMsg, { t: 'hello' }> = { t: 'hello', name: cleanName(v.name), at, look };
-      // 맵 id 가 틀려도 접속은 받는다 — 빼고 받으면 기본 템플릿
-      return isMapId(v.map) ? { ...hello, map: v.map } : hello;
+      let hello: Extract<ClientMsg, { t: 'hello' }> = { t: 'hello', name: cleanName(v.name), at, look };
+      // 맵 id·방 데이터가 틀려도 접속은 받는다 — 빼고 받으면 기본 템플릿
+      if (isMapId(v.map)) hello = { ...hello, map: v.map };
+      const room = v.room === undefined ? null : parseRoomData(v.room);
+      return room ? { ...hello, room } : hello;
     }
     case 'move': {
       const at = parseSpot(v.at);

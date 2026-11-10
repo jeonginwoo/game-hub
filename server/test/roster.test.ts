@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LOOK, type ClientMsg, type ServerMsg, type Spot } from '../src/protocol.ts';
 import { DEFAULT_ROOM, ROOM_TEMPLATES, type RoomTemplate } from '../src/room-templates.ts';
+import type { RoomData } from '../src/room-map.ts';
 import { CHAT_BURST, CHAT_WINDOW_MS, Rooms, Roster } from '../src/roster.ts';
 
 function peer(): { got: ServerMsg[]; send: (m: ServerMsg) => void } {
@@ -320,6 +321,21 @@ describe('Rooms', () => {
     const b = peer();
     rooms.join('aaaaaa', b, { t: 'hello', name: 'B', at: spot(1, 1), look: DEFAULT_LOOK, map: 'court' });
     expect(b.got[0]).toMatchObject({ map: 'court' });
+  });
+
+  it('비어 사라진 방을 다시 만드는 hello 의 방 데이터로 시작한다 — 검사에 걸리면 템플릿, 있는 방에 들어오면 무시', () => {
+    const kept: RoomData = { rows: ['#S.D#'], ground: ['...'], objects: [], doors: [{ x: 3, y: 0, game: 'a' }] };
+    const broken: RoomData = { rows: ['#..D#'], ground: ['...'], objects: [], doors: [] }; // 시작점이 없다
+    const rooms = new Rooms();
+    const a = peer();
+    rooms.join('aaaaaa', a, { t: 'hello', name: 'A', at: spot(1, 0), look: DEFAULT_LOOK, map: 'forest', room: kept });
+    expect(a.got[0]).toMatchObject({ t: 'welcome', map: 'forest', room: kept });
+    const b = peer();
+    rooms.join('aaaaaa', b, { t: 'hello', name: 'B', at: spot(1, 0), look: DEFAULT_LOOK, room: DEFAULT_ROOM });
+    expect(b.got[0]).toMatchObject({ room: kept });
+    const c = peer();
+    rooms.join('bbbbbb', c, { t: 'hello', name: 'C', at: spot(1, 0), look: DEFAULT_LOOK, room: broken });
+    expect(c.got[0]).toMatchObject({ map: 'plaza', room: DEFAULT_ROOM });
   });
 
   it('마지막 사람이 나가면 방이 사라진다', () => {

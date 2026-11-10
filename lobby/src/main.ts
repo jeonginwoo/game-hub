@@ -2,14 +2,14 @@
 // 2026-10-14: ZEP 식 층). 배경·물체는 Ninja Adventure 타일(docs/assets.md), 캐릭터는 아직 임시 그림. 월드 좌표: x = 칸 x, y = -칸 y (화면 위쪽이 맵 윗줄).
 // 칸은 타일(그림 32px)의 1/2 — 걷기·충돌만 잘게, 그림 크기는 그대로 (결정 2026-10-16: 칸 2배 밀도).
 import * as THREE from 'three';
-import type { Look, Spot } from '../../server/src/protocol';
+import type { ClientMsg, Look, Spot } from '../../server/src/protocol';
 import { assignDoor, buildRoom, OBJECT_SHAPES, paintTile, placeObject, removeObject, type ObjectKind, type ObjectState, type Room, type RoomData } from '../../server/src/room-map';
 import { DEFAULT_ROOM, templateFor } from '../../server/src/room-templates';
 import { avatarCanvas } from './avatar/avatar-art';
 import { bubbleText, chatLine, say, type Bubble } from './chat/chat';
 import { showChatBox, type ChatBox } from './chat/chat-box';
 import { doorIndexAt, doorLabels, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './launch/entry';
-import { loadName, loadRoomMap, saveRoomMap, showEntryScreen, type Entered } from './room/entry-screen';
+import { loadName, loadRoomData, loadRoomMap, saveRoomData, saveRoomMap, showEntryScreen, type Entered } from './room/entry-screen';
 import { GAMES } from './data/games';
 import { noticeText, peopleCount, rosterRows } from './hud/hud';
 import { loadLook, showHud, type Hud } from './hud/hud-bar';
@@ -628,8 +628,11 @@ function startNet(e: Entered): void {
     () => {
       const at = here();
       lastSent = spotKey(at);
-      // 이름은 지금 것 — 끊긴 사이 바꾼 이름도 다시 붙을 때 실린다
-      return { t: 'hello', name: entered?.name ?? e.name, at, look: myLook, map: roomMap };
+      // 이름은 지금 것 — 끊긴 사이 바꾼 이름도 다시 붙을 때 실린다.
+      // 기억해 둔 마지막 방도 싣는다 — 방이 비어 사라졌으면 서버가 그 방으로 되살린다 (있는 방이면 무시)
+      const hello: Extract<ClientMsg, { t: 'hello' }> = { t: 'hello', name: entered?.name ?? e.name, at, look: myLook, map: roomMap };
+      const kept = loadRoomData(e.room);
+      return kept ? { ...hello, room: kept } : hello;
     },
     (msg) => {
       if (msg.t === 'chat') {
@@ -646,11 +649,13 @@ function startNet(e: Entered): void {
         if (switchRoom(msg.room, arrivalSearch ?? '')) {
           roomMap = msg.map;
           saveRoomMap(e.room, msg.map);
+          saveRoomData(e.room, msg.room);
         }
         arrivalSearch = null;
       }
       // 방장이 저장함 — 배경·물체·걷기 판정을 다시 만들고, 막힌 칸에 섰으면 옮긴다 (결정 2026-10-21: 저장식 편집)
       if (msg.t === 'room') {
+        saveRoomData(e.room, msg.room); // 방이 비어 사라진 뒤 다시 만드는 hello 가 이 방을 싣게
         if (editing) {
           // 고친 초안은 그대로, 바뀐 것 없는 초안은 받은 방으로 — 취소하면 이 방으로
           draft = rebaseDraft(draft ?? msg.room, editBase, msg.room);

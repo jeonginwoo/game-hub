@@ -1,6 +1,7 @@
 // 로비 방·이름 — 첫 화면이 무엇을 보일지, 방 코드 만들기·읽기, 초대 링크. Three.js·DOM 과 무관한 순수 함수.
 // (결정 2026-10-14: 로그인 없이 방 + 닉네임 + 초대 링크). 방 코드 형식은 서버와 같은 server/src/protocol.ts.
 import { isRoomCode, normalizeName, ROOM_ALPHABET, ROOM_CODE_LENGTH, ROOM_PARAM } from '../../../server/src/protocol';
+import { parseRoomData, type RoomData } from '../../../server/src/room-map';
 
 /** 첫 화면 — start: 이름 + 만들기/참여, name: 초대 링크로 와서 이름만, lobby: 바로 로비 */
 export type Screen = 'start' | 'name' | 'lobby';
@@ -82,6 +83,24 @@ export function cycleIndex(i: number, delta: number, count: number): number {
  */
 export function mapKey(room: string): string {
   return `game-hub:map:${room}`;
+}
+
+/**
+ * 방 코드별로 기억해 둔 마지막 방 데이터(맵·물체·문 배정)의 저장 키 (sessionStorage). 방이 비어 사라지면 문 배정도 함께
+ * 사라지므로, 돌아와 다시 만드는 hello 에 실어 그 방으로 되살린다 (결정 2026-11-10)
+ */
+export function roomDataKey(room: string): string {
+  return `game-hub:room:${room}`;
+}
+
+/** 기억해 둔 방 데이터 글 — 없거나 JSON·모양이 틀리면 null (맞는 방인지는 서버가 buildRoom 으로) */
+export function parseStoredRoom(raw: string | null): RoomData | null {
+  if (raw === null) return null;
+  try {
+    return parseRoomData(JSON.parse(raw));
+  } catch {
+    return null;
+  }
 }
 
 /** 로비 안 이름 바꾸기 칸의 입력 — 비었거나 지금 이름과 같으면 null (바꿀 것이 없다) */

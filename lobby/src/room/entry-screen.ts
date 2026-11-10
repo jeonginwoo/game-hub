@@ -1,7 +1,8 @@
 // 첫 화면(이름·로비 만들기·코드로 참여) — DOM 연결만. 무엇을 보일지·코드 판정은 room.ts.
 // (결정 2026-10-14: 로그인 없이 방 + 닉네임 + 초대 링크). 화면 글자는 모두 textContent 로 넣는다.
 import { ROOM_TEMPLATES } from '../../../server/src/room-templates';
-import { cycleIndex, mapKey, nameFromInput, newRoomCode, roomFromInput, type Screen } from './room';
+import type { RoomData } from '../../../server/src/room-map';
+import { cycleIndex, mapKey, nameFromInput, newRoomCode, parseStoredRoom, roomDataKey, roomFromInput, type Screen } from './room';
 
 const NAME_KEY = 'game-hub:name';
 
@@ -39,6 +40,24 @@ export function saveRoomMap(room: string, map: string): void {
     sessionStorage.setItem(mapKey(room), map);
   } catch {
     // 저장 못 하면 방이 비어 다시 생길 때 기본 맵 — 이번 접속은 그대로
+  }
+}
+
+/** 이 방에서 마지막으로 받은 방 데이터 — 없거나 틀렸거나 저장소를 못 쓰면 null */
+export function loadRoomData(room: string): RoomData | null {
+  try {
+    return parseStoredRoom(sessionStorage.getItem(roomDataKey(room)));
+  } catch {
+    return null;
+  }
+}
+
+/** welcome·room 으로 받은 방 데이터를 기억한다. 저장 못 해도(용량 등) 던지지 않는다 */
+export function saveRoomData(room: string, data: RoomData): void {
+  try {
+    sessionStorage.setItem(roomDataKey(room), JSON.stringify(data));
+  } catch {
+    // 저장 못 하면 방이 비어 다시 생길 때 템플릿 — 이번 접속은 그대로
   }
 }
 

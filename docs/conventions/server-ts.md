@@ -50,8 +50,9 @@
   The edit functions (`assignDoor`, `placeObject`, `removeObject`, `paintTile` in `room-map.ts`) are used by the
   lobby on its draft, not by the server. The server never looks at positions — a player left on a blocked cell moves
   themselves. The template is the `map` of the `hello`
-  that creates the room (`templateFor` — unknown or missing id = default); a `hello` joining an
-  existing room cannot change it.
+  that creates the room (`templateFor` — unknown or missing id = default). That `hello` may also carry `room` — the
+  lobby's remembered last room data — which replaces the template's data if it passes `buildRoom` (else the template's);
+  a `hello` joining an existing room cannot change either.
 - JSON over WebSocket, one object per message, discriminated by `t`.
 - Positions are client-authoritative, in **cell units** (`x` right, `y` down — same as
   `lobby-ts.md` §5). The server checks shape and bounds only; it holds the room data but never

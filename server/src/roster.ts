@@ -1,11 +1,22 @@
 // 로비 명단 — 방 하나의 접속자 목록과 중계, 그리고 방 코드별 묶음. 전송(ws)과 분리한 순수 모듈이라 소켓 없이 단위 테스트한다.
 // 위치는 클라이언트 권위(결정 2026-10-09): 받은 위치를 그대로 기록하고 다른 사람에게 전한다.
 // 방장은 서버가 정한다(결정 2026-10-16): 처음 들어온 사람, 나가면 남은 사람 중 가장 먼저 들어온 사람.
-// 방 데이터는 메모리에만 — 방이 생길 때 템플릿에서 받아 welcome 에 싣고, 방장의 저장(save)으로 통째 바뀌며,
-// 마지막 사람이 나가면 방과 함께 사라진다 (결정 2026-10-16: 방이 상태를 갖는다 · 2026-10-21: 저장식 편집).
+// 방 데이터는 메모리에만 — 방이 생길 때 템플릿(또는 만드는 hello 가 실은 방)에서 받아 welcome 에 싣고, 방장의 저장(save)으로
+// 통째 바뀌며, 마지막 사람이 나가면 방과 함께 사라진다 (결정 2026-10-16: 방이 상태를 갖는다 · 2026-10-21: 저장식 편집).
+// 사라진 방을 되살리는 것은 로비 몫 — 탭에 기억해 둔 마지막 방을 hello 에 싣는다 (결정 2026-11-10)
 import type { ClientMsg, Look, Player, ServerMsg } from './protocol.ts';
 import { buildRoom, sameRoomData, type RoomData } from './room-map.ts';
 import { DEFAULT_TEMPLATE, templateFor, type RoomTemplate } from './room-templates.ts';
+
+/** buildRoom 검사를 통과하는지 — 맞는 방만 들고 보낸다 */
+function isBuildable(room: RoomData): boolean {
+  try {
+    buildRoom(room);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export interface Peer {
   send(msg: ServerMsg): void;
@@ -33,10 +44,11 @@ export class Roster {
   /** 지금 방 데이터 — 템플릿에서 시작해 방장의 save 로 바뀐다. 서버는 들고 보낼 뿐, 위치를 이것과 대조하지 않는다 */
   private room: RoomData;
 
-  constructor(now: Clock = Date.now, template: RoomTemplate = DEFAULT_TEMPLATE) {
+  /** initial 은 템플릿 대신 시작할 방 데이터 — buildRoom 이 던지면 버리고 템플릿 그대로 */
+  constructor(now: Clock = Date.now, template: RoomTemplate = DEFAULT_TEMPLATE, initial?: RoomData) {
     this.now = now;
     this.template = template;
-    this.room = template.room;
+    this.room = initial && isBuildable(initial) ? initial : template.room;
   }
 
   get size(): number {
@@ -118,12 +130,7 @@ export class Roster {
    * 바뀌면 보낸 방장 포함 모두에게 room. 사람 자리는 보지 않는다 — 막힌 칸에 선 사람은 받은 쪽이 스스로 옮긴다
    */
   private save(id: string, room: RoomData): void {
-    if (id !== this.ownerId || sameRoomData(room, this.room)) return;
-    try {
-      buildRoom(room);
-    } catch {
-      return;
-    }
+    if (id !== this.ownerId || sameRoomData(room, this.room) || !isBuildable(room)) return;
     this.room = room;
     this.broadcast({ t: 'room', room });
   }
@@ -149,11 +156,11 @@ export class Rooms {
     return this.rooms.size;
   }
 
-  /** 방이 없으면 이 hello 의 map 으로 만든다 — 있으면 map 은 보지 않는다 (참여자는 맵을 바꾸지 못한다) */
+  /** 방이 없으면 이 hello 의 map·room 으로 만든다 — 있으면 둘 다 보지 않는다 (참여자는 맵을 바꾸지 못한다) */
   join(code: string, peer: Peer, hello: Extract<ClientMsg, { t: 'hello' }>): string {
     let roster = this.rooms.get(code);
     if (!roster) {
-      roster = new Roster(this.now, templateFor(hello.map));
+      roster = new Roster(this.now, templateFor(hello.map), hello.room);
       this.rooms.set(code, roster);
     }
     return roster.join(peer, hello);

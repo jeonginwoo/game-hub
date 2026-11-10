@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isRoomCode } from '../../../server/src/protocol';
 import { DEFAULT_ROOM, ROOM_TEMPLATES } from '../../../server/src/room-templates';
-import { cycleIndex, homeUrl, inviteUrl, mapKey, nameFromInput, newRoomCode, renameFromInput, roomFromInput, roomFromSearch, screenFor, withRoom } from '../../src/room/room';
+import { cycleIndex, homeUrl, inviteUrl, mapKey, nameFromInput, newRoomCode, parseStoredRoom, renameFromInput, roomDataKey, roomFromInput, roomFromSearch, screenFor, withRoom } from '../../src/room/room';
 
 describe('cycleIndex', () => {
   it('앞뒤로 돌고 끝에서 처음으로 넘어간다', () => {
@@ -21,6 +21,18 @@ describe('맵 고르기의 첫 값', () => {
 describe('mapKey', () => {
   it('방마다 다른 키', () => {
     expect(mapKey('abcdef')).not.toBe(mapKey('ghjkmn'));
+  });
+});
+
+describe('기억해 둔 방 데이터', () => {
+  it('방마다 다른 키 — 맵 id 키와도 다르다', () => {
+    expect(roomDataKey('abcdef')).not.toBe(roomDataKey('ghjkmn'));
+    expect(roomDataKey('abcdef')).not.toBe(mapKey('abcdef'));
+  });
+
+  it('저장한 글을 되읽고, 없거나 틀리면 null', () => {
+    expect(parseStoredRoom(JSON.stringify(DEFAULT_ROOM))).toEqual(DEFAULT_ROOM);
+    for (const raw of [null, '', '{', '3', JSON.stringify({ rows: 'x' })]) expect(parseStoredRoom(raw)).toBeNull();
   });
 });
 
