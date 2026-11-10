@@ -8,7 +8,7 @@ import { DEFAULT_ROOM, templateFor } from '../../server/src/room-templates';
 import { avatarCanvas } from './avatar/avatar-art';
 import { bubbleText, chatLine, say, type Bubble } from './chat/chat';
 import { showChatBox, type ChatBox } from './chat/chat-box';
-import { doorIndexAt, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './launch/entry';
+import { doorIndexAt, doorLabels, entryUrl, gameAtDoor, returnUrl, spawnFromSearch, withoutDoorParam } from './launch/entry';
 import { loadName, loadRoomMap, saveRoomMap, showEntryScreen, type Entered } from './room/entry-screen';
 import { GAMES } from './data/games';
 import { noticeText, peopleCount, rosterRows } from './hud/hud';
@@ -23,18 +23,21 @@ import { objectRect, objectZ, visibleObjects, withSolidObjects, type MapObject }
 import { advance, applyMsg, NO_OTHERS, remotePos, type Others } from './net/others';
 import { homeUrl, roomFromSearch, screenFor, withRoom } from './room/room';
 import { fillCell, groundArt, SHEET_PX, type Cell, type Sheet } from './world/tiles';
-import { clampAxis, driftCenter, panCenter, screenToCell } from './world/view';
+import { clampAxis, DEFAULT_ZOOM, driftCenter, panCenter, screenToCell, stepZoom, wheelDeltaPx, wheelSteps, ZOOM_LEVELS, zoomAround } from './world/view';
 import { canEdit, doorChoices, doorMarks } from './edit/edit';
 import { createDoorPicker } from './edit/door-picker';
+import { createZoomBadge } from './hud/zoom-badge';
 import { draftDirty, rebaseDraft } from './edit/draft';
 import { createEditTools } from './edit/edit-tools';
 import { canPlace, escStep, placeAt, placeState, topObjectAt, type EditTool } from './edit/place';
 import { cellsBetween, paintCheck } from './edit/paint';
 import { groundChar, paintGround, tileOf } from './edit/ground-brush';
 
-// 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 칸 = CELL_PX × VIEW_ZOOM). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
-// 1.5 면 한 칸 24px·그림 타일 48px — 16px 타일(Ninja Adventure)은 원본 1px 이 화면 3px 로 고르다. 32px 기준 그림(임시 캐릭터)은 1.5배라 고르지 않다
-const VIEW_ZOOM = 1.5;
+// 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 칸 = CELL_PX × viewZoom). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
+// 기본 1.5 면 한 칸 24px·그림 타일 48px — 16px 타일(Ninja Adventure)은 원본 1px 이 화면 3px 로 고르다.
+// 로비 안에서는 휠로 ZOOM_LEVELS 단계를 오르내리고(view.ts stepZoom), 이 브라우저에 기억한다
+const ZOOM_KEY = 'game-hub:zoom';
+let viewZoom = loadZoom();
 // 첫 화면 뒤 배경만 더 크게 — 1.5 면 큰 창이 광장(48×34칸)보다 넓어 카메라가 흐를 자리가 없다. 3 이면 원본 1px 이 화면 6px 로 고르다
 const BACKDROP_ZOOM = 3;
 const STEP_MS = 80; // 한 칸 걷는 시간 (대각선은 거리만큼 √2 배) — 칸이 타일의 1/2 라 걷는 속도는 타일 하나에 160ms 그대로
@@ -177,6 +180,8 @@ interface World {
   readonly cellMarks: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   /** 시트가 오면(이미 와 있으면 바로) 배경·물체 캔버스를 칠한다 */
   readonly paint: (sheets: Sheets) => void;
+  /** 게임이 붙은 문 위에 띄우는 이름·설명 — 화면 글자라 DOM, 루프가 매 프레임 자리를 옮긴다 */
+  readonly labels: readonly { readonly el: HTMLDivElement; readonly x: number; readonly y: number }[];
 }
 
 /** 검사를 마친 방으로 월드를 만들어 장면에 넣는다 — buildRoom 이 던지면 아무것도 넣지 않는다. view 상태의 꼬리표 물체만 그리고 막는다 */
@@ -227,7 +232,27 @@ function buildWorld(data: RoomData, view: WorldView): World {
   if (loadedSheets) paint(loadedSheets);
   // 닫힌 문(게임 없음)은 벽, 열린 문은 바닥 + 입장 (결정 2026-10-21: 문도 투명)
   const walkMap = withSolidObjects(withShutDoors(map, isOpenDoor), objects);
-  return { data, view, room, walkMap, objects, meshes, marks, cellMarks, paint };
+  const labels = doorLabels(map.doors, GAMES, room.doorGames).map((l) => ({ el: makeDoorLabel(l.title, l.description), x: l.x, y: l.y }));
+  return { data, view, room, walkMap, objects, meshes, marks, cellMarks, paint, labels };
+}
+
+/** 문 위 글 — 게임 이름 + 설명(있으면). textContent 로만 (등록 표 글이라도 HTML 로 넣지 않는다) */
+function makeDoorLabel(title: string, description: string | null): HTMLDivElement {
+  const root = document.createElement('div');
+  root.className = 'hub-door-label';
+  root.style.visibility = 'hidden'; // 첫 자리 잡기 전에 왼쪽 위에 보이지 않게
+  const name = document.createElement('div');
+  name.className = 'hub-door-title';
+  name.textContent = title;
+  root.append(name);
+  if (description !== null) {
+    const desc = document.createElement('div');
+    desc.className = 'hub-door-desc';
+    desc.textContent = description;
+    root.append(desc);
+  }
+  document.body.append(root);
+  return root;
 }
 
 const CELL_MARK = 'rgba(236, 239, 244, 0.12)'; // 그 밖의 칸 — 투명한 문자 맵의 칸이 보이게
@@ -296,6 +321,7 @@ function disposeWorld(w: World): void {
     m.material.map?.dispose();
     m.material.dispose();
   }
+  for (const l of w.labels) l.el.remove();
   scene.remove(w.marks);
   w.marks.traverse((o) => {
     if (!(o instanceof THREE.Mesh || o instanceof THREE.LineLoop)) return;
@@ -1184,8 +1210,54 @@ for (const ev of ['pointerup', 'pointercancel', 'blur'] as const) {
 
 /** 한 칸이 화면 몇 CSS px — 로비에 들어가기 전(첫 화면 뒤 배경)과 뒤가 다르다 */
 function cellScreenPx(): number {
-  return CELL_PX * (entered ? VIEW_ZOOM : BACKDROP_ZOOM);
+  return CELL_PX * (entered ? viewZoom : BACKDROP_ZOOM);
 }
+
+function loadZoom(): number {
+  try {
+    const z = Number(localStorage.getItem(ZOOM_KEY));
+    return ZOOM_LEVELS.includes(z) ? z : DEFAULT_ZOOM;
+  } catch {
+    return DEFAULT_ZOOM;
+  }
+}
+
+let wheelAcc = 0; // 트랙패드의 잘게 쪼갠 휠 delta 를 모아 둔 값 (view.ts wheelSteps)
+
+/**
+ * 배율을 바꾸고 알림을 띄운다 — 편집 중엔 화면 점(sx, sy)이 가리키던 자리를 그대로 두고, 걷는 중엔 카메라가 캐릭터를 따라간다.
+ * 바뀌지 않아도(끝 단계) 알림은 띄워 지금 배율을 보여 준다
+ */
+function setZoom(next: number, sx = window.innerWidth / 2, sy = window.innerHeight / 2): void {
+  if (!entered) return;
+  if (next !== viewZoom) {
+    const oldPx = cellScreenPx();
+    viewZoom = next;
+    try {
+      localStorage.setItem(ZOOM_KEY, String(next));
+    } catch {
+      // 저장 못 해도 이번 화면엔 반영
+    }
+    if (editCenter) editCenter = zoomAround(editCenter, sx, sy, { w: window.innerWidth, h: window.innerHeight }, oldPx, cellScreenPx());
+    resize(); // 범위 맞추기는 루프가 매 프레임 panCenter 로
+  }
+  zoomBadge.show(viewZoom);
+}
+
+const zoomBadge = createZoomBadge({
+  step: (steps) => setZoom(stepZoom(viewZoom, steps)),
+  reset: () => setZoom(DEFAULT_ZOOM),
+});
+
+// 맵 위에서 휠 → 확대·축소 (로비 안에서만 — 첫 화면 뒤 배경은 그대로). 편집 중엔 커서가 가리키는 자리를 기준으로
+canvas.addEventListener('wheel', (e) => {
+  if (!entered) return;
+  e.preventDefault(); // 페이지 스크롤·브라우저 확대 대신
+  const r = wheelSteps(wheelAcc, wheelDeltaPx(e.deltaY, e.deltaMode, window.innerHeight));
+  wheelAcc = r.acc;
+  if (r.steps === 0) return;
+  setZoom(stepZoom(viewZoom, -r.steps), e.clientX, e.clientY); // 휠을 위로(deltaY < 0) = 확대
+}, { passive: false });
 
 function resize(): void {
   const w = window.innerWidth;
@@ -1275,5 +1347,14 @@ renderer.setAnimationLoop((now) => {
     const p = remotePos(r);
     setBubble(v.head, bubbleText(bubbles, id, now));
     placeHead(v.head, p.x, p.y);
+  }
+  for (const l of world.labels) {
+    if (!entered) {
+      l.el.style.visibility = 'hidden'; // 첫 화면 뒤 배경엔 글 없이
+      continue;
+    }
+    const { sx, sy } = toScreen(l.x, -l.y);
+    l.el.style.transform = `translate(${sx}px, ${sy}px) translate(-50%, -100%)`;
+    l.el.style.visibility = 'visible';
   }
 });

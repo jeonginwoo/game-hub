@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   doorFront,
+  doorLabels,
   doorIndexAt,
   entryUrl,
   gameAtDoor,
@@ -169,5 +170,28 @@ describe('실제 등록 표', () => {
       const map = buildRoom(t.room).map;
       for (const d of map.doors) expect(doorFront(map, d), t.id).toBeDefined();
     }
+  });
+});
+
+describe('doorLabels', () => {
+  const games: readonly GameEntry[] = [
+    { id: 'a', title: '가', url: '/a/', description: '  가 게임  ' },
+    { id: 'b', title: '나', url: '/b/' },
+  ];
+  const doors = [
+    { x: 1, y: 0, w: 2 },
+    { x: 6, y: 0, w: 1 },
+    { x: 7, y: 3, w: 2 },
+  ];
+
+  it('게임이 붙은 문만, 문 윗변 가운데에 이름·설명', () => {
+    expect(doorLabels(doors, games, { 0: 'a', 2: 'b' })).toEqual([
+      { x: 1.5, y: -0.5, title: '가', description: '가 게임' },
+      { x: 7.5, y: 2.5, title: '나', description: null },
+    ]);
+  });
+
+  it('등록 표에 없는 게임은 건너뛴다', () => {
+    expect(doorLabels(doors, games, { 1: 'zzz' })).toEqual([]);
   });
 });

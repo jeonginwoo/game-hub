@@ -109,3 +109,27 @@ export function spawnFromSearch(map: TileMap, search: string, rand: () => number
   const front = door && doorFront(map, door);
   return front ?? { pos: pickStart(map, rand), facing: 'down' };
 }
+
+export interface DoorLabel {
+  /** 글을 띄울 자리(칸) — 문 윗변 가운데. y 는 문 윗변(칸 경계)이라 칸 중심 기준 -0.5 */
+  readonly x: number;
+  readonly y: number;
+  readonly title: string;
+  readonly description: string | null;
+}
+
+/** 게임이 배정된(등록 표에 있는) 문마다 문 위에 띄울 이름·설명 — 문 번호 순. 빈 문·모르는 게임은 없음 */
+export function doorLabels(
+  doors: readonly { readonly x: number; readonly y: number; readonly w: number }[],
+  games: readonly GameEntry[],
+  doorGames: Readonly<Record<number, string>>,
+): readonly DoorLabel[] {
+  const out: DoorLabel[] = [];
+  doors.forEach((d, door) => {
+    const g = gameAtDoor(door, games, doorGames);
+    if (!g) return;
+    const description = g.description?.trim() || null;
+    out.push({ x: d.x + (d.w - 1) / 2, y: d.y - 0.5, title: g.title, description });
+  });
+  return out;
+}

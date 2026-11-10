@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_LOOK, type Look, type Spot } from '../../../server/src/protocol';
 import { DEFAULT_ROOM } from '../../../server/src/room-templates';
 import { noticeText, peopleCount, rosterRows } from '../../src/hud/hud';
+import { zoomPercent } from '../../src/hud/zoom-badge';
+import { DEFAULT_ZOOM, ZOOM_LEVELS, ZOOM_PERCENTS } from '../../src/world/view';
 import type { EditTool } from '../../src/edit/place';
 import { bodyColor } from '../../src/avatar/look';
 import { applyMsg, NO_OTHERS, type Others } from '../../src/net/others';
@@ -93,5 +95,13 @@ describe('noticeText 편집 중', () => {
   it('저장 안 한 바뀐 것이 있으면 Esc 대신 저장·취소로 끝난다고', () => {
     expect(noticeText('open', { tool: 'paint', window: false, dirty: true })).toBe('편집 중 — 누르거나 끌어서 칸 칠하기 (저장해야 모두에게 · 저장·취소로 끝)');
     expect(noticeText('open', { tool: 'place', window: true, dirty: true })).toBe('편집 중 — 도구 고르기 (저장해야 모두에게 · 저장·취소로 끝)');
+  });
+});
+
+describe('zoomPercent', () => {
+  it('기본 배율이 100%, 나머지는 그 비율을 반올림', () => {
+    expect(zoomPercent(DEFAULT_ZOOM)).toBe(100);
+    expect(zoomPercent(3)).toBe(200);
+    expect(ZOOM_LEVELS.map(zoomPercent)).toEqual(ZOOM_PERCENTS);
   });
 });

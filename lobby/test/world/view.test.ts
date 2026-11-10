@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampAxis, DRIFT_X_PER_S, DRIFT_Y_PER_S, driftCenter, panCenter, screenToCell } from '../../src/world/view';
+import { clampAxis, DEFAULT_ZOOM, DRIFT_X_PER_S, DRIFT_Y_PER_S, driftCenter, panCenter, screenToCell, stepZoom, wheelDeltaPx, wheelSteps, ZOOM_LEVELS, zoomAround } from '../../src/world/view';
 
 describe('clampAxis', () => {
   // 맵 20칸, 화면 10칸 → 타일 0 의 왼쪽 끝(-0.5)이 화면 왼쪽 끝이 되는 중심은 4.5
@@ -96,5 +96,70 @@ describe('driftCenter', () => {
     const small = { w: 6, h: 30 };
     expect(driftCenter(0, small, view).x).toBe(2.5);
     expect(driftCenter(77_777, small, view).x).toBe(2.5);
+  });
+});
+
+describe('stepZoom', () => {
+  it('한 단계씩 오르내린다', () => {
+    expect(stepZoom(DEFAULT_ZOOM, 1)).toBeCloseTo(1.65);
+    expect(stepZoom(DEFAULT_ZOOM, -1)).toBeCloseTo(1.35);
+  });
+
+  it('끝에서 멈춘다', () => {
+    const top = ZOOM_LEVELS.at(-1) ?? 0;
+    const bottom = ZOOM_LEVELS[0] ?? 0;
+    expect(stepZoom(top, 1)).toBe(top);
+    expect(stepZoom(bottom, -3)).toBe(bottom);
+  });
+
+  it('표에 없는 값은 기본 배율에서 센다', () => {
+    expect(stepZoom(1.234, 0)).toBe(DEFAULT_ZOOM);
+    expect(stepZoom(Number.NaN, 1)).toBe(stepZoom(DEFAULT_ZOOM, 1));
+  });
+});
+
+describe('zoomAround', () => {
+  const view = { w: 800, h: 600 };
+
+  it('화면 가운데를 기준으로 하면 중심이 그대로', () => {
+    expect(zoomAround({ x: 10, y: 7 }, 400, 300, view, 24, 48)).toEqual({ x: 10, y: 7 });
+  });
+
+  it('기준 점이 가리키던 칸이 바뀐 배율에서도 같은 화면 점에 있다', () => {
+    const before = { x: 10, y: 7 };
+    const after = zoomAround(before, 600, 100, view, 24, 48);
+    const cellAt = (c: { x: number; y: number }, px: number) => ({ x: c.x + (600 - 400) / px, y: c.y + (100 - 300) / px });
+    const a = cellAt(before, 24);
+    const b = cellAt(after, 48);
+    expect(b.x).toBeCloseTo(a.x);
+    expect(b.y).toBeCloseTo(a.y);
+  });
+});
+
+describe('wheelSteps', () => {
+  it('마우스 휠 한 칸은 delta 크기와 상관없이 한 단계', () => {
+    expect(wheelSteps(0, 53)).toEqual({ steps: 1, acc: 0 });
+    expect(wheelSteps(0, -100)).toEqual({ steps: -1, acc: 0 });
+    expect(wheelSteps(0, 240)).toEqual({ steps: 1, acc: 0 });
+  });
+
+  it('잘게 쪼갠 delta 는 모아서 한 단계', () => {
+    let r = wheelSteps(0, 20);
+    expect(r.steps).toBe(0);
+    r = wheelSteps(r.acc, 20);
+    r = wheelSteps(r.acc, 25);
+    expect(r).toEqual({ steps: 1, acc: 5 });
+  });
+
+  it('방향이 바뀌면 모아 둔 것을 버린다', () => {
+    expect(wheelSteps(50, -10)).toEqual({ steps: 0, acc: -10 });
+  });
+});
+
+describe('wheelDeltaPx', () => {
+  it('px·줄·쪽 단위를 px 로', () => {
+    expect(wheelDeltaPx(53, 0, 800)).toBe(53);
+    expect(wheelDeltaPx(-3, 1, 800)).toBe(-99);
+    expect(wheelDeltaPx(1, 2, 800)).toBe(800);
   });
 });

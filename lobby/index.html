@@ -156,7 +156,22 @@
       }
       .hub-bubble[hidden] { display: none; }
       /* 편집 중(main.ts setEditing 이 body 에 hub-editing) — 맵에만 집중하게 머리 위 글·채팅창을 내린다 */
-      .hub-editing .hub-head, .hub-editing .hub-chat { display: none; }
+      .hub-editing .hub-head, .hub-editing .hub-chat, .hub-editing .hub-door-label { display: none; }
+      /* 게임이 붙은 문 위 이름·설명 (main.ts makeDoorLabel) — 머리 위 글보다 뒤 */
+      .hub-door-label {
+        position: fixed; left: 0; top: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 2px;
+        max-width: 200px; padding: 3px 8px 4px; margin-top: -4px; border-radius: 8px; background: rgb(46 52 64 / 0.8);
+        text-align: center; pointer-events: none;
+      }
+      /* 배율 알림 (src/hud/zoom-badge.ts) — 오른쪽 아래, 확대·축소할 때만 잠깐 */
+      .hub-zoom {
+        position: fixed; right: 12px; bottom: 12px; z-index: 20; display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 10px;
+        border-radius: 10px; background: rgb(46 52 64 / 0.9);
+      }
+      .hub-zoom[hidden] { display: none; }
+      .hub-zoom-pct { min-width: 44px; font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; margin-right: 4px; }
+      .hub-door-title { font-size: 13px; font-weight: 600; color: #a3be8c; white-space: nowrap; }
+      .hub-door-desc { font-size: 11px; line-height: 1.35; color: #d8dee9; overflow-wrap: anywhere; }
       /* 채팅창 (src/chat/chat-box.ts) */
       .hub-chat {
         position: fixed; left: 12px; bottom: 12px; z-index: 20; display: flex; flex-direction: column; gap: 6px;

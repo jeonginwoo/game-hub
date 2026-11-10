@@ -68,3 +68,53 @@ function driftAxis(ms: number, perS: number, mapSize: number, viewSize: number):
   const phase = (range / 2 + (ms / 1000) * perS) % (2 * range);
   return lo + (phase <= range ? phase : 2 * range - phase);
 }
+
+// 휠 확대·축소 — 로비 안 화면 배율(그림 1px 이 화면 몇 CSS px). 기본 배율을 100% 로 한 퍼센트 단계 — 100% 가까이는 10% 씩 촘촘하게
+export const DEFAULT_ZOOM = 1.5;
+export const ZOOM_PERCENTS: readonly number[] = [50, 60, 70, 80, 90, 100, 110, 120, 135, 150, 175, 200, 250, 300];
+export const ZOOM_LEVELS: readonly number[] = ZOOM_PERCENTS.map((p) => (DEFAULT_ZOOM * p) / 100);
+
+// 휠 입력 → 단계. 마우스 휠 한 칸은 기기·브라우저마다 delta 가 달라(대개 50~120px) 크기와 상관없이 한 칸 = 한 단계.
+// 트랙패드처럼 잘게 쪼갠 delta(WHEEL_FINE_PX 미만)만 WHEEL_FINE_STEP 만큼 모아서 한 단계
+export const WHEEL_FINE_PX = 30;
+export const WHEEL_FINE_STEP = 60;
+
+const LINE_PX = 33; // deltaMode 줄 단위(Firefox 마우스 휠) 한 줄을 px 로
+
+/** WheelEvent.deltaY 를 px 로 — deltaMode 0 = px · 1 = 줄 · 2 = 쪽(화면 높이) */
+export function wheelDeltaPx(deltaY: number, deltaMode: number, pageH: number): number {
+  return deltaY * (deltaMode === 1 ? LINE_PX : deltaMode === 2 ? pageH : 1);
+}
+
+/** 휠 한 번(deltaPx — px 로 바꾼 deltaY)과 모아 둔 값 → 이번에 오를 단계(+ = 축소 방향, deltaY 부호 그대로)와 새로 모아 둔 값 */
+export function wheelSteps(acc: number, deltaPx: number): { readonly steps: number; readonly acc: number } {
+  if (Math.abs(deltaPx) >= WHEEL_FINE_PX) return { steps: Math.sign(deltaPx), acc: 0 };
+  // 방향이 바뀌면 반대쪽으로 모은 것은 버린다
+  const sum = Math.sign(acc) === -Math.sign(deltaPx) ? deltaPx : acc + deltaPx;
+  const steps = Math.trunc(sum / WHEEL_FINE_STEP) || 0; // -0 을 0 으로
+  return { steps, acc: sum - steps * WHEEL_FINE_STEP };
+}
+
+/** 배율 한 단계 위(steps > 0 = 확대)·아래 — 끝에서 멈춘다. 표에 없는 값이면 기본 배율에서 센다 */
+export function stepZoom(zoom: number, steps: number): number {
+  const i = ZOOM_LEVELS.indexOf(zoom);
+  const from = i >= 0 ? i : ZOOM_LEVELS.indexOf(DEFAULT_ZOOM);
+  return ZOOM_LEVELS[Math.min(Math.max(from + steps, 0), ZOOM_LEVELS.length - 1)] ?? DEFAULT_ZOOM;
+}
+
+/**
+ * 배율을 바꿀 때 화면 점(sx, sy — CSS px)이 가리키던 칸 자리가 그대로 있게 옮긴 카메라 중심(칸).
+ * 맵 범위로 자르는 것은 부르는 쪽(panCenter) 몫
+ */
+export function zoomAround(
+  center: { readonly x: number; readonly y: number },
+  sx: number,
+  sy: number,
+  view: { readonly w: number; readonly h: number },
+  oldPx: number,
+  newPx: number,
+): { readonly x: number; readonly y: number } {
+  const dx = sx - view.w / 2;
+  const dy = sy - view.h / 2;
+  return { x: center.x + dx / oldPx - dx / newPx, y: center.y + dy / oldPx - dy / newPx };
+}
