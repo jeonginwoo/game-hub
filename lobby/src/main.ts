@@ -173,7 +173,7 @@ interface World {
   readonly meshes: readonly THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
   /** 편집 중에만 보이는 문 테두리 — 배정된 문·빈 문 다른 색 */
   readonly marks: THREE.Group;
-  /** 칠하기 도구일 때만 보이는 칸 격자 + 벽·시작점 칠 — 문자 맵은 그림이 없어 평소엔 보이지 않는다 */
+  /** 편집 중엔 늘 보이는 칸 격자 + 벽·문·시작점·게이트 칠 — 문자 맵은 그림이 없어 평소엔 보이지 않는다 */
   readonly cellMarks: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   /** 시트가 오면(이미 와 있으면 바로) 배경·물체 캔버스를 칠한다 */
   readonly paint: (sheets: Sheets) => void;
@@ -670,7 +670,7 @@ window.addEventListener('pagehide', () => {
 // 놓기: 창에서 고르면 창이 닫히고, 고른 물체의 반투명 미리보기가 포인터를 따라가며(놓을 수 없으면 밑에 빨간 칠) 누를 때마다 놓기.
 // 오른쪽 클릭은 포인터 아래 맨 앞 물체 치우기. Esc 는 창을 마지막 탭으로 다시, 창에서 Esc 면 편집 끝. 수정: 맵의 문을 누르면 옆에 게임 목록 → 고르면 배정.
 // 지우개: 고른 층(바닥·물체)에서 포인터 아래 맨 앞 물체에 빨간 칠, 누르거나 누른 채 끌면 지나간 물체마다 지우기. 손: 끌어서 맵 옮기기(Space 를 누르는 동안은 어느 도구든 손).
-// 칠하기: 맵 전체에 칸 격자, 포인터 칸에 흰 테두리(칠할 수 없으면 빨간 칠), 누르거나 누른 채 끌면 지나간 칸마다 칠하기.
+// 칠하기: (칸 격자는 편집 중 늘) 포인터 칸에 흰 테두리(칠할 수 없으면 빨간 칠), 누르거나 누른 채 끌면 지나간 칸마다 칠하기.
 // 바닥 재질(오브젝트 > 바닥 탭의 붓): 포인터 타일(2×2 칸)에 흰 테두리, 누르거나 누른 채 끌면 지나간 타일마다 재질 맵 칠하기.
 // 편집 중엔 캐릭터·머리 위 글·채팅창을 숨겨 맵만 보이고, 카메라는 캐릭터를 따라가지 않고 손으로만 움직인다 — 끄면 다시 캐릭터로.
 // 도구는 초안만 고친다(판정은 서버와 같은 room-map.ts 함수) — 「저장」 때 save 로 한 번에 보내고, 「취소」·연결 끊김·방장 넘어감이면 버린다.
@@ -846,13 +846,13 @@ function setPan(p: { sx: number; sy: number } | null): void {
   renderer.domElement.classList.toggle('hub-grabbing', p !== null);
 }
 
-/** 도구·포인터 칸·방이 바뀌면 — 문 테두리(수정 도구일 때만), 놓기 미리보기, 지울 물체 빨간 칠, 칠할 칸 테두리. 편집 창이 떠 있으면 맵 표시는 없다 */
+/** 도구·포인터 칸·방이 바뀌면 — 칸 표시(편집 중 늘), 문 테두리(수정 도구일 때만), 놓기 미리보기, 지울 물체 빨간 칠, 칠할 칸 테두리. 편집 창이 떠 있으면 칸 표시 말고는 없다 */
 function updateEditView(): void {
   const tool = activeTool();
   renderer.domElement.classList.toggle('hub-grab', editing && tool === 'hand');
   const onMap = editing && !editTools.windowOpen(); // 창이 떠 있으면 맵 표시 없이 — 게임·타일 규칙 도구 중에도 창이 열린다
   world.marks.visible = onMap && tool === 'select';
-  world.cellMarks.visible = onMap && tool === 'paint';
+  world.cellMarks.visible = editing; // 타일 규칙은 어느 도구든, 창이 떠 있어도 — 놓기·손 이동 중에도 막힌 칸이 보이게
   preview.visible = redMark.visible = cellFrame.visible = false;
   if (!editing || !hoverCell || editTools.windowOpen()) return;
   const kind = editTools.kind();

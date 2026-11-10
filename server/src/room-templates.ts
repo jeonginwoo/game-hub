@@ -1351,12 +1351,24 @@ function bigForestGround(): string[] {
   );
 }
 
+/** 입장 표시 — 문마다 양옆 벽 칸에 등 한 쌍. 숲보다 먼저 놓아 자리를 차지한다 (위·아래 문은 좌우, 왼쪽·오른쪽 문은 위아래) */
+function doorMarkers(p: Planter, doors: readonly (readonly [number, number])[]): void {
+  for (const [dx, dy] of doors) {
+    const side = dx === 2 || dx === BIG - 4; // 왼쪽·오른쪽 가장자리 문
+    const spots: readonly (readonly [number, number])[] = side ? [[dx, dy - 1], [dx, dy + 3]] : [[dx - 2, dy + 1], [dx + 2, dy + 1]];
+    for (const [x, y] of spots) {
+      if (!p.tryPut('lantern', x, y, undefined, isWall, anywhere)) throw new Error(`큰 숲 문 (${dx}, ${dy}) 옆에 등을 못 놓았다`);
+    }
+  }
+}
+
 /** 큰 숲 — 처음엔 모든 문이 비어 모든 길이 닫힘 숲으로 막혀 있다. 방장이 문에 게임을 배정하면 그 길이 열린다 */
 function bigForestRoom(): RoomData {
-  const { rows, lanes } = bigForestLayout();
+  const { rows, lanes, doors } = bigForestLayout();
   const ground = bigForestGround();
   const rand = seeded(BIG_SEED + 1);
   const p = new Planter(rows);
+  doorMarkers(p, doors);
   for (const key of WING_ORDER) shutForest(p, rand, key, lanes[key]);
   for (const key of WING_ORDER) openDeco(p, rand, key, lanes[key]);
   wallForest(p, rand);
