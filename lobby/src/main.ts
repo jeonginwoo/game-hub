@@ -30,6 +30,7 @@ import { draftDirty, rebaseDraft } from './edit/draft';
 import { createEditTools } from './edit/edit-tools';
 import { canPlace, escStep, placeAt, topObjectAt, type EditTool } from './edit/place';
 import { cellsBetween, paintCheck } from './edit/paint';
+import { groundChar, paintGround, tileOf } from './edit/ground-brush';
 
 // 화면 배율 — 그림 1px 을 화면 몇 CSS px 로 (한 칸 = CELL_PX × VIEW_ZOOM). 창 크기와 상관없이 고정이라 창이 크면 더 넓게 보인다.
 // 1.5 면 한 칸 24px·그림 타일 48px — 16px 타일(Ninja Adventure)은 원본 1px 이 화면 3px 로 고르다. 32px 기준 그림(임시 캐릭터)은 1.5배라 고르지 않다
@@ -660,6 +661,7 @@ window.addEventListener('pagehide', () => {
 // 오른쪽 클릭은 포인터 아래 맨 앞 물체 치우기. Esc 는 창을 마지막 탭으로 다시, 창에서 Esc 면 편집 끝. 수정: 맵의 문을 누르면 옆에 게임 목록 → 고르면 배정.
 // 지우개: 고른 층(바닥·물체)에서 포인터 아래 맨 앞 물체에 빨간 칠, 누르거나 누른 채 끌면 지나간 물체마다 지우기. 손: 끌어서 맵 옮기기(Space 를 누르는 동안은 어느 도구든 손).
 // 칠하기: 맵 전체에 칸 격자, 포인터 칸에 흰 테두리(칠할 수 없으면 빨간 칠), 누르거나 누른 채 끌면 지나간 칸마다 칠하기.
+// 바닥 재질(오브젝트 > 바닥 탭의 붓): 포인터 타일(2×2 칸)에 흰 테두리, 누르거나 누른 채 끌면 지나간 타일마다 재질 맵 칠하기.
 // 편집 중엔 캐릭터·머리 위 글·채팅창을 숨겨 맵만 보이고, 카메라는 캐릭터를 따라가지 않고 손으로만 움직인다 — 끄면 다시 캐릭터로.
 // 도구는 초안만 고친다(판정은 서버와 같은 room-map.ts 함수) — 「저장」 때 save 로 한 번에 보내고, 「취소」·연결 끊김·방장 넘어감이면 버린다.
 // 바뀐 것이 있으면 Esc·편집 버튼으로는 끝나지 않는다
@@ -677,6 +679,13 @@ const editTools = createEditTools(() => {
   art.tex.dispose(); // 캔버스만 쓴다 — DOM 썸네일
   paintObject(art.canvas, { id: '', x: 0, y: 0, ...shape, ...OBJECT_ART[kind] }, loadedSheets);
   return art.canvas;
+}, (ch) => {
+  // 재질 썸네일 — 그 글자로 깐 타일 2×2 (길이면 가장자리 네 조각이 둥근 조각으로 보인다)
+  if (!loadedSheets) return null;
+  const c = document.createElement('canvas');
+  c.width = c.height = 2 * CELL_PX * TILE_CELLS;
+  paintBackground(c, [ch + ch, ch + ch], [], loadedSheets);
+  return c;
 });
 
 const RED_MARK_COLOR = 0xbf616a; // 놓을 수 없는 자리 · 칠할 수 없는 칸 — 그림에 색을 곱하면 초록 잎이 어두워지기만 해서 칠을 깐다
@@ -841,6 +850,11 @@ function updateEditView(): void {
       placeScaled(redMark, r.left - 0.5, r.bottom + 0.5, r.right - r.left + 1, r.bottom - r.top + 1);
       redMark.visible = true;
     }
+  } else if (tool === 'ground') {
+    // 재질은 32px 타일(2×2 칸) 단위 — 어느 타일이든 칠할 수 있어 빨간 칠은 없다
+    const t = tileOf(hoverCell);
+    placeScaled(cellFrame, t.x * TILE_CELLS - 0.5, t.y * TILE_CELLS + TILE_CELLS - 0.5, TILE_CELLS, TILE_CELLS);
+    cellFrame.visible = true;
   } else if (tool === 'paint') {
     placeScaled(cellFrame, hoverCell.x - 0.5, hoverCell.y + 0.5, 1, 1);
     cellFrame.visible = true;
@@ -856,6 +870,14 @@ function paintTo(cell: Pos): void {
   if (!stroke) return;
   const ch = editTools.brush();
   for (const c of cellsBetween(stroke.last, cell)) editDraft((d) => paintTile(d, c, ch));
+  stroke.last = cell;
+}
+
+/** 재질 붓 끌기가 cell 에 닿았다 — 지나간 칸을 덮는 타일마다 재질 맵을 칠한다(이미 그 글자인 타일은 그대로) */
+function groundTo(cell: Pos): void {
+  if (!stroke) return;
+  const ch = groundChar(editTools.ground());
+  for (const c of cellsBetween(stroke.last, cell)) editDraft((d) => paintGround(d, tileOf(c), ch));
   stroke.last = cell;
 }
 
@@ -911,7 +933,13 @@ function editAt(cell: Pos): void {
     const kind = editTools.kind();
     if (!kind) return;
     const at = placeAt(kind, cell);
-    editDraft((d) => placeObject(d, kind, at)); // 빨간 자리면 던져 그대로
+    // 빨간 자리면 그대로 — 바닥 층 그림끼리 겹치기는 placeObject 가 아니라 canPlace 만 막는다
+    if (canPlace(editData(), kind, at)) editDraft((d) => placeObject(d, kind, at));
+    return;
+  }
+  if (tool === 'ground') {
+    stroke = { last: cell };
+    groundTo(cell);
     return;
   }
   if (tool === 'erase') {
@@ -1114,6 +1142,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (pan) return;
   const tool = activeTool();
   if (stroke && tool === 'paint') paintTo(cell);
+  else if (stroke && tool === 'ground') groundTo(cell);
   else if (stroke && tool === 'erase') eraseTo(cell);
 });
 canvas.addEventListener('pointerleave', () => {

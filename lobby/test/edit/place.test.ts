@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { buildRoom, type RoomObject } from '../../../server/src/room-map';
 import { DEFAULT_ROOM } from '../../../server/src/room-templates';
 import { OBJECT_ART } from '../../src/data/object-art';
-import { canPlace, escStep, placeAt, isWindowTool, thumbScale, toolLabel, topObjectAt } from '../../src/edit/place';
+import { canPlace, escStep, placeAt, tabOf, thumbScale, toolLabel, topObjectAt } from '../../src/edit/place';
+import { placeObject } from '../../../server/src/room-map';
 import type { MapObject } from '../../src/world/objects';
 
 /** 방 데이터 물체 → 로비가 그리는 물체 (main.ts buildWorld 와 같은 합치기) */
@@ -34,6 +35,25 @@ describe('canPlace (광장)', () => {
     expect(canPlace(DEFAULT_ROOM, 'tree', { x: 37, y: 48 })).toBe(false);
     expect(canPlace(DEFAULT_ROOM, 'tree', { x: -1, y: 30 })).toBe(false);
     expect(canPlace(DEFAULT_ROOM, 'tree', { x: 30, y: 2 })).toBe(false); // 위로 뻗어 맵 밖
+  });
+});
+
+// 편집 도구만의 규칙 — 바닥 층 그림(조약돌 등)끼리는 겹쳐 놓지 않는다 (결정 2026-11-10)
+describe('canPlace — 바닥 층 그림끼리', () => {
+  const withPebbles = placeObject(DEFAULT_ROOM, 'pebbles-1', { x: 60, y: 30 }); // 2×2 — (60~61, 29~30)
+
+  it('바닥 층 그림 위에 바닥 층 그림을 겹쳐 놓을 수 없다', () => {
+    expect(canPlace(withPebbles, 'pebbles-1', { x: 60, y: 30 })).toBe(false);
+    expect(canPlace(withPebbles, 'pebbles-2', { x: 61, y: 31 })).toBe(false); // 한 칸만 겹쳐도
+  });
+
+  it('맞닿기만 하면 된다', () => {
+    expect(canPlace(withPebbles, 'pebbles-2', { x: 62, y: 30 })).toBe(true);
+    expect(canPlace(withPebbles, 'pebbles-2', { x: 60, y: 32 })).toBe(true);
+  });
+
+  it('물체 층 그림은 바닥 그림 위에 놓을 수 있다', () => {
+    expect(canPlace(withPebbles, 'sunflower', { x: 60, y: 30 })).toBe(true);
   });
 });
 
@@ -103,7 +123,7 @@ describe('escStep', () => {
 });
 
 describe('toolLabel', () => {
-  const pick = { kind: null, brush: '.' } as const;
+  const pick = { kind: null, brush: '.', ground: { theme: 'g', path: true } } as const;
 
   it('게임은 이름만', () => {
     expect(toolLabel('select', pick)).toBe('게임');
@@ -117,12 +137,18 @@ describe('toolLabel', () => {
     expect(toolLabel('place', pick)).toBe('오브젝트');
     expect(toolLabel('place', { ...pick, kind: 'fill-soil' })).toBe('오브젝트 · 갈색 흙 채움');
   });
+
+  it('재질 붓도 오브젝트 탭 — 테마와 바닥/길', () => {
+    expect(toolLabel('ground', pick)).toBe('오브젝트 · 풀 길');
+    expect(toolLabel('ground', { ...pick, ground: { theme: 'n', path: false } })).toBe('오브젝트 · 눈 바닥');
+  });
 });
 
-describe('isWindowTool', () => {
-  it('오브젝트·게임·타일 규칙은 창 탭, 지우개·손은 아래 줄', () => {
-    for (const t of ['place', 'select', 'paint'] as const) expect(isWindowTool(t), t).toBe(true);
-    expect(isWindowTool('erase')).toBe(false);
-    expect(isWindowTool('hand')).toBe(false);
+describe('tabOf', () => {
+  it('오브젝트·게임·타일 규칙은 창 탭, 재질 붓은 오브젝트 탭, 지우개·손은 아래 줄', () => {
+    for (const t of ['place', 'select', 'paint'] as const) expect(tabOf(t), t).toBe(t);
+    expect(tabOf('ground')).toBe('place');
+    expect(tabOf('erase')).toBeNull();
+    expect(tabOf('hand')).toBeNull();
   });
 });

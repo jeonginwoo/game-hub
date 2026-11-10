@@ -1,14 +1,15 @@
-// 편집 중 가운데 편집 창(위에 탭 셋 — 오브젝트: 층 탭 + 왼쪽 묶음 목록 · 오른쪽 썸네일, 게임, 타일 규칙: 붓)과
+// 편집 중 가운데 편집 창(위에 탭 셋 — 오브젝트: 층 탭 + 왼쪽 목록 · 오른쪽 썸네일(바닥 층은 재질 붓 — 테마 · 바닥/길, 물체 층은 묶음 · 물체), 게임, 타일 규칙: 붓)과
 // 아래쪽 가운데 줄(창 열기 · 지우개 + 층 · 손 · 저장·취소) — DOM 연결만, 목록은 object-names.ts 의 kindsByGroup, 이름·배율은 place.ts.
 // (결정 2026-10-16: 물체 배치 편집 · 2026-10-17: 타일 편집 · 2026-10-21: 저장식 편집 · 편집 개편 B 놓기 창 · C 도구 상자
-//  · 2026-10-23: 편집 창 재구성 · 2026-10-24: 지우개·손은 아래 줄). 화면 글자는 textContent 로 넣는다.
+//  · 2026-10-23: 편집 창 재구성 · 2026-10-24: 지우개·손은 아래 줄 · 2026-11-10: 바닥 탭은 재질 붓). 화면 글자는 textContent 로 넣는다.
 import { OBJECT_SHAPES, type ObjectKind, type TileChar } from '../../../server/src/room-map';
-import { kindsByGroup, OBJECT_INFO, type PlaceLayer } from '../data/object-names';
+import { kindsByGroup, OBJECT_INFO } from '../data/object-names';
 import { el } from '../room/entry-screen';
 import { CELL_PX } from '../world/layers';
 import type { ObjectLayer } from '../world/objects';
+import { brushPartName, GROUND_BRUSH_THEMES, groundChar, type GroundBrush } from './ground-brush';
 import {
-  BAR_TOOLS, BRUSHES, ERASE_LAYERS, isWindowTool, thumbScale, toolLabel, WINDOW_TOOLS, type EditTool, type WindowTool,
+  BAR_TOOLS, BRUSHES, ERASE_LAYERS, tabOf, thumbScale, toolLabel, WINDOW_TOOLS, type EditTool, type PickTool, type WindowTool,
 } from './place';
 
 export interface EditTools {
@@ -19,6 +20,8 @@ export interface EditTools {
   kind(): ObjectKind | null;
   /** 칠하기 붓 — 맵 글자 */
   brush(): TileChar;
+  /** 바닥 재질 붓 — 테마 · 바닥/길 */
+  ground(): GroundBrush;
   /** 지우개가 지우는 층 — 고른 층만 */
   eraseLayer(): ObjectLayer;
   /** 편집 창이 열려 있는지 — 열려 있으면 맵 미리보기를 숨긴다 */
@@ -36,6 +39,9 @@ export interface EditCommit {
   readonly onCancel: () => void;
 }
 
+/** 오브젝트 탭의 층 탭 — 바닥은 재질 붓, 물체는 물체 묶음 */
+type PlaceLayer = 'floor' | 'object';
+
 const PLACE_LAYERS: readonly { readonly layer: PlaceLayer; readonly name: string }[] = [
   { layer: 'floor', name: '바닥' },
   { layer: 'object', name: '물체' },
@@ -48,6 +54,7 @@ const TAB_HINT: Readonly<Record<Exclude<WindowTool, 'place'>, string>> = {
 };
 
 const THUMB_BOX_PX = 56; // 썸네일 한 칸 — 큰 건물은 줄이고 작은 풀은 정수배로 키운다
+const GROUND_THUMB_PX = 64; // 재질 썸네일 — 타일 2×2 (32px 네 장) 그대로
 
 /** 단추 하나 — 누르면 포커스를 놓는다(남으면 스페이스가 다시 누른다) */
 function button(cls: string, text: string, onClick: () => void): HTMLButtonElement {
@@ -62,27 +69,29 @@ function button(cls: string, text: string, onClick: () => void): HTMLButtonEleme
 
 /**
  * onChange — 도구·고른 것·창 열림이 바뀌었다 (알림 글·미리보기를 다시). commit — 「저장」·「취소」를 눌렀다.
- * drawThumb — 물체 하나를 제 크기(칸 × CELL_PX)로 그린 캔버스, 시트가 아직 안 왔으면 null
+ * drawThumb — 물체 하나를 제 크기(칸 × CELL_PX)로 그린 캔버스, drawGroundThumb — 재질 글자 하나로 깐 타일 2×2 캔버스.
+ * 시트가 아직 안 왔으면 둘 다 null
  */
 export function createEditTools(
   onChange: () => void,
   commit: EditCommit,
   drawThumb: (kind: ObjectKind) => HTMLCanvasElement | null,
+  drawGroundThumb: (ch: string) => HTMLCanvasElement | null,
 ): EditTools {
   let tool: EditTool = 'place';
   let kind: ObjectKind | null = null;
   let brush: TileChar = '.';
+  let ground: GroundBrush = { theme: 'g', path: false };
+  let objectTool: 'place' | 'ground' = 'place'; // 오브젝트 탭에서 마지막에 고른 도구 — 창 열기 버튼 글과 다시 열 층
+  let groundTheme = ground.theme; // 바닥 층에서 보고 있는 테마 — 고르기 전엔 붓이 그대로
   let eraseLayer: ObjectLayer = 'sorted'; // 바닥을 실수로 통째 지우지 않게 물체부터
   let open = false;
   let tab: WindowTool = 'place'; // 창에 보이는 탭 — 고르기 전에는 도구가 그대로, 지우개·손 중에도 마지막 창 도구
   let layer: PlaceLayer = 'object';
   const groups = kindsByGroup();
-  // 층마다 마지막에 본 묶음 — 층을 오가도 보던 묶음으로
-  const groupOf: Record<PlaceLayer, number> = {
-    floor: Math.max(0, groups.findIndex((g) => g.layer === 'floor')),
-    object: Math.max(0, groups.findIndex((g) => g.layer === 'object')),
-  };
+  let groupIndex = 0; // 물체 층에서 보고 있는 묶음 — 층을 오가도 보던 묶음으로
   const thumbs = new Map<ObjectKind, HTMLCanvasElement>(); // 탭을 오갈 때 다시 그리지 않게
+  const groundThumbs = new Map<string, HTMLCanvasElement>();
 
   // 아래쪽 가운데 줄 — 창 열기(마지막 창 도구를 글로) · 지우개(고르면 층 둘) · 손 · 저장·취소.
   // 편집은 초안만 고치고, 저장해야 모두에게 간다
@@ -129,7 +138,8 @@ export function createEditTools(
     return b;
   });
 
-  // 오브젝트 탭 — 층 탭 + 왼쪽 묶음 목록 · 오른쪽 썸네일 격자(각각 넘치면 스크롤) + 호버 이름 줄
+  // 오브젝트 탭 — 층 탭 + 왼쪽 목록 · 오른쪽 썸네일 격자(각각 넘치면 스크롤) + 호버 이름 줄.
+  // 바닥 층은 왼쪽 테마 · 오른쪽 바닥/길, 물체 층은 왼쪽 묶음 · 오른쪽 물체
   const placeBody = el('div', 'hub-edit-place');
   const placeLayerTabs = el('div', 'hub-edit-layers');
   const placeLayerButtons = PLACE_LAYERS.map((l) => {
@@ -149,15 +159,23 @@ export function createEditTools(
   placeBody.append(placeLayerTabs, lists, caption);
   const groupButtons = groups.map((g, i) => {
     const b = button('hub-btn hub-small', g.name, () => {
-      groupOf[g.layer] = i;
+      groupIndex = i;
       render();
       grid.scrollTop = 0; // 새 묶음은 처음부터
     });
     groupList.append(b);
     return b;
   });
-  // 썸네일 밖으로 나가면 고른 물체 이름으로 돌아온다
-  grid.addEventListener('mouseleave', () => showCaption(kind));
+  const themeButtons = GROUND_BRUSH_THEMES.map((t) => {
+    const b = button('hub-btn hub-small', t.name, () => {
+      groundTheme = t.theme;
+      render();
+    });
+    groupList.append(b);
+    return b;
+  });
+  // 썸네일 밖으로 나가면 고른 것 이름으로 돌아온다
+  grid.addEventListener('mouseleave', () => showPicked());
 
   // 다른 탭 — 안내 한 줄 + 고를 것(타일 규칙은 붓 넷, 게임은 그 도구 하나)
   const choiceBody = el('div', 'hub-edit-choice');
@@ -173,8 +191,27 @@ export function createEditTools(
     if (e.target === backdrop && (tool !== 'place' || kind !== null)) closeWindow();
   });
 
-  function showCaption(k: ObjectKind | null): void {
-    caption.textContent = k === null ? ' ' : OBJECT_INFO[k].name; // 빈 줄도 높이를 지켜 창이 출렁이지 않게
+  function showCaption(text: string | null): void {
+    caption.textContent = text ?? ' '; // 빈 줄도 높이를 지켜 창이 출렁이지 않게
+  }
+
+  /** 지금 층에서 고른 것의 이름 — 바닥 층은 재질 붓(붓을 쓰는 중일 때), 물체 층은 고른 물체 */
+  function showPicked(): void {
+    if (layer === 'floor') showCaption(objectTool === 'ground' ? brushPartName(ground) : null);
+    else showCaption(kind === null ? null : OBJECT_INFO[kind].name);
+  }
+
+  /** 재질 썸네일 캔버스 — 시트가 안 왔으면 빈 자리 */
+  function groundThumb(ch: string): HTMLElement {
+    let c = groundThumbs.get(ch);
+    if (!c) {
+      const drawn = drawGroundThumb(ch);
+      if (!drawn) return el('span', 'hub-thumb-empty');
+      drawn.style.width = drawn.style.height = `${GROUND_THUMB_PX}px`;
+      groundThumbs.set(ch, drawn);
+      c = drawn;
+    }
+    return c;
   }
 
   /** 썸네일 캔버스 — 시트가 안 왔으면 빈 자리 */
@@ -196,7 +233,22 @@ export function createEditTools(
   }
 
   function renderGrid(): void {
-    const kinds = groups[groupOf[layer]]?.kinds ?? [];
+    if (layer === 'floor') {
+      grid.replaceChildren(...[false, true].map((path) => {
+        const choice: GroundBrush = { theme: groundTheme, path };
+        const on = objectTool === 'ground' && ground.theme === choice.theme && ground.path === path;
+        const b = button(on ? 'hub-thumb hub-on' : 'hub-thumb', '', () => {
+          ground = choice;
+          pick('ground');
+        });
+        b.setAttribute('aria-label', brushPartName(choice));
+        b.append(groundThumb(groundChar(choice)));
+        b.addEventListener('mouseenter', () => showCaption(brushPartName(choice)));
+        return b;
+      }));
+      return;
+    }
+    const kinds = groups[groupIndex]?.kinds ?? [];
     grid.replaceChildren(...kinds.map((k) => {
       const b = button(k === kind ? 'hub-thumb hub-on' : 'hub-thumb', '', () => {
         kind = k;
@@ -204,7 +256,7 @@ export function createEditTools(
       });
       b.setAttribute('aria-label', OBJECT_INFO[k].name);
       b.append(thumb(k));
-      b.addEventListener('mouseenter', () => showCaption(k));
+      b.addEventListener('mouseenter', () => showCaption(OBJECT_INFO[k].name));
       return b;
     }));
   }
@@ -221,8 +273,9 @@ export function createEditTools(
   }
 
   function render(): void {
-    windowButton.textContent = toolLabel(tab, { kind, brush });
-    windowButton.classList.toggle('hub-on', isWindowTool(tool));
+    const last: PickTool = tab === 'place' ? objectTool : tab;
+    windowButton.textContent = toolLabel(last, { kind, brush, ground });
+    windowButton.classList.toggle('hub-on', tabOf(tool) !== null);
     barButtons.forEach((b, i) => b.classList.toggle('hub-on', BAR_TOOLS[i]?.tool === tool));
     layerButtons.forEach((b, i) => b.classList.toggle('hub-on', ERASE_LAYERS[i]?.layer === eraseLayer));
     layerRow.hidden = tool !== 'erase';
@@ -234,32 +287,40 @@ export function createEditTools(
     if (tab === 'place') {
       placeLayerButtons.forEach((b, i) => b.classList.toggle('hub-on', PLACE_LAYERS[i]?.layer === layer));
       groupButtons.forEach((b, i) => {
-        b.hidden = groups[i]?.layer !== layer;
-        b.classList.toggle('hub-on', i === groupOf[layer]);
+        b.hidden = layer !== 'object';
+        b.classList.toggle('hub-on', i === groupIndex);
+      });
+      themeButtons.forEach((b, i) => {
+        b.hidden = layer !== 'floor';
+        b.classList.toggle('hub-on', GROUND_BRUSH_THEMES[i]?.theme === groundTheme);
       });
       renderGrid();
-      showCaption(kind);
+      showPicked();
     } else renderChoices(tab);
   }
 
   /** 도구를 고르고 창을 닫는다 — 고른 것(물체·붓·층)은 부르는 쪽이 먼저 바꿔 둔다 */
   function pick(next: EditTool): void {
     tool = next;
-    if (isWindowTool(next)) tab = next;
+    const t = tabOf(next);
+    if (t !== null) tab = t;
+    if (next === 'place' || next === 'ground') objectTool = next;
     open = false;
     render();
     onChange();
   }
 
   function openWindow(): void {
-    // 고른 물체의 층·묶음으로 — 다시 열면 보던 자리
+    // 마지막에 고른 것의 층·묶음(테마)으로 — 다시 열면 보던 자리
     const k = kind;
-    if (tab === 'place' && k !== null) {
+    if (tab === 'place' && objectTool === 'ground') {
+      layer = 'floor';
+      groundTheme = ground.theme;
+    } else if (tab === 'place' && k !== null) {
       const i = groups.findIndex((g) => g.group === OBJECT_INFO[k].group);
-      const g = groups[i];
-      if (g) {
-        layer = g.layer;
-        groupOf[g.layer] = i;
+      if (i >= 0) {
+        layer = 'object';
+        groupIndex = i;
       }
     }
     open = true;
@@ -278,6 +339,7 @@ export function createEditTools(
     show(on) {
       bar.hidden = !on;
       tool = 'place';
+      objectTool = 'place';
       tab = 'place';
       open = on;
       render();
@@ -285,6 +347,7 @@ export function createEditTools(
     tool: () => tool,
     kind: () => kind,
     brush: () => brush,
+    ground: () => ground,
     eraseLayer: () => eraseLayer,
     windowOpen: () => open,
     openWindow,
@@ -292,7 +355,7 @@ export function createEditTools(
       saveButton.disabled = !dirty;
     },
     refreshThumbs() {
-      if (!backdrop.hidden && tab === 'place') renderGrid();
+      if (!backdrop.hidden && tab === 'place') renderGrid(); // 바닥 층이면 재질 썸네일도 다시 굽는다
     },
   };
 }

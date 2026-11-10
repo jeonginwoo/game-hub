@@ -29,7 +29,7 @@ Files are grouped by feature, not by layer: a feature's pure module and its wiri
 | `room/` | `room.ts` · `entry-screen.ts` | room code / name → first screen |
 | `chat/` | `chat.ts` · `chat-box.ts` | chat rules → chat box |
 | `hud/` | `hud.ts` · `hud-bar.ts` | roster / notice text → top-right buttons |
-| `edit/` | `edit.ts` `place.ts` `paint.ts` `draft.ts` · `door-picker.ts` `edit-tools.ts` | owner's edit mode: who may edit, door marks, game choices, where an object goes / whether it may / which one is under the pointer / how big its thumbnail is / what Esc does, whether a cell may be painted / which cells a drag crosses, whether the draft has changes → door game list, edit bar (window button, eraser with its layers, hand, save / cancel) and edit window (object / game / tile-rule tabs) |
+| `edit/` | `edit.ts` `place.ts` `paint.ts` `ground-brush.ts` `draft.ts` · `door-picker.ts` `edit-tools.ts` | owner's edit mode: who may edit, door marks, game choices, ground brush names / cell → tile / painting one ground tile, where an object goes / whether it may / which one is under the pointer / how big its thumbnail is / what Esc does, whether a cell may be painted / which cells a drag crosses, whether the draft has changes → door game list, edit bar (window button, eraser with its layers, hand, save / cancel) and edit window (object / game / tile-rule tabs) |
 
 A new module joins the folder of the feature it serves; a new folder is made when a feature
 has no home yet. `games/` is not used as a folder name (it is the repo-root games folder).
@@ -73,9 +73,9 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   respawning — the player stays put unless the new walk map blocks the cell (`unstick`, below).
 - **Edit mode** (owner only, `canEdit`) is a state in `main.ts`: while on, the lobby does not walk, shows only the
   map (the render loop hides every avatar; `setEditing` puts `hub-editing` on `body` so CSS hides head tags and the
-  chat box, and Enter does not open chat), and one of five tools is active: place, select, erase, hand, paint. Tools with
+  chat box, and Enter does not open chat), and one of six tools is active: place, ground, select, erase, hand, paint. Tools with
   something to pick live in the **edit window** (`edit-tools.ts`, centre, over a dimmed backdrop that keeps pointers off the map but
-  stays under the bar), one tab each (`WINDOW_TOOLS` in `place.ts`: 「오브젝트」 = place, 「게임」 = select, 「타일 규칙」 = paint); the
+  stays under the bar), one tab each (`WINDOW_TOOLS` in `place.ts`: 「오브젝트」 = place and ground, 「게임」 = select, 「타일 규칙」 = paint; `tabOf`); the
   **edit bar** (bottom centre — the top row of the map holds doors) holds the window button (labelled by `toolLabel`: the last
   window tool and what it picked), the tools that act straight away (`BAR_TOOLS`: erase — its two layer buttons show next to it while
   it is on —, hand) and save / cancel. Holding Space makes any tool the hand while held (`activeTool` in `main.ts`; the keydown is
@@ -83,19 +83,26 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   the view was (`editCenter`) and moves only by the hand — dragging moves the map with the pointer (`panCenter` in `view.ts`, clamped like
   following, re-clamped every frame; the pointer is captured so a drag over the bar keeps panning; canvas cursor `grab` / `grabbing`).
   Turning edit mode off goes back to following the avatar. Turning edit mode on opens the window on the object tab: layer tabs
-  (floor, object — `layer` of `OBJECT_GROUPS`), a scrolling group list on the left and a scrolling grid of thumbnails on the right — each
-  kind painted by the same `paintObject` as the map (`drawThumb` from `main.ts`, cached per kind, only the open group is built), sized
-  by `thumbScale` (whole-number zoom, or shrunk to fit), the hovered kind's name in a caption line. Picking a kind closes the window and
-  the place tool keeps placing it; the tile-rule tab picks a brush the same way; the game tab switches to select at once. The window
+  (floor, object), a scrolling list on the left and a scrolling grid of thumbnails on the right, the hovered choice's name in a caption line.
+  The floor layer is the ground brush: the eight themes on the left (`GROUND_BRUSH_THEMES`), floor and path on the right — each a 2×2-tile
+  patch baked by the same `paintBackground` as the map (`drawGroundThumb` from `main.ts`, cached per character); picking one closes the
+  window and switches to the ground tool. The object layer lists the groups `kindsByGroup()` shows (`window` of `OBJECT_GROUPS` — floor
+  pieces and fills stay in the data but not in the window; floor decorations are the 「바닥 장식」 group) — each kind painted by the same
+  `paintObject` as the map (`drawThumb`, cached per kind, only the open group is built), sized by `thumbScale` (whole-number zoom, or
+  shrunk to fit). Picking a kind closes the window and the place tool keeps placing it; the tile-rule tab picks a brush the same way; the game tab switches to select at once. The window
   button reopens the window on the last window tab; a click on the backdrop closes it unless the tool is place with no kind chosen. While the window is
   open the map shows no edit marks. A pointer on the map goes screen → cell (`screenToCell` in `view.ts`), then by tool:
   place — the chosen kind's preview follows the pointer (`placeAt`: the pointer is the
-  object's bottom centre), a red fill under it when `canPlace` (`placeObject`) says no, a left click places it
+  object's bottom centre), a red fill under it when `canPlace` says no (`placeObject` throws, or — an edit-tool rule only, not the server's — a floor-layer
+  picture would overlap another floor-layer picture), a left click places it when `canPlace` says yes
   (`placeObject`), a right click removes `topObjectAt` (the frontmost picture over the cell, `removeObject`; the canvas
   `contextmenu` is suppressed while editing); select — the door marks (part of the world, rebuilt with it) are visible, a door opens
   `door-picker.ts`, picking assigns the game (`assignDoor`); erase — two layers (floor, object = `floor`, `sorted`;
   `top` gets a button once some kind uses it), a red fill over the picture area of `topObjectAt` in the chosen layer under the
   pointer, pressing removes it and a drag removes that layer's frontmost object of every cell it crosses (`cellsBetween`, like paint); hand — no marks;
+  ground — a white frame on the 32px tile (2×2 cells, `tileOf`) under the pointer, no red (every tile can be painted); pressing
+  starts a stroke and every tile the crossed cells cover gets the brush's ground character (`paintGround` — throws when already that
+  character, so a tile is painted once);
   paint — the brush (floor, wall, door, start = map characters) from the tile-rule tab, the world's cell marks show every
   cell (a translucent fill — walls and starts in their own colour — and a 1px grid), a white frame on the cell with a
   red fill when `paintCheck` (`paintTile`) says `no` (`same` — already that character — is not red); pressing starts a
