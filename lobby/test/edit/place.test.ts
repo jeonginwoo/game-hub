@@ -73,6 +73,13 @@ describe('placeState · canPlace — 상태 꼬리표', () => {
     expect(placeState(map, 'gate-open', placeAt('gate-open', { x: 6, y: 6 }), 'open')).toBe('open'); // 문보다 넓은 그림
   });
 
+  it('가운데 발 칸이 문에 딸린 게이트 칸이어도 토글 상태 — 딸린 문 없는 게이트는 꼬리표 없음', () => {
+    // (7~8, 6) 게이트는 문 0 에 이어지고, (1, 3) 게이트는 어느 문에도 안 닿는다
+    const gated = parseMap(['############', '#..........#', '#..........#', '#G.........#', '#..........#', '#..........#', '#....DDGG..#', '#S.........#', '############']);
+    expect(placeState(gated, 'log', placeAt('log', { x: 8, y: 6 }), 'open')).toBe('open');
+    expect(placeState(gated, 'log', placeAt('log', { x: 1, y: 3 }), 'open')).toBeUndefined();
+  });
+
   it('같은 문의 다른 상태 물체와는 막는 칸이 겹쳐도 놓인다 — 같은 상태끼리는 안 된다', () => {
     const at = placeAt('log', { x: 5, y: 6 }); // 통나무 2×2 는 아랫줄 (4~5, 6) 을 막는다 — 문 칸 (5, 6) 을 막으니 닫힘 꼬리표만
     expect(canPlace(data, 'log', at)).toBe(false);

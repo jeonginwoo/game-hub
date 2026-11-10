@@ -43,6 +43,7 @@ export const BRUSHES: readonly { readonly ch: TileChar; readonly name: string }[
   { ch: '#', name: '벽' },
   { ch: 'D', name: '문' },
   { ch: 'S', name: '시작점' },
+  { ch: 'G', name: '게이트' },
 ];
 
 /** 지우개 층 — 쓰는 물체가 있는 층만(위 층 'top' 은 쓰는 물체가 생기면). (결정 2026-10-23: 지우개는 고른 층만) */
@@ -85,11 +86,11 @@ export const DOOR_STATES: readonly { readonly state: ObjectState; readonly name:
 ];
 
 /**
- * 왼쪽 아래 칸 at 에 놓는 물체의 상태 꼬리표 — 가운데 발 칸(footCell, 포인터 칸)이 문 칸이면 편집 토글 상태, 아니면 없음
+ * 왼쪽 아래 칸 at 에 놓는 물체의 상태 꼬리표 — 가운데 발 칸(footCell, 포인터 칸)이 문 칸이나 딸린 게이트 칸이면 편집 토글 상태, 아니면 없음
  * (결정 2026-10-21: 꼬리표는 문 칸 위 물체만, 그 문을 따른다 · 2026-11-10: 기준은 가운데 발 칸)
  */
 export function placeState(map: TileMap, kind: ObjectKind, at: Pos, toggle: ObjectState): ObjectState | undefined {
-  return map.doorAt(footCell({ ...at, w: OBJECT_SHAPES[kind].w })) === undefined ? undefined : toggle;
+  return map.doorOf(footCell({ ...at, w: OBJECT_SHAPES[kind].w })) === undefined ? undefined : toggle;
 }
 
 /**
@@ -106,9 +107,9 @@ export function canPlace(data: RoomData, kind: ObjectKind, at: Pos, state?: Obje
   }
   if (OBJECT_ART[kind].layer !== 'floor') return true;
   const map = parseMap(data.rows);
-  const door = map.doorAt(footCell({ ...at, w: OBJECT_SHAPES[kind].w }));
+  const door = map.doorOf(footCell({ ...at, w: OBJECT_SHAPES[kind].w }));
   const hidden = (o: RoomData['objects'][number]): boolean =>
-    state !== undefined && o.state !== undefined && o.state !== state && map.doorAt(footCell({ ...o, w: OBJECT_SHAPES[o.kind].w })) === door;
+    state !== undefined && o.state !== undefined && o.state !== state && map.doorOf(footCell({ ...o, w: OBJECT_SHAPES[o.kind].w })) === door;
   const rect = objectRect({ id: '', ...at, ...OBJECT_SHAPES[kind] });
   return !data.objects.some((o) => OBJECT_ART[o.kind].layer === 'floor' && !hidden(o) && overlaps(rect, objectRect({ ...o, ...OBJECT_SHAPES[o.kind] })));
 }

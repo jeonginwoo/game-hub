@@ -35,14 +35,14 @@ export function withSolidObjects(map: TileMap, objects: readonly PlacedShape[]):
 }
 
 /**
- * 지금 보이는 물체 — 상태 꼬리표가 없으면 늘 보이고, 있으면 가운데 발 칸(footCell)의 문 상태(doorState)와 같을 때만.
+ * 지금 보이는 물체 — 상태 꼬리표가 없으면 늘 보이고, 있으면 가운데 발 칸(footCell)의 문(게이트 칸이면 딸린 문) 상태(doorState)와 같을 때만.
  * 평소엔 문마다 열림(게임 배정)·닫힘, 편집 중엔 토글 하나를 모든 문에. 그리기·막는 칸·지우개는 이것만 본다
  * (결정 2026-10-21: 편집 개편 D — 상태 꼬리표 물체는 그 문을 따른다)
  */
 export function visibleObjects<T extends PlacedShape>(objects: readonly T[], map: TileMap, doorState: (door: number) => ObjectState): T[] {
   return objects.filter((o) => {
     if (o.state === undefined) return true;
-    const door = map.doorAt(footCell(o));
+    const door = map.doorOf(footCell(o));
     return door !== undefined && doorState(door) === o.state;
   });
 }

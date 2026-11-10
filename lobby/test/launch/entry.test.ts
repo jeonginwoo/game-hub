@@ -124,6 +124,11 @@ describe('doorFront / spawnFromSearch', () => {
     expect(doorFront(map, { x: 7, y: 1, w: 1, h: 1 })).toEqual({ pos: { x: 6, y: 1 }, facing: 'left' });
   });
 
+  it('문 앞이 게이트 칸이어도 그 칸에 선다', () => {
+    const gated = parseMap(['#D#', '#G#', '#S#']);
+    expect(doorFront(gated, { x: 1, y: 0, w: 1, h: 1 })).toEqual({ pos: { x: 1, y: 1 }, facing: 'down' });
+  });
+
   it('hub_door 가 유효하면 그 문 앞', () => {
     expect(spawnFromSearch(map, '?hub_door=1')).toEqual({ pos: { x: 6, y: 1 }, facing: 'down' });
   });

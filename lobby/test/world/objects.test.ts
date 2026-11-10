@@ -54,6 +54,14 @@ describe('visibleObjects', () => {
     const shut = withSolidObjects(map, visibleObjects([post], map, () => 'shut'));
     expect(shut.tileAt({ x: 4, y: 2 })).toBe('wall');
   });
+
+  it('게이트 칸의 꼬리표 물체는 딸린 문을 따른다', () => {
+    // 문 0 = (1, 0), 게이트 (1~3, 1) 이 이어져 문 0 에 딸린다
+    const gated = parseMap(['#D###', '#GGG#', '#S..#', '#####']);
+    const onGate = [bit('g-open', 3, 1, 'open'), bit('g-shut', 3, 1, 'shut')];
+    expect(ids(visibleObjects(onGate, gated, (d) => (d === 0 ? 'open' : 'shut')))).toEqual(['g-open']);
+    expect(ids(visibleObjects(onGate, gated, () => 'shut'))).toEqual(['g-shut']);
+  });
 });
 
 describe('실제 로비 물체', () => {

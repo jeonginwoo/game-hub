@@ -234,9 +234,11 @@ const CELL_MARK = 'rgba(236, 239, 244, 0.12)'; // 그 밖의 칸 — 투명한 �
 const WALL_MARK = 'rgba(191, 97, 106, 0.45)'; // 벽 '#'
 const START_MARK = 'rgba(94, 129, 172, 0.6)'; // 시작점 'S'
 const DOOR_MARK = 'rgba(235, 203, 139, 0.55)'; // 문 'D' — 문도 그림이 없어 칠하기에서만 보인다
+const GATE_MARK = 'rgba(208, 135, 112, 0.55)'; // 문에 딸린 게이트 'G'
+const LOOSE_GATE_MARK = 'rgba(255, 40, 40, 0.85)'; // 어느 문에도 안 닿은 게이트 — 상태 꼬리표를 달 수 없어 쓸모없다는 경고 (결정 2026-10-21: 게이트 칸 G)
 const GRID_LINE = 'rgba(236, 239, 244, 0.35)'; // 칸 테두리
 
-/** 칸마다 반투명 바탕(벽·시작점은 제 색) + 칸 테두리 격자를 그린 맵 크기 한 장 — 편집 표시 층 */
+/** 칸마다 반투명 바탕(벽·문·시작점·게이트는 제 색, 딸린 문 없는 게이트는 진한 빨강) + 칸 테두리 격자를 그린 맵 크기 한 장 — 편집 표시 층 */
 function buildCellMarks(map: TileMap): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> {
   const art = blankTexture(map.width, map.height);
   const g = art.canvas.getContext('2d');
@@ -245,7 +247,8 @@ function buildCellMarks(map: TileMap): THREE.Mesh<THREE.PlaneGeometry, THREE.Mes
     for (let x = 0; x < map.width; x++) {
       const start = map.starts.some((p) => p.x === x && p.y === y);
       const tile = map.tileAt({ x, y });
-      g.fillStyle = start ? START_MARK : tile === 'wall' ? WALL_MARK : tile === 'door' ? DOOR_MARK : CELL_MARK;
+      const gate = map.doorOf({ x, y }) === undefined ? LOOSE_GATE_MARK : GATE_MARK;
+      g.fillStyle = start ? START_MARK : tile === 'wall' ? WALL_MARK : tile === 'door' ? DOOR_MARK : tile === 'gate' ? gate : CELL_MARK;
       g.fillRect(x * CELL_PX, y * CELL_PX, CELL_PX, CELL_PX);
     }
   }

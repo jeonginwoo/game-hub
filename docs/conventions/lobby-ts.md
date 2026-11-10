@@ -95,7 +95,7 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   place — the chosen kind's preview follows the pointer (`placeAt`: the pointer is the
   object's bottom centre), a red fill under it when `canPlace` says no (`placeObject` throws, or — an edit-tool rule only, not the server's — a floor-layer
   picture would overlap another visible floor-layer picture), a left click places it when `canPlace` says yes
-  (`placeObject`; an object whose centre foot cell — `footCell`, the pointer's cell — is a door cell gets the toggle's state tag — `placeState`), a right click removes `topObjectAt` (the frontmost picture over the cell, `removeObject`; the canvas
+  (`placeObject`; an object whose centre foot cell — `footCell`, the pointer's cell — is a door cell or a gate cell of a door — `doorOf` — gets the toggle's state tag — `placeState`), a right click removes `topObjectAt` (the frontmost picture over the cell, `removeObject`; the canvas
   `contextmenu` is suppressed while editing); select — the door marks (part of the world, rebuilt with it) are visible, a door opens
   `door-picker.ts`, picking assigns the game (`assignDoor`); erase — two layers (floor, object = `floor`, `sorted`;
   `top` gets a button once some kind uses it), a red fill over the picture area of `topObjectAt` in the chosen layer under the
@@ -103,8 +103,9 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
   ground — a white frame on the 32px tile (2×2 cells, `tileOf`) under the pointer, no red (every tile can be painted); pressing
   starts a stroke and every tile the crossed cells cover gets the brush's ground character (`paintGround` — throws when already that
   character, so a tile is painted once);
-  paint — the brush (floor, wall, door, start = map characters) from the tile-rule tab, the world's cell marks show every
-  cell (a translucent fill — walls and starts in their own colour — and a 1px grid), a white frame on the cell with a
+  paint — the brush (floor, wall, door, start, gate = map characters) from the tile-rule tab, the world's cell marks show every
+  cell (a translucent fill — walls, doors, starts and gates in their own colour, a gate touching no door in strong red as a
+  warning: nothing can be tagged to it, but painting it is allowed so a gate can be painted from either end — and a 1px grid), a white frame on the cell with a
   red fill when `paintCheck` (`paintTile`) says `no` (`same` — already that character — is not red); pressing starts a
   stroke and every cell it crosses (`cellsBetween` joins pointer moves, side by side, never diagonally) is painted
   (`paintTile`); pointer up or leaving the canvas ends the stroke.
@@ -173,12 +174,14 @@ has no home yet. `games/` is not used as a folder name (it is the repo-root game
 - Drawing never blocks movement by itself: what is impassable is the character map's `#`,
   closed doors (no registered game — `withShutDoors`), and each object's `solid` cells
   (`withSolidObjects`), fitted to the art cell by cell.
-- An object with a door-state tag (`state`) is drawn and blocks only while its door is in that state
+- An object with a door-state tag (`state`) is drawn and blocks only while its door (for a gate cell, the door it belongs to) is in that state
   (`visibleObjects` in `objects.ts`): normally open = a registered game is assigned to the door, otherwise shut;
   while editing, the edit bar's open / shut toggle applies to every door. `buildWorld` keeps only the visible objects
   (`World.objects`, which the eraser and right click pick from) and records the view it was built for (`World.view`),
   so `switchRoom` rebuilds when the room or the view changes.
-- The map (terrain: `#` `.` `D` `S`) and objects are separate layers. An object may sit on any
+- A gate cell (`G` joined to a door's `D` cells side by side, directly or through other `G` — `doorOf`) always walks as
+  floor and never enters a game, whatever its door's state: what opens and closes there is only the tagged objects on it.
+- The map (terrain: `#` `.` `D` `S` `G`) and objects are separate layers. An object may sit on any
   cell, `#` included; `checkObjects` only rejects `solid` cells that block a door or start, or that
   overlap another object's `solid` cells. Pictures may overlap freely.
 

@@ -9,14 +9,17 @@ export const TILE_CELLS = 2;
 
 /**
  * 걷기 판정용 맵 — 닫힌 문(isOpenDoor 가 false)의 칸을 벽으로 본다. 열린 문은 그대로 문(밟으면 입장).
- * 문 번호·자리(doors·doorAt)는 원래 맵 그대로 (결정 2026-10-21: 문도 투명 — 닫힘은 벽, 열림은 바닥)
+ * 게이트 칸은 문 상태와 상관없이 늘 바닥(입장 없음) — 막는 것은 그 칸에 놓은 상태 꼬리표 물체의 solid 뿐.
+ * 문 번호·자리(doors·doorAt·doorOf)는 원래 맵 그대로 (결정 2026-10-21: 문도 투명 · 2026-11-10: 게이트 칸은 늘 바닥)
  */
 export function withShutDoors(map: TileMap, isOpenDoor: (door: number) => boolean): TileMap {
   return {
     ...map,
     tileAt: (p) => {
+      const tile = map.tileAt(p);
+      if (tile === 'gate') return 'floor';
       const door = map.doorAt(p);
-      return door !== undefined && !isOpenDoor(door) ? 'wall' : map.tileAt(p);
+      return door !== undefined && !isOpenDoor(door) ? 'wall' : tile;
     },
   };
 }

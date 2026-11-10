@@ -41,8 +41,9 @@
   rounded up — `checkGround` in `buildRoom`). Its shape and size caps (`MAP_ROWS_MAX`, `MAP_COLS_MAX` — and half of each
   for `ground` — `MAX_OBJECTS`,
   `DOOR_GAMES_MAX`, `ID_MAX`) are `parseRoomData`'s; `MAX_PAYLOAD` in `ws.ts` is sized so a room at those caps fits.
-  An object may carry a door-state tag `state: 'open' | 'shut'` (only when its centre foot cell — `footCell`: bottom row, middle, right of the two when the width is even — is a door cell — it
-  follows that door); `checkObjects` lets a `shut` object's solid cover its own door's cells and lets the `open` and
+  An object may carry a door-state tag `state: 'open' | 'shut'` (only when its centre foot cell — `footCell`: bottom row, middle, right of the two when the width is even — is a door cell or a
+  gate cell — `G`, which `parseMap` joins to the one door its group touches, `doorOf`; a group touching two doors throws — it
+  follows that door; a gate cell is floor to the solid check); `checkObjects` lets a `shut` object's solid cover its own door's cells and lets the `open` and
   `shut` objects of the same door overlap, nothing else. `placeObject` takes the tag as an optional last argument;
   which tagged objects are drawn and block is the lobby's (`visibleObjects`).
   The edit functions (`assignDoor`, `placeObject`, `removeObject`, `paintTile` in `room-map.ts`) are used by the

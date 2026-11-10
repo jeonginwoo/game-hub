@@ -78,7 +78,8 @@ export interface Spawn {
 
 /**
  * 문에서 바로 걸어 나온 자리와 그때 보는 방향(문 반대쪽). 사방이 막혔으면 undefined.
- * 문을 감싼 사각형 바깥에 맞닿은 칸 — 위·아래로 나오면 문의 왼쪽 열, 좌우로 나오면 문의 아랫줄
+ * 문을 감싼 사각형 바깥에 맞닿은 칸 — 위·아래로 나오면 문의 왼쪽 열, 좌우로 나오면 문의 아랫줄.
+ * 게이트 칸도 선다 — 게이트는 늘 바닥으로 걷고, 숲으로 막힌 문은 문 앞이 게이트다 (결정 2026-11-10: 게이트 칸은 늘 바닥)
  */
 export function doorFront(map: TileMap, door: Door): Spawn | undefined {
   for (const dir of FRONT_ORDER) {
@@ -87,7 +88,8 @@ export function doorFront(map: TileMap, door: Door): Spawn | undefined {
       x: d.x < 0 ? door.x - 1 : d.x > 0 ? door.x + door.w : door.x,
       y: d.y < 0 ? door.y - 1 : d.y > 0 ? door.y + door.h : door.y + door.h - 1,
     };
-    if (map.tileAt(pos) === 'floor') return { pos, facing: dir };
+    const tile = map.tileAt(pos);
+    if (tile === 'floor' || tile === 'gate') return { pos, facing: dir };
   }
   return undefined;
 }

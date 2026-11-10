@@ -5,7 +5,8 @@
 import { checkGround } from './ground.ts';
 import { OBJECT_SHAPES, type ObjectKind, type ObjectShape } from './object-shapes.ts';
 
-export type Tile = 'wall' | 'floor' | 'door';
+/** gate — 게이트 칸 'G'. 로비는 문 상태와 상관없이 바닥으로 걷는다 — 막는 것은 그 칸의 상태 꼬리표 물체 (결정 2026-11-10: 게이트 칸은 늘 바닥) */
+export type Tile = 'wall' | 'floor' | 'door' | 'gate';
 
 export interface Pos {
   readonly x: number;
@@ -30,16 +31,22 @@ export interface TileMap {
   readonly doors: readonly Door[];
   /** 맵 밖은 벽으로 본다 — 호출부가 경계 검사를 따로 하지 않아도 된다 */
   tileAt(p: Pos): Tile;
-  /** 칸이 속한 문 번호, 문 칸이 아니면 undefined */
+  /** 칸이 속한 문 번호, 문 칸이 아니면 undefined — 게이트 칸은 문 칸이 아니다(밟아도 입장 없음) */
   doorAt(p: Pos): number | undefined;
+  /** 칸이 딸린 문 번호 — 문 칸이면 그 문, 그 문에 이어진 게이트 칸이면 그 문, 아니면 undefined. 상태 꼬리표는 이것을 본다 */
+  doorOf(p: Pos): number | undefined;
 }
 
 // 'S'(시작점)는 바닥 위에 놓인 표식이라 타일로는 바닥
-const LEGEND: Readonly<Record<string, Tile>> = { '#': 'wall', '.': 'floor', D: 'door', S: 'floor' };
+const LEGEND: Readonly<Record<string, Tile>> = { '#': 'wall', '.': 'floor', D: 'door', S: 'floor', G: 'gate' };
 
 const NEIGHBORS: readonly Pos[] = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
 
-/** 문자 맵 — # 벽 · . 바닥 · D 문(붙은 D 칸 묶음이 문 하나) · S 시작점(하나 이상). 줄 길이는 모두 같아야 한다 */
+/**
+ * 문자 맵 — # 벽 · . 바닥 · D 문(붙은 D 칸 묶음이 문 하나) · S 시작점(하나 이상) · G 게이트. 줄 길이는 모두 같아야 한다.
+ * 게이트 칸은 상하좌우로 D 에 바로 또는 다른 G 를 거쳐 이어진 문에 딸린다 — 한 G 묶음이 문 둘에 닿으면 throw,
+ * 어느 문에도 안 닿은 G 는 딸린 문이 없다(꼬리표를 달 수 없다) (결정 2026-10-21: 게이트 칸 G)
+ */
 export function parseMap(rows: readonly string[]): TileMap {
   const height = rows.length;
   const width = rows[0]?.length ?? 0;
@@ -88,6 +95,33 @@ export function parseMap(rows: readonly string[]): TileMap {
     }
   }
 
+  // 붙은 게이트 칸을 묶고, 묶음이 닿은 문을 찾는다
+  const gateDoors: (number | undefined)[] = new Array<number | undefined>(width * height);
+  const gateSeen = new Set<number>();
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (tileAt({ x, y }) !== 'gate' || gateSeen.has(y * width + x)) continue;
+      const group: Pos[] = [];
+      const touched = new Set<number>();
+      const stack: Pos[] = [{ x, y }];
+      gateSeen.add(y * width + x);
+      for (let p = stack.pop(); p; p = stack.pop()) {
+        group.push(p);
+        for (const d of NEIGHBORS) {
+          const n = { x: p.x + d.x, y: p.y + d.y };
+          const door = inside(n.x, n.y) ? doorIds[n.y * width + n.x] : undefined;
+          if (door !== undefined) touched.add(door);
+          if (tileAt(n) !== 'gate' || gateSeen.has(n.y * width + n.x)) continue;
+          gateSeen.add(n.y * width + n.x);
+          stack.push(n);
+        }
+      }
+      if (touched.size > 1) throw new Error(`(${x}, ${y}) 의 게이트 묶음이 문 ${[...touched].join('·')} 에 함께 닿는다 — 문 하나에만`);
+      const [door] = touched;
+      for (const p of group) gateDoors[p.y * width + p.x] = door;
+    }
+  }
+
   return {
     width,
     height,
@@ -95,6 +129,7 @@ export function parseMap(rows: readonly string[]): TileMap {
     doors,
     tileAt,
     doorAt: ({ x, y }) => (inside(x, y) ? doorIds[y * width + x] : undefined),
+    doorOf: ({ x, y }) => (inside(x, y) ? doorIds[y * width + x] ?? gateDoors[y * width + x] : undefined),
   };
 }
 
@@ -103,7 +138,7 @@ export function parseMap(rows: readonly string[]): TileMap {
 // 종류별 크기·막는 칸 표는 object-shapes.ts — 종류가 많아 따로 둔다
 export { OBJECT_SHAPES, type ObjectKind, type ObjectShape };
 
-/** 문 상태 꼬리표 — 물체가 가운데 발 칸(footCell)의 문의 어느 상태에 딸리는지. 그 상태일 때만 보이고 막는 것은 로비 몫(visibleObjects) (결정 2026-10-21: 편집 개편 D) */
+/** 문 상태 꼬리표 — 물체가 가운데 발 칸(footCell)의 문(게이트 칸이면 딸린 문)의 어느 상태에 딸리는지. 그 상태일 때만 보이고 막는 것은 로비 몫(visibleObjects) (결정 2026-10-21: 편집 개편 D) */
 export type ObjectState = 'open' | 'shut';
 
 /** 방 데이터 속 물체 하나 — 종류와 왼쪽 아래 칸, 그리고 문 칸 위라면 상태 꼬리표 */
@@ -113,7 +148,7 @@ export interface RoomObject {
   /** 왼쪽 아래 칸 — 물체는 여기서 오른쪽(w)·위쪽(h)으로 뻗는다. 발은 이 칸의 아래 선 */
   readonly x: number;
   readonly y: number;
-  /** 없으면 늘 보인다. 있으면 가운데 발 칸(footCell)이 문 칸이어야 하고 그 문을 따른다 */
+  /** 없으면 늘 보인다. 있으면 가운데 발 칸(footCell)이 문 칸이나 딸린 게이트 칸이어야 하고 그 문을 따른다 */
   readonly state?: ObjectState;
 }
 
@@ -167,7 +202,7 @@ function claimsClash(a: SolidClaim, b: SolidClaim): boolean {
 /**
  * 물체 목록 검사 — id 중복, 크기 0 이하, 맵 밖으로 나간 물체, 물체를 벗어나거나 문·시작점을 막는 solid,
  * 다른 물체의 solid 와 겹치는 solid 를 거부한다. 그림끼리 겹치거나 solid 가 맵의 '#' 위에 놓이는 것은 괜찮다.
- * 상태 꼬리표 물체는 가운데 발 칸(footCell)이 문 칸이어야 하고, 닫힘 물체의 solid 는 제 문의 칸을 막아도 되며(닫힌 문은 어차피 벽),
+ * 상태 꼬리표 물체는 가운데 발 칸(footCell)이 문 칸이거나 문에 딸린 게이트 칸이어야 하고(게이트 칸은 바닥처럼 solid 가 막아도 된다), 닫힘 물체의 solid 는 제 문의 칸을 막아도 되며(닫힌 문은 어차피 벽),
  * 같은 문의 열림·닫힘 물체끼리는 solid 가 겹쳐도 된다 (결정 2026-10-23: 상태 꼬리표 검사)
  */
 export function checkObjects(map: TileMap, objects: readonly PlacedShape[]): void {
@@ -187,9 +222,9 @@ export function checkObjects(map: TileMap, objects: readonly PlacedShape[]): voi
       }
     }
     const foot = footCell(o);
-    const door = o.state === undefined ? undefined : map.doorAt(foot);
+    const door = o.state === undefined ? undefined : map.doorOf(foot);
     if (o.state !== undefined && door === undefined) {
-      throw new Error(`물체 '${o.id}' 의 상태 '${o.state}' — 가운데 발 칸 (${foot.x}, ${foot.y}) 이 문 칸이어야 한다`);
+      throw new Error(`물체 '${o.id}' 의 상태 '${o.state}' — 가운데 발 칸 (${foot.x}, ${foot.y}) 이 문 칸이거나 문에 딸린 게이트 칸이어야 한다`);
     }
     const claim: SolidClaim = { id: o.id, door, state: o.state };
     for (const p of solidCells(o)) {
@@ -377,7 +412,7 @@ function freeObjectId(objects: readonly RoomObject[]): string {
 /**
  * 물체 하나를 놓은 새 방 데이터 — at 은 왼쪽 아래 칸, id 는 새로 붙인다. 결과는 buildRoom 으로 검사한다 —
  * 맵 밖·문/시작점을 막는 solid·다른 물체의 solid 와 겹치는 solid 이거나 MAX_OBJECTS 개가 이미 있으면 throw (결정 2026-10-16: 물체 배치 편집).
- * state 를 주면 상태 꼬리표를 붙인다 — 가운데 발 칸(footCell)이 문 칸이 아니면 throw (결정 2026-10-23: 상태 꼬리표 검사)
+ * state 를 주면 상태 꼬리표를 붙인다 — 가운데 발 칸(footCell)이 문 칸·딸린 게이트 칸이 아니면 throw (결정 2026-10-23: 상태 꼬리표 검사)
  */
 export function placeObject(data: RoomData, kind: ObjectKind, at: Pos, state?: ObjectState): RoomData {
   if (data.objects.length >= MAX_OBJECTS) throw new Error(`물체가 이미 ${MAX_OBJECTS} 개 — 더 놓을 수 없다`);
@@ -387,8 +422,8 @@ export function placeObject(data: RoomData, kind: ObjectKind, at: Pos, state?: O
   return next;
 }
 
-/** 칠할 수 있는 맵 글자 — parseMap 의 LEGEND 와 같은 넷 */
-export type TileChar = '#' | '.' | 'D' | 'S';
+/** 칠할 수 있는 맵 글자 — parseMap 의 LEGEND 와 같은 다섯 */
+export type TileChar = '#' | '.' | 'D' | 'S' | 'G';
 
 export function isTileChar(v: unknown): v is TileChar {
   return typeof v === 'string' && Object.hasOwn(LEGEND, v);

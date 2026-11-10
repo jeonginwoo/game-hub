@@ -62,6 +62,37 @@ describe('parseMap', () => {
   });
 });
 
+describe('parseMap — 게이트 칸', () => {
+  // 문 0 = (1, 0) · 문 1 = (5, 0). 게이트 (1~2, 1) 은 문 0 에 바로·G 를 거쳐, (4, 3) 은 어느 문에도 안 닿음
+  const map = parseMap(['#D###D#', '#GG...#', '#S....#', '####G##']);
+
+  it('G 는 게이트 칸 — 문 칸이 아니라 입장 판정(doorAt)에는 없다', () => {
+    expect(map.tileAt({ x: 1, y: 1 })).toBe('gate');
+    expect(map.doorAt({ x: 1, y: 1 })).toBeUndefined();
+    expect(map.doors).toHaveLength(2);
+  });
+
+  it('D 에 바로 또는 다른 G 를 거쳐 닿은 G 는 그 문에 딸린다 — doorOf', () => {
+    expect(map.doorOf({ x: 1, y: 1 })).toBe(0);
+    expect(map.doorOf({ x: 2, y: 1 })).toBe(0);
+    expect(map.doorOf({ x: 1, y: 0 })).toBe(0);
+    expect(map.doorOf({ x: 5, y: 0 })).toBe(1);
+    expect(map.doorOf({ x: 3, y: 1 })).toBeUndefined();
+    expect(map.doorOf({ x: -1, y: 0 })).toBeUndefined();
+  });
+
+  it('어느 문에도 안 닿은 G 는 딸린 문이 없다 · 대각선은 닿은 것이 아니다', () => {
+    expect(map.doorOf({ x: 4, y: 3 })).toBeUndefined();
+    expect(parseMap(['D#', '#G', 'S.']).doorOf({ x: 1, y: 1 })).toBeUndefined();
+  });
+
+  it('한 G 묶음이 문 둘에 닿으면 거부한다', () => {
+    expect(() => parseMap(['#DGGD#', '#S...#'])).toThrow(/게이트 묶음/);
+    // 따로 떨어진 두 묶음이면 문마다 하나씩 괜찮다
+    expect(() => parseMap(['#DG.GD#', '#S....#'])).not.toThrow();
+  });
+});
+
 describe('objectRect', () => {
   // 칸 중심이 정수 — 칸 4·5 를 덮으면 왼쪽 선 3.5, 오른쪽 선 5.5. 발은 칸 5 의 아래 선 5.5
   it('왼쪽 아래 칸에서 오른쪽·위로 뻗는다', () => {
@@ -143,6 +174,26 @@ describe('checkObjects — 상태 꼬리표', () => {
     expect(() => checkObjects(map, [shut, { ...shut, id: 's2' }])).toThrow(/'s' 와 겹친다/);
     expect(() => checkObjects(map, [open, { ...open, id: 'o2' }])).toThrow(/'o' 와 겹친다/);
     expect(() => checkObjects(map, [shut, open, block('n', 3, 0)])).toThrow(/'s' 와 겹친다/);
+  });
+});
+
+describe('checkObjects — 게이트 칸', () => {
+  // 문 0 = (1, 0), 게이트 (1~2, 1) 은 문 0 에 딸림, (4, 1) 은 딸린 문 없음. 시작점 (1, 2)
+  const map = parseMap(['#D####', '#GG.G#', '#S...#', '######']);
+  const block = (id: string, x: number, y: number, state?: 'open' | 'shut'): PlacedShape =>
+    ({ ...tree, id, x, y, w: 1, h: 1, solid: [{ x: 0, y: 0 }], ...(state && { state }) });
+
+  it('발 칸이 딸린 게이트 칸이면 꼬리표를 달 수 있다 — 딸린 문 없는 G 는 안 된다', () => {
+    expect(() => checkObjects(map, [block('a', 2, 1, 'open')])).not.toThrow();
+    expect(() => checkObjects(map, [block('a', 4, 1, 'shut')])).toThrow(/발 칸/);
+  });
+
+  it('게이트 칸은 바닥처럼 꼬리표 없는 solid 가 막아도 된다', () => {
+    expect(() => checkObjects(map, [block('a', 2, 1)])).not.toThrow();
+  });
+
+  it('게이트 칸의 열림·닫힘 물체는 같은 문을 따라 solid 가 겹쳐도 된다', () => {
+    expect(() => checkObjects(map, [block('s', 2, 1, 'shut'), block('o', 2, 1, 'open')])).not.toThrow();
   });
 });
 
@@ -288,7 +339,7 @@ describe('placeObject', () => {
     expect(placeObject(room, 'grass-1', { x: 3, y: 2 }, 'shut').objects).toEqual([{ id: 'p1', kind: 'grass-1', x: 3, y: 2, state: 'shut' }]);
     expect(placeObject(room, 'grass-1', { x: 3, y: 2 }).objects[0]).not.toHaveProperty('state');
     expect(placeObject(room, 'grass-1', { x: 2, y: 2 }, 'open').objects).toHaveLength(1); // 왼쪽 아래 (2, 2) 는 문 밖이어도 가운데 (3, 2) 가 문
-    expect(() => placeObject(room, 'grass-1', { x: 4, y: 2 }, 'open')).toThrow(/문 칸이어야/);
+    expect(() => placeObject(room, 'grass-1', { x: 4, y: 2 }, 'open')).toThrow(/문 칸이거나/);
   });
 
   it(`물체가 MAX_OBJECTS 개면 더 놓지 않는다`, () => {
@@ -345,6 +396,13 @@ describe('paintTile', () => {
     expect(() => paintTile(data, { x: 1, y: 3 }, '.')).toThrow(/시작점/);
     expect(() => paintTile(data, { x: 2, y: 4 }, 'S')).toThrow(/막는다/);
     expect(() => paintTile(data, { x: 3, y: 4 }, 'D')).toThrow(/막는다/);
+  });
+
+  it('게이트 칸을 칠할 수 있다 — 문 둘을 잇는 게이트는 거부한다', () => {
+    const next = paintTile(data, { x: 3, y: 1 }, 'G');
+    expect(buildRoom(next).map.doorOf({ x: 3, y: 1 })).toBe(0);
+    const two: RoomData = { ...data, rows: ['#D.D###', '#.....#', '#.....#', '#S....#', '#.....#', '#######'], doors: [] };
+    expect(() => paintTile(two, { x: 2, y: 0 }, 'G')).toThrow(/게이트 묶음/);
   });
 
   it('상태 꼬리표 물체의 발 밑 문 칸은 지울 수 없다', () => {
