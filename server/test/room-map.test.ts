@@ -518,37 +518,85 @@ describe('sameRoomData', () => {
   });
 });
 
+/**
+ * 시작점에서 걸어 닿는 칸들 — 로비처럼 문 상태에 맞는 꼬리표 물체만 막는다(배정된 문 = 열림, visibleObjects 와 같은 규칙).
+ * 벽만 못 지나고 문 칸은 지나가는 것으로 본다 — 닫힌 문이 벽인 것은 여기서 따지지 않는다
+ */
+function reachable(data: RoomData, start: { readonly x: number; readonly y: number }): Set<string> {
+  const { map, objects, doorGames } = buildRoom(data);
+  const shown = objects.filter((o) => {
+    if (o.state === undefined) return true;
+    const door = map.doorOf(footCell(o));
+    return door !== undefined && (doorGames[door] !== undefined ? 'open' : 'shut') === o.state;
+  });
+  const blocked = new Set(shown.flatMap(solidCells).map((p) => `${p.x},${p.y}`));
+  const walkable = (x: number, y: number): boolean => map.tileAt({ x, y }) !== 'wall' && !blocked.has(`${x},${y}`);
+  const seen = new Set([`${start.x},${start.y}`]);
+  const queue = [start];
+  for (let p = queue.shift(); p; p = queue.shift()) {
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const n = { x: p.x + dx, y: p.y + dy };
+      const key = `${n.x},${n.y}`;
+      if (seen.has(key) || !walkable(n.x, n.y)) continue;
+      seen.add(key);
+      queue.push(n);
+    }
+  }
+  return seen;
+}
+
 describe('방 템플릿', () => {
-  it('모두 검사를 통과하고 문 배정이 하나 이상 있다', () => {
+  it('모두 검사를 통과하고 문 배정이 하나 이상 있다 — 큰 숲만 모든 문이 닫힌 채 시작', () => {
     for (const t of ROOM_TEMPLATES) {
       expect(() => buildRoom(t.room), t.id).not.toThrow();
-      expect(t.room.doors.length, t.id).toBeGreaterThan(0);
+      if (t.id === 'big-forest') expect(t.room.doors, t.id).toEqual([]);
+      else expect(t.room.doors.length, t.id).toBeGreaterThan(0);
     }
   });
 
   it('어느 시작점에서든 게임이 배정된 문까지 걸어갈 수 있다 — 물체가 길을 막지 않는다', () => {
     for (const t of ROOM_TEMPLATES) {
-      const { map, objects, doorGames } = buildRoom(t.room);
-      const blocked = new Set(objects.flatMap(solidCells).map((p) => `${p.x},${p.y}`));
-      const walkable = (x: number, y: number): boolean => map.tileAt({ x, y }) !== 'wall' && !blocked.has(`${x},${y}`);
+      const { map, doorGames } = buildRoom(t.room);
       for (const start of map.starts) {
-        const seen = new Set([`${start.x},${start.y}`]);
-        const queue = [start];
-        for (let p = queue.shift(); p; p = queue.shift()) {
-          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-            const n = { x: p.x + dx, y: p.y + dy };
-            const key = `${n.x},${n.y}`;
-            if (seen.has(key) || !walkable(n.x, n.y)) continue;
-            seen.add(key);
-            queue.push(n);
-          }
-        }
+        const seen = reachable(t.room, start);
         for (const door of Object.keys(doorGames).map(Number)) {
           const d = map.doors[door];
           expect(d && seen.has(`${d.x},${d.y}`), `${t.id}: (${start.x}, ${start.y}) → 문 ${door}`).toBe(true);
         }
       }
     }
+  });
+
+  describe('큰 숲', () => {
+    const big = templateFor('big-forest').room;
+    const { map } = buildRoom(big);
+    const start = map.starts[0] ?? { x: 0, y: 0 };
+    /** 문 바로 앞 게이트 칸 — 문 칸에 붙은 게이트 */
+    const gateBefore = (door: number): string => {
+      const d = map.doors[door];
+      if (!d) throw new Error(`문 ${door} 없음`);
+      for (let y = d.y - 1; y <= d.y + d.h; y++) {
+        for (let x = d.x - 1; x <= d.x + d.w; x++) if (map.tileAt({ x, y }) === 'gate' && map.doorOf({ x, y }) === door) return `${x},${y}`;
+      }
+      throw new Error(`문 ${door} 앞 게이트 없음`);
+    };
+
+    it('문 8개 모두 게이트 길이 이어지고, 재질 테마 8개를 쓴다', () => {
+      expect(map.doors.length).toBe(8);
+      for (let door = 0; door < 8; door++) expect(() => gateBefore(door)).not.toThrow();
+      expect(new Set(big.ground.join('').toLowerCase())).toEqual(new Set('sgpdnbic'));
+    });
+
+    it('처음엔 모든 문이 비어 닫힘 숲이 모든 길을 막는다 — 어느 문 앞 게이트 칸까지도 못 간다', () => {
+      const seen = reachable(big, start);
+      for (let door = 0; door < 8; door++) expect(seen.has(gateBefore(door)), `문 ${door}`).toBe(false);
+    });
+
+    it('모든 문에 게임을 배정하면 숲이 걷히고 어느 문까지든 걸어간다 — 열림 장식은 막지 않는다', () => {
+      const open = { ...big, doors: map.doors.map((d, i) => ({ x: d.x, y: d.y, game: `g${i}` })) };
+      const seen = reachable(open, start);
+      for (const d of map.doors) expect(seen.has(`${d.x},${d.y}`), `(${d.x}, ${d.y})`).toBe(true);
+    });
   });
 
   it('물체 전시에는 모든 물체 종류가 한 번씩 있다', () => {

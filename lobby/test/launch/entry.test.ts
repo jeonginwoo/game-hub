@@ -158,7 +158,8 @@ describe('실제 등록 표', () => {
     // 문 칸·한 문 한 게임은 buildRoom 이 본다 — 등록 표는 로비만 안다
     for (const t of ROOM_TEMPLATES) {
       const room = buildRoom(t.room);
-      expect(Object.keys(room.doorGames), t.id).not.toHaveLength(0);
+      // 큰 숲만 모든 문이 닫힌 채 시작 (결정 2026-11-10)
+      if (t.id !== 'big-forest') expect(Object.keys(room.doorGames), t.id).not.toHaveLength(0);
       for (const id of Object.values(room.doorGames)) expect(GAMES.some((g) => g.id === id), `${t.id} 게임 ${id}`).toBe(true);
     }
   });

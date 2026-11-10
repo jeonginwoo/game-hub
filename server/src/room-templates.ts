@@ -7,10 +7,10 @@
 // 좌우 대칭 맵은 폭의 절반이 홀수 — 가운데 문(x = 폭/2 - 1)이 32px 격자에 맞고 맵 한가운데에 온다.
 import { blankGround, groundSize, type GroundThemeKey } from './ground.ts';
 import { FLOOR_TILES, OBJECT_SHAPES, type ObjectKind } from './object-shapes.ts';
-import { parseMap, solidCells, type DoorGame, type RoomData, type RoomObject } from './room-map.ts';
+import { parseMap, solidCells, type DoorGame, type ObjectState, type RoomData, type RoomObject } from './room-map.ts';
 
-/** 물체 하나 — [종류, 왼쪽 아래 칸 x, y] */
-type Spot = readonly [ObjectKind, number, number];
+/** 물체 하나 — [종류, 왼쪽 아래 칸 x, y, 문 상태 꼬리표] */
+type Spot = readonly [ObjectKind, number, number, ObjectState?];
 
 /** 칸 사각형 — [왼쪽 x, 위 y, 폭, 높이]. 바닥 재질을 깔 자리 — 모두 짝수(32px 타일 단위) */
 type Rect = readonly [number, number, number, number];
@@ -18,10 +18,10 @@ type Rect = readonly [number, number, number, number];
 /** 물체 목록 — id 는 종류 이름, 같은 종류가 또 나오면 kind-2, kind-3 … */
 function objects(...groups: readonly (readonly Spot[])[]): RoomObject[] {
   const count = new Map<string, number>();
-  return groups.flat().map(([kind, x, y]) => {
+  return groups.flat().map(([kind, x, y, state]) => {
     const n = (count.get(kind) ?? 0) + 1;
     count.set(kind, n);
-    return { id: n === 1 ? kind : `${kind}-${n}`, kind, x, y };
+    return { id: n === 1 ? kind : `${kind}-${n}`, kind, x, y, ...(state !== undefined && { state }) };
   });
 }
 
@@ -962,6 +962,411 @@ const MINE_ROOM: RoomData = room(
   [{ x: 32, y: 2, game: 'whiteboard-3d' }],
 );
 
+// 큰 숲 — 한가운데 둥근 빈터에서 8방향(가장자리 넷·모서리 넷)의 게임 문까지 게이트 길(G)이 뻗는다 (편집 개편 E 의 쓰임, 사용자 제안 2026-11-10).
+// 문에 게임이 없으면 닫힘 꼬리표 숲이 길을 빽빽이 막고, 게임을 배정하면 숲이 사라지고 열림 꼬리표 꽃·풀이 길가에 보인다.
+// 방향마다 바닥 재질 테마와 숲 종류가 다르다. 길 바닥은 숲 바닥과 같은 재질 — 바닥 재질은 문 상태를 따르지 않는다(사용자 승인 2026-11-10).
+// 걷기는 문자 맵의 벽(#)이 막고, 벽 위 숲은 그림일 뿐이라 자연스럽게 흩는다(사용자 요청 2026-11-10) — 자리는 시드 고정 의사 난수라 모두에게 같다.
+// 맵이 커서 벽 타일마다 맵 옷(dressed)을 입히면 MAX_OBJECTS 를 넘으므로 쓰지 않는다. 문자 맵은 손으로 쓰지 않고 코드로 만든다.
+// 98 칸(절반 49 가 홀수)이라 가운데 문 x = 48 이 32px 격자에 맞는다.
+const BIG = 98; // 칸 — 가로·세로
+const CENTER = (BIG - 1) / 2; // 맵 한가운데 (칸 좌표, 48.5)
+const CLEAR_R = 14; // 빈터 반지름 (칸) — 2×2 칸 덩이마다 ±1.5 들쭉날쭉
+const LANE = 6; // 길 폭 — 숲 무더기의 막는 줄(6칸)과 같아 무더기 하나가 길 한 줄을 다 막는다
+const MID = BIG / 2 - 1; // 가운데 문의 왼쪽 칸 (48)
+const LANE_X = MID - (LANE - 2) / 2; // 곧은 길이었을 때 왼쪽 칸 (46)
+const SLABS = 16; // 대각선 길의 계단 수 — 계단마다 2줄, 2칸씩 비킨다
+const BIG_SEED = 20261110;
+
+/** 시드 고정 의사 난수 [0, 1) — mulberry32 */
+function seeded(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** 좌표마다 고정된 값 [0, 1) — 빈터 가장자리·테마 경계를 들쭉날쭉하게 */
+function hash2(x: number, y: number, salt: number): number {
+  return seeded((x * 73856093) ^ (y * 19349663) ^ (salt * 83492791))();
+}
+
+/** 한 방향의 테마 — 바닥 재질 글자와 숲 그림 묶음 */
+interface Wing {
+  readonly ground: GroundThemeKey;
+  /** 큰 그림 — 숲 무더기·큰 나무. 닫힘 숲의 길 막기는 그중 무더기(grove-*)로 */
+  readonly big: readonly ObjectKind[];
+  /** 가운데 크기 — 나무·바위·덤불 */
+  readonly mid: readonly ObjectKind[];
+  /** 작은 것 — 막는 2×2(그루터기·돌)와 막지 않는 풀·꽃 */
+  readonly small: readonly ObjectKind[];
+  /** 열림 꼬리표 길가 장식 — 막지 않는 것만 */
+  readonly deco: readonly ObjectKind[];
+}
+
+const WINGS = {
+  e: {
+    ground: 'g',
+    big: ['grove-green', 'grove-lime', 'tree-big-green'],
+    mid: ['tree-green', 'tree-lime', 'tree', 'tree-round', 'berry-big-1', 'rock-brown'],
+    small: ['bush-1', 'bush-3', 'stump-small', 'rock-brown-small', 'grass-1', 'clover', 'fern-1'],
+    deco: ['flower-red', 'clover', 'flower-white', 'grass-1', 'berry-2'],
+  },
+  se: {
+    ground: 's',
+    big: ['grove-lime-grass', 'tree-big-orange'],
+    mid: ['tree-lime-grass', 'tree-lime', 'boulder-brown', 'rock-brown', 'berry-big-4'],
+    small: ['rock-orange', 'stone-brown-1', 'bush-5', 'grass-3', 'sunflower', 'pebbles-1'],
+    deco: ['sunflower', 'grass-4', 'flower-white', 'pebbles-1', 'sprout-orange'],
+  },
+  s: {
+    ground: 'b',
+    big: ['grove-dead', 'rock-pile-brown'],
+    mid: ['tree-dead', 'stump-dark', 'boulder-brown-2', 'stump', 'log-standing'],
+    small: ['shrub-dead', 'twig', 'stone-brown-2', 'stump-small', 'pebbles-2', 'rock-brown-small'],
+    deco: ['shrub-dead', 'twig', 'pebbles-2', 'pebbles-3', 'leaf-orange'],
+  },
+  sw: {
+    ground: 'c',
+    big: ['grove-lime', 'grove-green'],
+    mid: ['tree-round', 'tree-lime-grass', 'berry-big-2', 'berry-big-3', 'log-standing-mossy'],
+    small: ['bush-5', 'leafy-1', 'leafy-2', 'berry-3', 'sprout-olive', 'stump-small', 'rock-gray-small'],
+    deco: ['sprout-olive', 'leafy-1', 'berry-3', 'sprout-olive-2', 'berry-7'],
+  },
+  w: {
+    ground: 'n',
+    big: ['grove-snow', 'tree-big-snow'],
+    mid: ['tree-snow', 'tree-pine-snowy', 'boulder-snow'],
+    small: ['snow-pile', 'snowball', 'rock-snowy', 'rock-white', 'spikes-snowy'],
+    deco: ['snow-pile', 'flower-white', 'pebbles-pale', 'ice-1'],
+  },
+  nw: {
+    ground: 'i',
+    big: ['grove-pine-snow', 'grove-pine-snowy'],
+    mid: ['tree-pine-snow', 'tree-pine-snowy', 'boulder-snow'],
+    small: ['crystal-teal', 'rock-teal', 'rock-teal-sharp', 'spikes-teal', 'ice-2', 'gem-teal'],
+    deco: ['gem-teal', 'leaf-teal', 'ice-2', 'ice-1'],
+  },
+  n: {
+    ground: 'd',
+    big: ['grove-pine', 'grove-green', 'tree-big-green'],
+    mid: ['tree-pine', 'tree-green', 'tree-round', 'rock-gray', 'log-standing-mossy'],
+    small: ['fern-1', 'fern-2', 'bush-1', 'stump-small', 'rock-gray-small', 'grass-1', 'log'],
+    deco: ['fern-1', 'flower-white', 'fern-2', 'grass-3', 'bush-1'],
+  },
+  ne: {
+    ground: 'p',
+    big: ['grove-pink', 'tree-big-pink'],
+    mid: ['tree-pink', 'tree-round', 'boulder-gray', 'berry-big-1'],
+    small: ['crystal-pink', 'leaf-pink', 'berry-5', 'flower-red', 'bush-4', 'rock-orange-2'],
+    deco: ['flower-red', 'berry-5', 'sprout-orange', 'leaf-pink', 'gem-pink'],
+  },
+} as const satisfies Record<string, Wing>;
+
+type WingKey = keyof typeof WINGS;
+/** 화면 각도 순 — 동(0°)에서 시계 방향 (y 가 아래로 늘므로) */
+const WING_ORDER: readonly WingKey[] = ['e', 'se', 's', 'sw', 'w', 'nw', 'n', 'ne'];
+
+/** 칸 (x, y) 의 방향 — 45° 부채꼴 여덟. 경계마다 한가운데에서 멀어질수록 물결치게(경계마다 다른 위상) 곧은 줄이 안 되게 */
+function wingAt(x: number, y: number): Wing {
+  const step = Math.PI / 4;
+  const angle = Math.atan2(y - CENTER, x - CENTER) / step; // 부채꼴 단위
+  const r = Math.hypot(x - CENTER, y - CENTER);
+  const border = Math.floor(angle); // 가까운 경계 — 부채꼴 가운데는 정수, 경계는 그 사이 (border + 0.5)
+  const wave = 0.22 * Math.sin(r / 5 + hash2(border, 0, 1) * 6.28) + 0.1 * Math.sin(r / 2.3 + hash2(border, 1, 1) * 6.28);
+  const sector = Math.round(angle + wave);
+  return WINGS[WING_ORDER[(sector + 8) % 8] ?? 'e'];
+}
+
+/** 2×2 칸 덩이 (bx, by) 가 빈터인가 — 둥근 모양에 덩이마다 들쭉날쭉 */
+function inClearing(bx: number, by: number, r = CLEAR_R): boolean {
+  const d = Math.hypot(2 * bx + 0.5 - CENTER, 2 * by + 0.5 - CENTER);
+  return d <= r + (hash2(bx, by, 2) - 0.5) * 3;
+}
+
+/** 길 한 토막 — 길을 가로지르는 칸 사각형. 세로 길은 1줄, 가로 길은 1칸 폭, 대각선은 2줄 계단. 문 쪽에서 빈터 쪽 순서 */
+type Strip = Rect;
+
+/** 구불구불 — 8칸마다 2칸씩 옆으로 비키되 ±4 안, 문 앞·빈터 앞 토막은 곧게 */
+function wobble(rand: () => number, length: number): number[] {
+  const offs: number[] = [];
+  let off = 0;
+  for (let i = 0; i < length; i++) {
+    if (i % 8 === 0 && i >= 8 && i < length - 12) off = Math.max(-4, Math.min(4, off + [-2, 0, 2][Math.floor(rand() * 3)]!));
+    if (i >= length - 12) off = 0;
+    offs.push(off);
+  }
+  return offs;
+}
+
+/** 방향마다 문 자리(2×2 의 왼쪽 위 칸)와 길 토막들 */
+function laneStrips(key: WingKey, rand: () => number): { readonly door: readonly [number, number]; readonly strips: readonly Strip[] } {
+  const len = MID - 4; // 문 앞(4)부터 한가운데 가까이까지 — 빈터에 닿은 토막은 칠할 때 바닥으로 남는다
+  const offs = wobble(rand, len);
+  const diag = (flipX: boolean, flipY: boolean): Strip[] =>
+    Array.from({ length: SLABS + 6 }, (_, i) => {
+      const k = SLABS - 1 - i; // 문 쪽(15)부터 빈터 안쪽(-6)까지
+      const x = CLEAR_X0 - 2 * k;
+      const y = CLEAR_X0 - 2 * k;
+      return [flipX ? BIG - x - LANE : x, flipY ? BIG - y - 2 : y, LANE, 2];
+    });
+  switch (key) {
+    case 'n':
+      return { door: [MID, 2], strips: offs.map((o, i) => [LANE_X + o, 4 + i, LANE, 1]) };
+    case 's':
+      return { door: [MID, BIG - 4], strips: offs.map((o, i) => [LANE_X + o, BIG - 5 - i, LANE, 1]) };
+    case 'w':
+      return { door: [2, MID], strips: offs.map((o, i) => [4 + i, LANE_X + o, 1, LANE]) };
+    case 'e':
+      return { door: [BIG - 4, MID], strips: offs.map((o, i) => [BIG - 5 - i, LANE_X + o, 1, LANE]) };
+    case 'nw':
+      return { door: [6, 2], strips: diag(false, false) };
+    case 'ne':
+      return { door: [BIG - 8, 2], strips: diag(true, false) };
+    case 'sw':
+      return { door: [6, BIG - 4], strips: diag(false, true) };
+    case 'se':
+      return { door: [BIG - 8, BIG - 4], strips: diag(true, true) };
+  }
+}
+
+const CLEAR_X0 = 34; // 대각선 계단 k = 0 의 왼쪽 위 칸 — 계단 15 가 모서리 문(6, 2) 아래 (4, 4)
+const BIG_STARTS: readonly (readonly [number, number])[] = [[45, 45], [52, 45], [45, 52], [52, 52]];
+
+/** 큰 숲 한 판 — 문자 맵과 길 토막. 길은 벽(#)인 칸만 G 로 칠해 빈터에서 끊긴다 */
+function bigForestLayout(): { readonly rows: string[]; readonly lanes: Readonly<Record<WingKey, readonly Strip[]>>; readonly doors: readonly (readonly [number, number])[] } {
+  const rand = seeded(BIG_SEED);
+  const cells = Array.from({ length: BIG }, () => Array.from({ length: BIG }, () => '#'));
+  for (let by = 1; by < BIG / 2 - 1; by++) for (let bx = 1; bx < BIG / 2 - 1; bx++) {
+    if (!inClearing(bx, by)) continue;
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) (cells[2 * by + dy] ?? [])[2 * bx + dx] = '.';
+  }
+  const lanes = {} as Record<WingKey, Strip[]>;
+  const doors: (readonly [number, number])[] = [];
+  for (const key of WING_ORDER) {
+    const { door, strips } = laneStrips(key, rand);
+    const kept: Strip[] = [];
+    for (const s of strips) {
+      const [x, y, w, h] = s;
+      let any = false;
+      for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) {
+        const line = cells[j];
+        if (line?.[i] === '#') {
+          line[i] = 'G';
+          any = true;
+        }
+      }
+      if (!any) break; // 빈터에 닿았다
+      kept.push(s);
+    }
+    lanes[key] = kept;
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) (cells[door[1] + dy] ?? [])[door[0] + dx] = 'D';
+    doors.push(door);
+  }
+  for (const [x, y] of BIG_STARTS) (cells[y] ?? [])[x] = 'S';
+  return { rows: cells.map((line) => line.join('')), lanes, doors };
+}
+
+/** 물체 놓기 — 막는 칸 겹침(taken)·맵 밖·문 덮기를 피해 넣고, 넣었으면 true */
+class Planter {
+  readonly spots: Spot[] = [];
+  private readonly taken = new Set<string>();
+  private readonly rows: readonly string[];
+  constructor(rows: readonly string[]) {
+    this.rows = rows;
+  }
+
+  at(x: number, y: number): string | undefined {
+    return this.rows[y]?.[x];
+  }
+
+  /**
+   * cellOk: 막는 칸이 놓여도 되는 칸인가. coverOk: 그림 아래 세 줄(가장자리 한 칸 빼고)이 덮어도 되는 칸인가.
+   * 그림은 문 칸을 덮지 않는다. state 가 있으면 가운데 발 칸이 G 여야 한다
+   */
+  tryPut(kind: ObjectKind, x: number, y: number, state: ObjectState | undefined, cellOk: (ch: string) => boolean, coverOk: (ch: string) => boolean): boolean {
+    if (!this.fits(kind, x, y, state, cellOk, coverOk)) return false;
+    for (const c of OBJECT_SHAPES[kind].solid ?? []) this.taken.add(`${x + c.x},${y - c.y}`);
+    this.spots.push(state === undefined ? [kind, x, y] : [kind, x, y, state]);
+    return true;
+  }
+
+  /** tryPut 이 넣을 수 있는가 — 넣지는 않는다 */
+  fits(kind: ObjectKind, x: number, y: number, state: ObjectState | undefined, cellOk: (ch: string) => boolean, coverOk: (ch: string) => boolean): boolean {
+    const { w, h, solid = [] } = OBJECT_SHAPES[kind];
+    if (x < 0 || x + w > BIG || y - h + 1 < 0 || y >= BIG) return false;
+    if (state !== undefined && this.at(x + Math.floor(w / 2), y) !== 'G') return false;
+    for (let j = y - h + 1; j <= y; j++) {
+      for (let i = x; i < x + w; i++) {
+        const ch = this.at(i, j) ?? '#';
+        if (ch === 'D' || ch === 'S') return false;
+        const inner = w <= 2 || (i > x && i < x + w - 1);
+        if (inner && j > y - 3 && !coverOk(ch)) return false;
+      }
+    }
+    return !solid.some((c) => this.taken.has(`${x + c.x},${y - c.y}`) || !cellOk(this.at(x + c.x, y - c.y) ?? '#'));
+  }
+}
+
+function pick<T>(rand: () => number, list: readonly T[]): T {
+  const v = list[Math.floor(rand() * list.length)];
+  if (v === undefined) throw new Error('빈 목록');
+  return v;
+}
+
+function shuffled<T>(rand: () => number, list: readonly T[]): T[] {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
+}
+
+const isWall = (ch: string): boolean => ch === '#';
+const isGateOrWall = (ch: string): boolean => ch === '#' || ch === 'G';
+const anywhere = (): boolean => true;
+
+/**
+ * 닫힘 숲 한 길 — 길 막이 몇 곳(무더기 막는 줄로 길 토막 하나를 다 막는다) + 길 위에 숲·바위·덤불을 흩는다.
+ * 가로 길은 막는 줄이 가로라 한 칸 폭 토막의 여섯 줄에 무더기를 하나씩 엇갈려 쌓는다
+ */
+function shutForest(p: Planter, rand: () => number, key: WingKey, strips: readonly Strip[]): void {
+  const wing = WINGS[key];
+  const groves = wing.big.filter((k) => k.startsWith('grove-'));
+  const vertical = key === 'w' || key === 'e';
+  const blocks = [0.2, 0.45, 0.7].map((f) => Math.floor(strips.length * f) + Math.floor(rand() * 3));
+  // 막이 하나 — 토막 하나를 다 막는 무더기들. 다 놓을 수 있을 때만 놓는다 (가로 길은 칸 x 의 여섯 줄마다 하나, 막는 칸 gx+1..gx+6 이 x 를 품게)
+  const barrier = (strip: Strip): boolean => {
+    const [x, y, , h] = strip;
+    const rowsToBlock = vertical ? Array.from({ length: h }, (_, j) => y + j) : [y + h - 1];
+    const plan: Spot[] = [];
+    for (const j of rowsToBlock) {
+      const kind = pick(rand, groves);
+      const xs = vertical ? shuffled(rand, [x - 6, x - 5, x - 4, x - 3, x - 2, x - 1]) : [x - 1];
+      const gx = xs.find((gx) => p.fits(kind, gx, j, 'shut', isGateOrWall, anywhere));
+      if (gx === undefined) return false;
+      plan.push([kind, gx, j]);
+    }
+    for (const [kind, gx, j] of plan) p.tryPut(kind, gx, j, 'shut', isGateOrWall, anywhere);
+    return true;
+  };
+  let made = 0;
+  for (const i of blocks) {
+    for (let k = i; k < strips.length && k < i + 6; k++) {
+      const strip = strips[k];
+      if (strip && barrier(strip)) {
+        made++;
+        break;
+      }
+    }
+  }
+  if (made === 0) throw new Error(`큰 숲 ${key} 길에 막이를 하나도 못 놓았다`);
+  // 흩는 숲 — 길 칸을 발 칸으로
+  const cells = strips.flatMap(([x, y, w, h]) => Array.from({ length: w * h }, (_, n) => [x + (n % w), y + Math.floor(n / w)] as const));
+  for (const [cx, cy] of shuffled(rand, cells).slice(0, Math.floor(cells.length / 5))) {
+    const roll = rand();
+    const kind = pick(rand, roll < 0.3 ? wing.big : roll < 0.75 ? wing.mid : wing.small);
+    p.tryPut(kind, cx - Math.floor(OBJECT_SHAPES[kind].w / 2), cy, 'shut', isGateOrWall, anywhere);
+  }
+}
+
+/** 열림 장식 — 길 칸에 드문드문 (막지 않는 것만) */
+function openDeco(p: Planter, rand: () => number, key: WingKey, strips: readonly Strip[]): void {
+  const cells = strips.flatMap(([x, y, w, h]) => Array.from({ length: w * h }, (_, n) => [x + (n % w), y + Math.floor(n / w)] as const));
+  for (const [cx, cy] of shuffled(rand, cells).slice(0, Math.floor(cells.length / 14))) {
+    p.tryPut(pick(rand, WINGS[key].deco), cx - 1, cy, 'open', anywhere, anywhere);
+  }
+}
+
+/** 벽 숲 — 벽 위에 큰 것 → 가운데 → 작은 것 순으로 흩는다. 막는 칸은 벽에만, 그림 아래 세 줄도 벽에만(잎 위는 길에 걸쳐도 된다) */
+function wallForest(p: Planter, rand: () => number): void {
+  const passes: readonly { readonly step: number; readonly pickFrom: (w: Wing) => readonly ObjectKind[]; readonly chance: number }[] = [
+    { step: 4, pickFrom: (w) => w.big, chance: 0.8 },
+    { step: 4, pickFrom: (w) => w.mid, chance: 0.5 },
+    { step: 6, pickFrom: (w) => w.small, chance: 0.35 },
+  ];
+  for (const { step, pickFrom, chance } of passes) {
+    const spots: (readonly [number, number])[] = [];
+    for (let y = 1; y < BIG + 4; y += step) for (let x = -2; x < BIG; x += step) spots.push([x + Math.floor(rand() * step), y + Math.floor(rand() * step)]);
+    for (const [x, y] of shuffled(rand, spots)) {
+      if (rand() > chance) continue;
+      const kind = pick(rand, pickFrom(wingAt(x + 2, y - 1)));
+      p.tryPut(kind, x, y, undefined, isWall, isWall);
+    }
+  }
+}
+
+/** 빈터 — 가장자리 쪽에 큰 나무 몇 그루, 여기저기 풀·꽃·그루터기. 막는 것은 빈터 바깥 고리에만 */
+function clearingDeco(p: Planter, rand: () => number): void {
+  const ring = (x: number, y: number): boolean => Math.hypot(x - CENTER, y - CENTER) > CLEAR_R - 5;
+  const floor = (ch: string): boolean => ch === '.';
+  const extras: readonly ObjectKind[] = ['tree-big-green', 'tree-big-pink', 'tree-big-orange', 'tree-round', 'stump', 'rock-gray', 'log'];
+  for (let n = 0; n < 40; n++) {
+    const x = Math.floor(CENTER - CLEAR_R + rand() * 2 * CLEAR_R);
+    const y = Math.floor(CENTER - CLEAR_R + rand() * 2 * CLEAR_R);
+    if (ring(x + 2, y) && n < 24) p.tryPut(pick(rand, extras), x, y, undefined, (ch) => floor(ch) || isWall(ch), anywhere);
+    else p.tryPut(pick(rand, ['grass-1', 'grass-3', 'flower-red', 'flower-white', 'clover', 'fern-2', 'pebbles-4', 'sprout-olive']), x, y, undefined, anywhere, anywhere);
+  }
+}
+
+/** 테마 경계 가리기 — 재질이 바뀌는 타일 중 걷는 칸이 든 곳(길·빈터 가장자리)에 덤불·풀을 (막지 않는다). 벽 위 경계는 드문드문 — 대개 벽 숲이 가린다 */
+function seamCover(p: Planter, rand: () => number, ground: readonly string[]): void {
+  const at = (tx: number, ty: number): string | undefined => ground[ty]?.[tx]?.toLowerCase();
+  for (let ty = 0; ty < ground.length; ty++) {
+    for (let tx = 0; tx < (ground[0]?.length ?? 0); tx++) {
+      const here = at(tx, ty);
+      const seam = [[1, 0], [0, 1], [-1, 0], [0, -1]].some(([dx, dy]) => { const o = at(tx + dx!, ty + dy!); return o !== undefined && o !== here; });
+      if (!seam) continue;
+      const walk = [[0, 0], [1, 0], [0, 1], [1, 1]].some(([dx, dy]) => p.at(2 * tx + dx!, 2 * ty + dy!) !== '#');
+      if (!walk && rand() > 0.15) continue; // 벽 위 경계는 대개 숲이 가린다 — 드문드문만
+      const wing = wingAt(2 * tx + 1, 2 * ty + 1);
+      const soft = wing.small.filter((k) => OBJECT_SHAPES[k].solid === undefined);
+      p.tryPut(pick(rand, soft.length > 0 ? soft : wing.deco), 2 * tx, 2 * ty + 1, undefined, anywhere, anywhere);
+    }
+  }
+}
+
+/** 빈터 둘레 풀밭 (타일 단위) — 반지름이 방향 따라 물결치고 타일마다 ±2.5칸 흔들려, 길을 가로지르는 재질 경계도 곧은 줄이 안 된다 */
+function inMeadow(tx: number, ty: number): boolean {
+  const dx = 2 * tx + 0.5 - CENTER;
+  const dy = 2 * ty + 0.5 - CENTER;
+  const a = Math.atan2(dy, dx);
+  const r = CLEAR_R + 6 + 3 * Math.sin(3 * a + 1.3) + 2 * Math.sin(7 * a + 4.1) + (hash2(tx, ty, 3) - 0.5) * 5;
+  return Math.hypot(dx, dy) <= r;
+}
+
+/** 재질 맵 — 빈터와 그 둘레 풀밭은 풀(가운데 흙 광장), 바깥은 그 자리 방향의 바닥 글자 */
+function bigForestGround(): string[] {
+  const { width, height } = groundSize(BIG, BIG);
+  return Array.from({ length: height }, (_, ty) =>
+    Array.from({ length: width }, (_, tx) => {
+      if (inClearing(tx, ty, 7)) return 'G';
+      if (inMeadow(tx, ty)) return 'g';
+      return wingAt(2 * tx + 1, 2 * ty + 1).ground;
+    }).join(''),
+  );
+}
+
+/** 큰 숲 — 처음엔 모든 문이 비어 모든 길이 닫힘 숲으로 막혀 있다. 방장이 문에 게임을 배정하면 그 길이 열린다 */
+function bigForestRoom(): RoomData {
+  const { rows, lanes } = bigForestLayout();
+  const ground = bigForestGround();
+  const rand = seeded(BIG_SEED + 1);
+  const p = new Planter(rows);
+  for (const key of WING_ORDER) shutForest(p, rand, key, lanes[key]);
+  for (const key of WING_ORDER) openDeco(p, rand, key, lanes[key]);
+  wallForest(p, rand);
+  clearingDeco(p, rand);
+  seamCover(p, rand, ground);
+  // id 는 차례 번호 — 종류 이름에 -2 를 붙이면 다른 종류 이름(boulder-gray-2 등)과 겹친다
+  const objects = p.spots.map(([kind, x, y, state], i): RoomObject => ({ id: `f${i + 1}`, kind, x, y, ...(state !== undefined && { state }) }));
+  return { rows, ground, objects, doors: [] };
+}
+
 // 물체 전시 — 모든 물체 종류를 표 순서대로 한 번씩 늘어놓은 방. 그림 자르기·막는 칸을 눈으로 확인하는 곳 (결정 2026-10-16: 물체 종류 늘리기).
 // 종류가 늘면 저절로 따라오도록 표에서 만든다 — 선반처럼 왼쪽부터 채우고, 줄이 차면 그 줄의 가장 큰 높이 아래로 내려간다.
 // 바닥 조각(floor-열-줄)은 선반 아래에 시트 모양 그대로 붙여 놓는다 — 가장자리 세트가 어떻게 이어지는지 보이게.
@@ -1030,6 +1435,7 @@ export const ROOM_TEMPLATES: readonly RoomTemplate[] = [
   { id: 'winter', name: '눈마을', room: WINTER_ROOM },
   { id: 'farm', name: '농장 마을', room: FARM_ROOM },
   { id: 'mine', name: '광산 마을', room: MINE_ROOM },
+  { id: 'big-forest', name: '큰 숲', room: bigForestRoom() },
   { id: 'gallery', name: '물체 전시', room: galleryRoom() },
 ];
 
