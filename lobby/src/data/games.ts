@@ -18,8 +18,13 @@ function devOr(dev: string, deployed: string): string {
 }
 
 export const GAMES: readonly GameEntry[] = [
-  // 독립 저장소 github.com/jeonginwoo/whiteboard-3d — `npm run dev` 가 5174 에 뜬다
-  { id: 'whiteboard-3d', title: '3D 화이트보드', url: 'http://localhost:5174/', description: '여럿이 함께 그리는 3D 화이트보드' },
+  // 독립 저장소 github.com/jeonginwoo/whiteboard-3d — `npm run dev` 가 5174 에 뜨고, 배포는 같은 VM 의 다른 서비스
+  {
+    id: 'whiteboard-3d',
+    title: '3D 화이트보드',
+    url: devOr('http://localhost:5174/', 'https://nolja-board.duckdns.org/'),
+    description: '여럿이 함께 그리는 3D 화이트보드',
+  },
   // 독립 저장소 github.com/Eunji1217/3js — GitHub Pages 배포본 (계약 v3: 복귀·이름·방 코드 모두 씀)
   { id: 'room-sim', title: 'Room Sim', url: 'https://eunji1217.github.io/3js/', description: '집·마당·들판을 오가며 사냥·채집·요리하는 생활 시뮬레이션' },
   // 독립 저장소 github.com/HYERINI/rinfish — Vercel 배포본 (계약 v3: 복귀·이름·방 코드 모두 씀)
