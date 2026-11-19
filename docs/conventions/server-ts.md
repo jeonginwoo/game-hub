@@ -21,6 +21,14 @@
   They are tested without sockets.
 - **Wiring** is `ws.ts` (`attachLobby` — upgrades on `WS_PATH` only, heartbeat) and `main.ts`
   (deploy entry: serves `lobby/dist` + `/ws` on one port, `PORT` env).
+- **Load test** (not part of the running server): `load/bots.ts` (`npm run load -w server -- --bots N …` —
+  bots that send the lobby's own `hello`/`move`, latency via `chat` probes; `--ui` serves the live page
+  `load/dashboard.html` on 127.0.0.1:9300 with add/remove/rate controls) with its pure rules in `load/walk.ts`
+  (tested). `src/load-stats.ts` samples CPU·memory·event-loop delay·connections every second and logs every 5 s,
+  only when `main.ts` runs with `STATS=1`; then `main.ts` also answers `GET /__stats` (`STATS_PATH`, JSON, CORS `*`)
+  for the dashboard. Never on without `STATS=1` — and never set `STATS=1` on the public deploy (it publishes
+  connection counts). The dashboard answers only `Host`/`Origin` of localhost:its port (other pages and DNS
+  rebinding can't drive the bots).
 - Dev and deploy share `attachLobby`: dev attaches it to the Vite server through
   `lobby/vite.config.ts`. Besides that, lobby `src/` may import `protocol.ts`, `room-map.ts`, `ground.ts`,
   `object-shapes.ts` and `room-templates.ts` — so they must stay free of `node:*`, `ws` and the DOM.

@@ -4,6 +4,7 @@ import { createReadStream, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream';
+import { startStats, STATS_PATH, type ServerStats } from './load-stats.ts';
 import { attachLobby, WS_PATH } from './ws.ts';
 
 const PORT = Number(process.env.PORT) || 8080; // 호스팅이 PORT 를 정해 주면 그것을 쓴다 (빈 값이면 기본)
@@ -18,12 +19,21 @@ const MIME: Readonly<Record<string, string>> = {
   '.ico': 'image/x-icon',
 };
 
+// 부하 측정 때만(STATS=1) — 아래 attachLobby 뒤에 켠다
+let stats: (() => ServerStats | null) | null = null;
+
 const server = createServer((req, res) => {
   let path: string;
   try {
     path = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname);
   } catch {
     res.writeHead(400).end();
+    return;
+  }
+  if (stats && path === STATS_PATH) {
+    // 봇 대시보드(다른 포트)가 읽는다
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(stats()));
     return;
   }
   let file = normalize(join(ROOT, path));
@@ -47,7 +57,9 @@ const server = createServer((req, res) => {
   pipeline(createReadStream(file), res, () => {});
 });
 
-attachLobby(server);
+const wss = attachLobby(server);
+// 부하 측정 때만 — CPU·메모리·접속 수 (봇: server/load/bots.ts)
+if (process.env.STATS === '1') stats = startStats(wss);
 // attachLobby 는 /ws 밖의 업그레이드를 남겨 둔다 — 받을 곳이 없으면 소켓이 매달리므로 끊는다
 server.on('upgrade', (req, socket) => {
   if (new URL(req.url ?? '/', 'http://x').pathname !== WS_PATH) socket.destroy();

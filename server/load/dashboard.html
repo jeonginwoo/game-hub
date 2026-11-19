@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>부하 테스트</title>
+<!-- 부하 테스트 봇(bots.ts --ui)의 실시간 화면 — 의존성 없이 캔버스로 그린다. 데이터는 /events(SSE) 1초 샘플 -->
+<style>
+:root{
+  --bg:#f3f5f8; --surface:#fff; --ink:#152030; --muted:#5d697c; --line:#d8dee7;
+  --a:#2c5bd8; --b:#d98a12; --c:#c23b6e; --good:#23875b; --bad:#cc3e34;
+  --mono:ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0e131b; --surface:#161d28; --ink:#e5eaf1; --muted:#95a2b5; --line:#2a3443;
+  --a:#7f9cff; --b:#f0b142; --c:#ff7aa8; --good:#4cc48b; --bad:#ff6d61; color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;padding:16px}
+/* 로비를 열면 두 칸 — 왼쪽 지표·로그, 오른쪽 로비(화면 높이에 붙어 따라온다). 좁으면 위아래로 */
+.page{max-width:1200px;margin:0 auto;display:grid;gap:14px}
+.page.split{max-width:none;grid-template-columns:minmax(0,1fr) minmax(420px,44%)}
+.wrap{display:grid;gap:14px;min-width:0;align-content:start}
+aside{display:none}
+.page.split aside{display:grid;gap:6px;position:sticky;top:16px;align-self:start}
+aside .head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.85rem;color:var(--muted)}
+.page.split canvas{height:150px}
+.page.split .tiles{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+.page.split #log{height:160px}
+@media (max-width:1000px){.page.split{grid-template-columns:1fr}.page.split aside{position:static}}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px}
+h1{font-size:1.4rem;margin:0}
+.meta{color:var(--muted);font-size:.85rem;font-family:var(--mono)}
+.state{font-size:.8rem;border:1px solid var(--line);border-radius:99px;padding:1px 10px}
+.state.live{color:var(--good);border-color:var(--good)}
+.state.off{color:var(--bad);border-color:var(--bad)}
+.bar{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.grp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.grp>span{font-size:.8rem;color:var(--muted)}
+button,select{font:inherit;font-size:.9rem;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:4px 11px;cursor:pointer}
+button:hover,select:hover{border-color:var(--a)}
+button.stop{color:var(--bad)}
+a{color:var(--a)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.tile .k{font-size:.78rem;color:var(--muted)}
+.tile .v{font-size:1.6rem;font-weight:700;font-variant-numeric:tabular-nums;font-family:var(--mono)}
+.tile .s{font-size:.78rem;color:var(--muted);font-family:var(--mono)}
+.tile.warn .v{color:var(--bad)}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:10px}
+.logbox{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;display:grid;gap:6px}
+.logbox h2{font-size:.95rem;margin:0}
+#log{margin:0;height:200px;overflow:auto;font:12px/1.55 var(--mono);color:var(--ink);white-space:pre}
+#log .ctl{color:var(--a)}
+.chart{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;display:grid;gap:6px}
+.chart h2{font-size:.95rem;margin:0;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.legend{display:flex;gap:12px;font-size:.78rem;color:var(--muted);font-weight:400}
+.legend i{display:inline-block;width:12px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+canvas{width:100%;height:200px;display:block}
+.note{font-size:.8rem;color:var(--muted)}
+iframe{width:100%;height:calc(100vh - 64px);min-height:420px;border:1px solid var(--line);border-radius:12px;background:#000}
+@media (max-width:1000px){iframe{height:560px}}
+</style>
+</head>
+<body>
+<div class="page" id="page">
+<div class="wrap">
+  <header>
+    <h1>부하 테스트</h1>
+    <span id="state" class="state">연결 중</span>
+    <span class="meta" id="meta"></span>
+  </header>
+
+  <div class="bar">
+    <div class="grp"><span>봇</span>
+      <button data-bots="-10">−10</button><button data-bots="-1">−1</button>
+      <button data-bots="1">+1</button><button data-bots="10">+10</button><button data-bots="50">+50</button>
+    </div>
+    <div class="grp"><span>봇당 이동/초</span>
+      <select id="hz">
+        <option>1</option><option>2.5</option><option>5</option><option>10</option>
+        <option value="12.5">12.5 (쉬지 않고 걷기)</option><option>20</option>
+      </select>
+    </div>
+    <div class="grp"><span>방</span><span id="rooms" class="meta"></span></div>
+    <div class="grp"><button id="watch">로비에서 보기</button><button class="stop" id="stop">끝내기</button></div>
+  </div>
+
+  <div class="tiles">
+    <div class="tile"><div class="k">접속 봇</div><div class="v" id="v-bots">-</div><div class="s" id="s-bots"></div></div>
+    <div class="tile" id="t-cpu"><div class="k">서버 CPU (코어 1개 기준)</div><div class="v" id="v-cpu">-</div><div class="s" id="s-cpu"></div></div>
+    <div class="tile" id="t-recv"><div class="k">서버 → 봇 메시지/초</div><div class="v" id="v-recv">-</div><div class="s" id="s-recv"></div></div>
+    <div class="tile"><div class="k">서버 송신량</div><div class="v" id="v-kb">-</div><div class="s" id="s-kb"></div></div>
+    <div class="tile" id="t-lat"><div class="k">중계 지연 p99</div><div class="v" id="v-lat">-</div><div class="s" id="s-lat"></div></div>
+    <div class="tile" id="t-drop"><div class="k">끊김 / 접속 실패</div><div class="v" id="v-drop">-</div><div class="s">측정 중 서버가 끊은 봇</div></div>
+  </div>
+
+  <div class="charts">
+    <div class="chart"><h2>접속 봇 수 <span class="legend"><span><i style="background:var(--a)"></i>봇</span></span></h2><canvas id="c-bots"></canvas></div>
+    <div class="chart"><h2>서버 CPU % <span class="legend"><span><i style="background:var(--b)"></i>CPU</span><span><i style="background:var(--bad)"></i>80% 선</span></span></h2><canvas id="c-cpu"></canvas></div>
+    <div class="chart"><h2>메시지/초 <span class="legend"><span><i style="background:var(--a)"></i>받음</span><span><i style="background:var(--muted)"></i>기대 n·(n−1)·hz</span></span></h2><canvas id="c-msg"></canvas></div>
+    <div class="chart"><h2>중계 지연 ms <span class="legend"><span><i style="background:var(--good)"></i>p50</span><span><i style="background:var(--b)"></i>p95</span><span><i style="background:var(--c)"></i>p99</span></span></h2><canvas id="c-lat"></canvas></div>
+  </div>
+  <div class="logbox"><h2>로그 <span class="meta">5초 요약 · 조작</span></h2><pre id="log"></pre></div>
+  <p class="note" id="note"></p>
+</div>
+<aside>
+  <div class="head"><span id="lobby-title">로비</span><button id="close-lobby">닫기</button></div>
+  <div id="lobby"></div>
+</aside>
+</div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const WINDOW = 120; // 그래프에 보이는 초
+let samples = [];
+let init = null;
+
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const fmt = (v) => (v === null || v === undefined ? '-' : v >= 10000 ? `${(v / 1000).toFixed(1)}k`
+  : Number.isInteger(v) ? String(v) : v < 100 ? v.toFixed(1) : String(Math.round(v)));
+
+/** 선 그래프 — series: [{ get, color, dash }], 고정 max 가 없으면 값에 맞춘다 */
+function draw(canvas, series, { max, floor = 1, line } = {}) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== w * dpr || canvas.height !== h * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
+  const g = canvas.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const data = samples.slice(-WINDOW);
+  const L = 44, R = 8, T = 8, B = 20;
+  let top = max;
+  if (top === undefined) {
+    top = floor;
+    for (const s of data) for (const se of series) { const v = se.get(s); if (v !== null && v !== undefined) top = Math.max(top, v); }
+    top = niceMax(top * 1.1);
+  }
+  const x = (i) => L + (i / (WINDOW - 1)) * (w - L - R) + (WINDOW - data.length) / (WINDOW - 1) * (w - L - R);
+  const y = (v) => T + (1 - v / top) * (h - T - B);
+  g.font = `11px ${css('--mono')}`;
+  g.fillStyle = css('--muted');
+  g.strokeStyle = css('--line');
+  g.lineWidth = 1;
+  for (let k = 0; k <= 4; k++) {
+    const v = (top / 4) * k, yy = Math.round(y(v)) + 0.5;
+    g.beginPath(); g.moveTo(L, yy); g.lineTo(w - R, yy); g.stroke();
+    g.textAlign = 'right'; g.textBaseline = 'middle'; g.fillText(fmt(v), L - 6, yy);
+  }
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  g.fillText(`최근 ${WINDOW}초`, L, h - 4);
+  if (line !== undefined) {
+    g.strokeStyle = css('--bad'); g.setLineDash([5, 4]);
+    g.beginPath(); g.moveTo(L, y(line)); g.lineTo(w - R, y(line)); g.stroke(); g.setLineDash([]);
+  }
+  for (const se of series) {
+    g.strokeStyle = css(se.color); g.lineWidth = 2; g.setLineDash(se.dash ? [5, 4] : []);
+    g.beginPath();
+    let pen = false;
+    data.forEach((s, i) => {
+      const v = se.get(s);
+      if (v === null || v === undefined) { pen = false; return; }
+      const xx = x(i), yy = y(Math.min(v, top));
+      if (pen) g.lineTo(xx, yy); else g.moveTo(xx, yy);
+      pen = true;
+    });
+    g.stroke();
+  }
+  g.setLineDash([]);
+}
+
+function niceMax(v) {
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p;
+  return 10 * p;
+}
+
+function render() {
+  const s = samples[samples.length - 1];
+  if (s) {
+    $('v-bots').textContent = s.bots;
+    $('s-bots').textContent = s.target !== s.bots ? `목표 ${s.target}` : `봇당 이동 ${s.hz}/초`;
+    const cpu = s.server ? s.server.cpu : null;
+    $('v-cpu').textContent = cpu === null ? '-' : `${Math.round(cpu)}%`;
+    $('s-cpu').textContent = s.server ? `메모리 ${Math.round(s.server.memMb)} MB · 루프 p99 ${s.server.loopP99Ms.toFixed(0)}ms` : 'STATS=1 로 띄운 서버만';
+    $('t-cpu').classList.toggle('warn', cpu !== null && cpu >= 80);
+    $('v-recv').textContent = fmt(s.recv);
+    $('s-recv').textContent = `기대 ${fmt(s.expected)} · 봇 → 서버 ${fmt(s.sent)}`;
+    $('t-recv').classList.toggle('warn', s.expected > 100 && s.recv < s.expected * 0.8);
+    $('v-kb').textContent = s.kb >= 1024 ? `${(s.kb / 1024).toFixed(1)} MB/s` : `${s.kb} KB/s`;
+    $('s-kb').textContent = s.bots > 0 ? `봇 하나당 ${Math.round(s.kb / s.bots)} KB/s` : '';
+    $('v-lat').textContent = s.p99 === null ? '-' : `${Math.round(s.p99)}ms`;
+    $('s-lat').textContent = s.p50 === null ? '탐침 기다리는 중' : `p50 ${Math.round(s.p50)} · p95 ${Math.round(s.p95)} · 최대 ${Math.round(s.max)}`;
+    $('t-lat').classList.toggle('warn', s.p99 !== null && s.p99 >= 100);
+    $('v-drop').textContent = `${s.dropped} / ${s.failed}`;
+    $('t-drop').classList.toggle('warn', s.dropped + s.failed > 0);
+    if (document.activeElement !== $('hz')) $('hz').value = String(s.hz);
+    $('note').textContent = `봇 프로세스 루프 지연 p99 ${s.botLoop}ms — Windows 에선 쉬어도 20~30ms. 크게 오르면 서버가 아니라 봇 쪽이 병목이다.`;
+  }
+  draw($('c-bots'), [{ get: (s) => s.bots, color: '--a' }], { floor: 10 });
+  draw($('c-cpu'), [{ get: (s) => (s.server ? s.server.cpu : null), color: '--b' }], { max: 100, line: 80 });
+  draw($('c-msg'), [{ get: (s) => s.expected, color: '--muted', dash: true }, { get: (s) => s.recv, color: '--a' }], { floor: 100 });
+  draw($('c-lat'), [{ get: (s) => s.p50, color: '--good' }, { get: (s) => s.p95, color: '--b' }, { get: (s) => s.p99, color: '--c' }], { floor: 10 });
+}
+
+function setState(text, cls) { const el = $('state'); el.textContent = text; el.className = `state ${cls}`; }
+
+const es = new EventSource('/events');
+es.addEventListener('init', (e) => {
+  init = JSON.parse(e.data);
+  samples = init.history;
+  $('meta').textContent = init.url;
+  $('rooms').textContent = init.rooms.join(' ');
+  setState('실시간', 'live');
+  $('log').replaceChildren();
+  for (const line of init.logs) addLog(line);
+  render();
+  // 주소에 ?lobby=1 이면 처음부터 로비를 오른쪽에
+  if (new URLSearchParams(location.search).has('lobby') && !$('page').classList.contains('split')) setLobby(true);
+});
+es.addEventListener('sample', (e) => { samples.push(JSON.parse(e.data)); if (samples.length > 600) samples.shift(); render(); });
+es.addEventListener('stopped', () => { setState('끝남', 'off'); es.close(); });
+es.onerror = () => setState('연결 끊김', 'off');
+
+const post = (path, v) => fetch(`${path}?v=${encodeURIComponent(v)}`, { method: 'POST' });
+document.querySelectorAll('[data-bots]').forEach((b) => b.addEventListener('click', () => post('/bots', b.dataset.bots)));
+$('hz').addEventListener('change', (e) => post('/hz', e.target.value));
+$('stop').addEventListener('click', () => { if (confirm('봇을 모두 끊고 끝낼까요?')) post('/stop', 0); });
+function setLobby(on) {
+  if (!init) return;
+  const box = $('lobby');
+  $('page').classList.toggle('split', on);
+  $('watch').textContent = on ? '로비 닫기' : '로비에서 보기';
+  if (!on) { box.replaceChildren(); render(); return; }
+  // 로비에 직접 들어간다 — 이 창도 접속자 한 명이 된다
+  const f = document.createElement('iframe');
+  f.src = init.lobby + init.rooms[0];
+  box.replaceChildren(f);
+  $('lobby-title').textContent = `로비 · 방 ${init.rooms[0]} (이 창도 접속자 1명)`;
+  render(); // 칸 너비가 바뀌었다
+}
+$('watch').addEventListener('click', () => setLobby(!$('page').classList.contains('split')));
+$('close-lobby').addEventListener('click', () => setLobby(false));
+
+function addLog(line) {
+  const el = $('log');
+  const stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 4; // 맨 아래를 보고 있을 때만 따라 내려간다
+  const div = document.createElement('div');
+  div.textContent = line;
+  if (line.startsWith('──')) div.className = 'ctl';
+  el.append(div);
+  while (el.childElementCount > 200) el.firstElementChild.remove();
+  if (stick) el.scrollTop = el.scrollHeight;
+}
+es.addEventListener('log', (e) => addLog(JSON.parse(e.data)));
+window.addEventListener('resize', render);
+</script>
+</body>
+</html>
